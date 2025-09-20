@@ -15,12 +15,19 @@ export class Renderer
     public readonly SceneTexture        : GPUTexture;   // Texture To Render
     public readonly AccumTexture        : GPUTexture;   // Texture To Write Path-Traced Result
 
-    public readonly SceneTextureView    : GPUTextureView;
-    public readonly AccumTextureView    : GPUTextureView;
+    public readonly UniformBuffer       : GPUBuffer;
+    public readonly TriangleBuffer      : GPUBuffer;
+    public readonly BVHBuffer           : GPUBuffer;
 
     // WebGPU Pipelines
-    public readonly ComputePipeline: GPUComputePipeline;
-    public readonly RenderPipeline: GPURenderPipeline;
+    public readonly ComputePipeline : GPUComputePipeline;
+    public readonly RenderPipeline  : GPURenderPipeline;
+
+
+    // WebGPU BindGroups
+    public readonly ComputeBindGroup: GPUBindGroup;
+    public readonly RenderBindGroup: GPUBindGroup;
+
 
     // World Data
     public World    : World;
@@ -47,21 +54,27 @@ export class Renderer
         // Generate WebGPU Resources
         {
             this.SceneTexture = this.createTexture(
-                this.Canvas.width,
-                this.Canvas.height,
-                "rgba32float",
+                this.Canvas.width, this.Canvas.height, "rgba32float",
                 GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
             );
 
             this.AccumTexture = this.createTexture(
-                this.Canvas.width,
-                this.Canvas.height,
-                "rgba32float",
+                this.Canvas.width, this.Canvas.height, "rgba32float",
                 GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC
             );
 
-            this.SceneTextureView = this.SceneTexture.createView();
-            this.AccumTextureView = this.AccumTexture.createView();
+
+            this.UniformBuffer = this.createBuffer(
+                256, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            );
+
+            this.TriangleBuffer = this.createBuffer(
+                48, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            );
+
+            this.BVHBuffer = this.createBuffer(
+                32, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            );
         }
 
         // Generate WebGPU Pipelines "FILL WITH SHADER CODE"
@@ -96,6 +109,34 @@ export class Renderer
             this.RenderPipeline = this.Device.createRenderPipeline(RenderPipelineDescriptor);
         }
 
+        // Generate WebGPU BindGroups
+        {
+            const SceneTextureView: GPUTextureView = this.SceneTexture.createView();
+            const AccumTextureView: GPUTextureView = this.AccumTexture.createView();
+
+            const ComputeBindGroupDescriptor: GPUBindGroupDescriptor =
+            {
+                layout: this.ComputePipeline.getBindGroupLayout(0),
+                entries: 
+                [
+                    { binding: 0, resource: { buffer: this.UniformBuffer } },
+                    { binding: 1, resource: SceneTextureView },
+                    { binding: 2, resource: AccumTextureView },
+                    { binding: 3, resource: { buffer: this.TriangleBuffer } },
+                    { binding: 4, resource: { buffer: this.BVHBuffer } },
+                ],
+            };
+            
+            const RenderBindGroupDescriptor: GPUBindGroupDescriptor =
+            {
+                layout: this.RenderPipeline.getBindGroupLayout(0),
+                entries: [{ binding: 0, resource: SceneTextureView }],
+            }
+
+            this.ComputeBindGroup = this.Device.createBindGroup(ComputeBindGroupDescriptor);
+            this.RenderBindGroup = this.Device.createBindGroup(RenderBindGroupDescriptor);
+        }
+
     }
 
     Initialize(): void
@@ -113,7 +154,7 @@ export class Renderer
     Render(): void
     {
 
-        console.log(this.AccumTexture);
+        console.log(this.UniformBuffer);
 
         return;
     }
@@ -135,6 +176,19 @@ export class Renderer
         }
 
         return this.Device.createTexture(TextureDescriptor);
+    }
+
+
+
+    private createBuffer(BufferSize: number, BufferUsage: GPUBufferUsageFlags): GPUBuffer
+    {
+        const BufferDescriptor: GPUBufferDescriptor =
+        {
+            size: BufferSize,
+            usage: BufferUsage,
+        };
+
+        return this.Device.createBuffer(BufferDescriptor);
     }
 
 
