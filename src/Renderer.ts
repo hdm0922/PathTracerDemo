@@ -10,15 +10,22 @@ export class Renderer
     public readonly Context         : GPUCanvasContext;
     public readonly PreferredFormat : GPUTextureFormat;
 
-    // WebGPU Resources
-    public readonly SceneTexture    : GPUTexture;   // Texture To Render
-    public readonly AccumTexture    : GPUTexture;   // Texture To Write Path-Traced Result
 
-    public readonly SceneTextureView: GPUTextureView;
-    public readonly AccumTextureView: GPUTextureView;
+    // WebGPU Resources
+    public readonly SceneTexture        : GPUTexture;   // Texture To Render
+    public readonly AccumTexture        : GPUTexture;   // Texture To Write Path-Traced Result
+
+    public readonly SceneTextureView    : GPUTextureView;
+    public readonly AccumTextureView    : GPUTextureView;
+
+    // WebGPU Pipelines
+    public readonly ComputePipeline: GPUComputePipeline;
+    public readonly RenderPipeline: GPURenderPipeline;
 
     // World Data
-    public World                    : World;
+    public World    : World;
+
+
 
     constructor
     (
@@ -57,13 +64,49 @@ export class Renderer
             this.AccumTextureView = this.AccumTexture.createView();
         }
 
+        // Generate WebGPU Pipelines "FILL WITH SHADER CODE"
+        {
+            const ComputeShaderModuleDescriptor     : GPUShaderModuleDescriptor = { code: "" };
+            const VertexShaderModuleDescriptor      : GPUShaderModuleDescriptor = { code: "" };
+            const FragmentShaderModuleDescriptor    : GPUShaderModuleDescriptor = { code: "" };
+
+            const ComputeShaderEntryPoint           : string = "";
+            const VertexShaderEntryPoint            : string = "";
+            const FragmentShaderEntryPoint          : string = "";
+
+            const ComputeShaderModule   : GPUShaderModule = this.Device.createShaderModule(ComputeShaderModuleDescriptor);
+            const VertexShaderModule    : GPUShaderModule = this.Device.createShaderModule(VertexShaderModuleDescriptor);
+            const FragmentShaderModule  : GPUShaderModule = this.Device.createShaderModule(FragmentShaderModuleDescriptor);
+
+            const ComputePipelineDescriptor: GPUComputePipelineDescriptor =
+            {
+                layout: "auto",
+                compute: { module: ComputeShaderModule, entryPoint: ComputeShaderEntryPoint },
+            };
+
+            const RenderPipelineDescriptor: GPURenderPipelineDescriptor =
+            {
+                layout: "auto",
+                vertex: { module: VertexShaderModule, entryPoint: VertexShaderEntryPoint },
+                fragment: { module: FragmentShaderModule, entryPoint: FragmentShaderEntryPoint, targets: [] },
+                primitive: { topology: "triangle-list" },
+            }
+
+            this.ComputePipeline = this.Device.createComputePipeline(ComputePipelineDescriptor);
+            this.RenderPipeline = this.Device.createRenderPipeline(RenderPipelineDescriptor);
+        }
 
     }
 
     Initialize(): void
     {
+
+
+
+
         this.clearTexture(this.SceneTexture);
-        
+        this.clearTexture(this.AccumTexture);
+
         return;
     }
 
