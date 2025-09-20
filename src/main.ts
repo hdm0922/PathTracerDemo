@@ -2,7 +2,6 @@ import { Renderer } from "./Renderer";
 
 async function main()
 {
-
   
   // Initialize
   let TestRenderer: Renderer;
@@ -14,7 +13,7 @@ async function main()
     TestRenderer = new Renderer(Adapter, Device, Canvas);
   }
 
-  console.log(TestRenderer);
+    console.log('f');
 
   return 0;
 }

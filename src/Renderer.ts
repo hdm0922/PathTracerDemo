@@ -1,3 +1,4 @@
+import { World } from "./World";
 
 export class Renderer
 {
@@ -8,7 +9,7 @@ export class Renderer
     public readonly Context         : GPUCanvasContext;
     public readonly PreferredFormat : GPUTextureFormat;
 
-
+    public World                    : World;
 
     constructor
     (
@@ -22,6 +23,9 @@ export class Renderer
         this.Canvas             = Canvas;
         this.Context            = Canvas.getContext('webgpu')!;
         this.PreferredFormat    = navigator.gpu.getPreferredCanvasFormat();
+
+        this.World = new World();
     }
+
 
 };
