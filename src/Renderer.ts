@@ -117,7 +117,7 @@ export class Renderer
             const ComputeBindGroupDescriptor: GPUBindGroupDescriptor =
             {
                 layout: this.ComputePipeline.getBindGroupLayout(0),
-                entries: 
+                entries:
                 [
                     { binding: 0, resource: { buffer: this.UniformBuffer } },
                     { binding: 1, resource: SceneTextureView },
@@ -142,19 +142,51 @@ export class Renderer
     Initialize(): void
     {
 
-
-
-
         this.clearTexture(this.SceneTexture);
         this.clearTexture(this.AccumTexture);
 
         return;
     }
 
+    Update(): void
+    {
+
+        // Update UniformBuffer
+
+
+
+        return;
+    }
+
+
+
     Render(): void
     {
 
-        console.log(this.UniformBuffer);
+        // Create Command Encoder
+        const CommandEncoder: GPUCommandEncoder = this.Device.createCommandEncoder();
+
+        // ComputePass (Path Tracing)
+        {
+
+        }
+
+        // Copy Texture : AccumTexture -> SceneTexture
+        {
+            const SourceTextureInfo     : GPUTexelCopyTextureInfo   = { texture: this.AccumTexture };
+            const DestTextureInfo       : GPUTexelCopyTextureInfo   = { texture: this.SceneTexture };
+            const TextureSize           : GPUExtent3DStrict         = { width: this.SceneTexture.width, height: this.SceneTexture.height };
+        
+            CommandEncoder.copyTextureToTexture(SourceTextureInfo, DestTextureInfo, TextureSize);
+        }
+        
+        // RenderPass (Draw SceneTexture)
+        {
+
+        }
+
+        // Submit Encoder
+        this.Device.queue.submit([CommandEncoder.finish()]);
 
         return;
     }

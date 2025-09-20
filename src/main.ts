@@ -4,7 +4,7 @@ import { World } from "./World";
 async function main()
 {
   
-  // Initialize
+  // Create
   let TestRenderer: Renderer;
   let TestWorld: World;
   {
@@ -16,8 +16,13 @@ async function main()
     TestRenderer = new Renderer(Adapter, Device, Canvas, TestWorld);
   }
 
-  TestWorld.Initialize();
+  // Initialize
+  {
+    TestWorld.Initialize();
+    TestRenderer.Initialize();
+  }
 
+  // Render
   TestRenderer.Render();
 
 
