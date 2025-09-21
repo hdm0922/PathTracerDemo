@@ -17,17 +17,22 @@ async function main()
     TestRenderer = new Renderer(Adapter, Device, Canvas);
   }
 
-  // Initialize
+  TestRenderer.Test_Init();
+
+  console.log(TestRenderer.TrianglesBuffer);
+
+  function frame()
   {
-    TestWorld.Initialize();
-    TestRenderer.Initialize(TestWorld);
+    //console.log("Hi");
+
+
+    TestRenderer.Test_Update();
+    TestRenderer.Test_Render();
+
+    requestAnimationFrame(frame);
   }
 
-
-  // Render
-  TestRenderer.Render();
-
-
+  frame();
 
   return 0;
 }
