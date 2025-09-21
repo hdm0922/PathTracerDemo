@@ -12,12 +12,14 @@ export class Renderer
 
 
     // WebGPU Resources
-    public readonly SceneTexture        : GPUTexture;   // Texture To Render
-    public readonly AccumTexture        : GPUTexture;   // Texture To Write Path-Traced Result
+    public SceneTexture     : GPUTexture;   // Texture To Render
+    public AccumTexture     : GPUTexture;   // Texture To Write Path-Traced Result
 
-    public readonly UniformBuffer       : GPUBuffer;
-    public readonly TriangleBuffer      : GPUBuffer;
-    public readonly BVHBuffer           : GPUBuffer;
+    public UniformBuffer    : GPUBuffer;
+    public InstancesBuffer  : GPUBuffer;
+    public BVHBuffer        : GPUBuffer;
+    public TrianglesBuffer  : GPUBuffer;
+    public MaterialsBuffer  : GPUBuffer;
 
     // WebGPU Pipelines
     public readonly ComputePipeline : GPUComputePipeline;
@@ -39,7 +41,6 @@ export class Renderer
         Adapter : GPUAdapter,
         Device  : GPUDevice,
         Canvas  : HTMLCanvasElement,
-        World   : World,
     )
     {
 
@@ -49,35 +50,35 @@ export class Renderer
         this.Canvas             = Canvas;
         this.Context            = Canvas.getContext('webgpu')!;
         this.PreferredFormat    = navigator.gpu.getPreferredCanvasFormat();
-        this.World              = World;
-
-        // Generate WebGPU Resources
-        {
-            this.SceneTexture = this.createTexture(
-                this.Canvas.width, this.Canvas.height, "rgba32float",
-                GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
-            );
-
-            this.AccumTexture = this.createTexture(
-                this.Canvas.width, this.Canvas.height, "rgba32float",
-                GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC
-            );
 
 
-            this.UniformBuffer = this.createBuffer(
-                256, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-            );
+        // Create WebGPU Resources
+        this.SceneTexture       = GPUTexture.prototype;
+        this.AccumTexture       = GPUTexture.prototype;
 
-            this.TriangleBuffer = this.createBuffer(
-                48, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-            );
+        this.UniformBuffer      = GPUBuffer.prototype;
+        this.InstancesBuffer    = GPUBuffer.prototype;
+        this.BVHBuffer          = GPUBuffer.prototype;
+        this.TrianglesBuffer    = GPUBuffer.prototype;
+        this.MaterialsBuffer    = GPUBuffer.prototype;
 
-            this.BVHBuffer = this.createBuffer(
-                32, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-            );
-        }
+
+        // Create WebGPU Pipelines
+        this.ComputePipeline    = GPUComputePipeline.prototype;
+        this.RenderPipeline     = GPURenderPipeline.prototype;
+
+
+        // Create WebGPU BindGroups
+        this.ComputeBindGroup   = GPUBindGroup.prototype;
+        this.RenderBindGroup    = GPUBindGroup.prototype;
+
+
+        // World Data
+        this.World              = World.prototype;
+
 
         // Generate WebGPU Pipelines "FILL WITH SHADER CODE"
+        if (false)
         {
             const ComputeShaderModuleDescriptor     : GPUShaderModuleDescriptor = { code: "" };
             const VertexShaderModuleDescriptor      : GPUShaderModuleDescriptor = { code: "" };
@@ -108,8 +109,8 @@ export class Renderer
             this.ComputePipeline = this.Device.createComputePipeline(ComputePipelineDescriptor);
             this.RenderPipeline = this.Device.createRenderPipeline(RenderPipelineDescriptor);
         }
-
         // Generate WebGPU BindGroups
+        if (false)
         {
             const SceneTextureView: GPUTextureView = this.SceneTexture.createView();
             const AccumTextureView: GPUTextureView = this.AccumTexture.createView();
@@ -122,11 +123,10 @@ export class Renderer
                     { binding: 0, resource: { buffer: this.UniformBuffer } },
                     { binding: 1, resource: SceneTextureView },
                     { binding: 2, resource: AccumTextureView },
-                    { binding: 3, resource: { buffer: this.TriangleBuffer } },
-                    { binding: 4, resource: { buffer: this.BVHBuffer } },
+
                 ],
             };
-            
+
             const RenderBindGroupDescriptor: GPUBindGroupDescriptor =
             {
                 layout: this.RenderPipeline.getBindGroupLayout(0),
@@ -136,11 +136,23 @@ export class Renderer
             this.ComputeBindGroup = this.Device.createBindGroup(ComputeBindGroupDescriptor);
             this.RenderBindGroup = this.Device.createBindGroup(RenderBindGroupDescriptor);
         }
-
     }
 
-    Initialize(): void
+
+    Initialize(World: World): void
     {
+        this.World = World;
+
+        
+        // Initialize WebGPU Resources
+        {
+            const SceneTextureFlag  : GPUTextureUsageFlags  = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
+            const AccumTextureFlag  : GPUTextureUsageFlags  = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC;
+            //const UniformBufferFlag : GPUBufferUsageFlags   = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
+
+            this.SceneTexture = this.createTexture(this.Canvas.width, this.Canvas.height, "rgba32float", SceneTextureFlag);
+            this.AccumTexture = this.createTexture(this.Canvas.width, this.Canvas.height, "rgba32float", AccumTextureFlag);
+        }
 
         this.clearTexture(this.SceneTexture);
         this.clearTexture(this.AccumTexture);
@@ -150,10 +162,6 @@ export class Renderer
 
     Update(): void
     {
-
-        // Update UniformBuffer
-
-
 
         return;
     }
@@ -168,7 +176,7 @@ export class Renderer
 
         // ComputePass (Path Tracing)
         {
-
+            //const ComputePass: GPUComputePassEncoder = CommandEncoder.beginComputePass();
         }
 
         // Copy Texture : AccumTexture -> SceneTexture

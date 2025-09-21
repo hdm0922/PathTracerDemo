@@ -12,15 +12,17 @@ async function main()
     const Device    = await Adapter?.requestDevice()            as GPUDevice;
     const Canvas    = document.querySelector('canvas')          as HTMLCanvasElement;
 
+
     TestWorld = new World();
-    TestRenderer = new Renderer(Adapter, Device, Canvas, TestWorld);
+    TestRenderer = new Renderer(Adapter, Device, Canvas);
   }
 
   // Initialize
   {
     TestWorld.Initialize();
-    TestRenderer.Initialize();
+    TestRenderer.Initialize(TestWorld);
   }
+
 
   // Render
   TestRenderer.Render();
