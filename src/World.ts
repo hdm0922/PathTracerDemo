@@ -72,11 +72,9 @@ export class World {
     ];
 
     // ── Triangles (각 모델을 아주 단순한 2~1 tri로 가정)
-    const trisChair: CPUTriPacked[] = makeQuadTris([-0.8,-0.3,0], [0.4,0.6,0], 0); // 원점 근처 왼쪽 사각
-    const trisTable: CPUTriPacked[] = makeQuadTris([ 0.2,-0.3,0], [0.6,0.6,0], 1); // 오른쪽 사각
-    const trisLight: CPUTriPacked[] = [
-      makeTri([0,0.7,-0.5],[0.2,0.9,-0.5],[-0.2,0.9,-0.5], 2)                     // 위쪽 작은 삼각형(광원)
-    ];
+    const trisChair: CPUTriPacked[] = makeQuadTris([-0.6,-0.3,0], [0.5,0.5,0], 0); // 원점 근처 왼쪽 사각
+    const trisTable: CPUTriPacked[] = makeQuadTris([ 0.3,-0.3,0], [0.6,0.6,0], 1); // 오른쪽 사각
+    const trisLight: CPUTriPacked[] = [makeTri([0,0.7,-1],[0.2,0.9,-0.5],[-0.2,0.9,-0.5], 2)];
 
     // 전역 TrianglesBuffer로 이어붙임(절대 인덱스 계산)
     const triStartChair = 0;

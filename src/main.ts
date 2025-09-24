@@ -12,22 +12,23 @@ async function main()
     const Device    = await Adapter?.requestDevice()            as GPUDevice;
     const Canvas    = document.querySelector('canvas')          as HTMLCanvasElement;
 
+    Canvas.width = 600;
+    Canvas.height = 450;
+
+    console.log(Device.limits);
+    console.log(GPUBufferUsage);
 
     TestWorld = new World();
     TestRenderer = new Renderer(Adapter, Device, Canvas);
   }
 
-  TestRenderer.Test_Init();
-
-  console.log(TestRenderer.TrianglesBuffer);
+  TestRenderer.Initialize(TestWorld);
 
   function frame()
   {
-    //console.log("Hi");
 
-
-    TestRenderer.Test_Update();
-    TestRenderer.Test_Render();
+    //TestRenderer.Test_Update();
+    TestRenderer.Render();
 
     requestAnimationFrame(frame);
   }

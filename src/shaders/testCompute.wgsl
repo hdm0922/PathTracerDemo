@@ -79,7 +79,7 @@ struct Material {
 @group(0) @binding(4) var<storage, read> Materials : array<Material>;
 
 //@group(0) @binding(5) var prevImage : texture_2d<f32>;
-@group(0) @binding(5) var outImage : texture_storage_2d<rgba16float, write>;
+@group(0) @binding(5) var outImage : texture_storage_2d<rgba32float, write>;
 
 // ============================================================================
 // 수학/유틸

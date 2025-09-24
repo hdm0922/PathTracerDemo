@@ -12,6 +12,7 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
   // 감마 2.2
   let sdr = pow(clamp(aces, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(1.0/2.2));
+
   return vec4<f32>(sdr, 1.0);
 
 }
