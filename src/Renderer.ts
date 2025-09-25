@@ -1,9 +1,40 @@
 import { World } from "./World";
 import { vec3, mat4 } from "gl-matrix";
 
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshBVH } from 'three-mesh-bvh';
+
 import computeShaderCode from './shaders/PathTracer.wgsl?raw';
 import vertexShaderCode from './shaders/testVertex.wgsl?raw';
 import fragmentShaderCode from './shaders/testFragment.wgsl?raw';
+
+function createHumanEyeViewProjection(camWorldPosition: vec3): mat4 {
+    // 1. 최종 결과를 저장할 행렬과 중간 계산용 행렬들을 생성합니다.
+    const viewMatrix = mat4.create();
+    const projectionMatrix = mat4.create();
+    const viewProjectionMatrix = mat4.create();
+
+    // 2. View Matrix 계산 (카메라의 위치와 방향)
+    const cameraTarget = vec3.fromValues(0, 0, 0); // 바라볼 목표 지점
+    const worldUp = vec3.fromValues(0, 1, 0);       // 월드의 '위' 방향
+
+    mat4.lookAt(viewMatrix, camWorldPosition, cameraTarget, worldUp);
+    
+    // 3. Projection Matrix 계산 (카메라의 렌즈 특성)
+    const fieldOfView = (55 * Math.PI) / 180; // 55도를 라디안으로 변환
+    const aspectRatio = 16.0 / 9.0;
+    const zNear = 0.1;
+    const zFar = 1000.0;
+
+    mat4.perspective(projectionMatrix, fieldOfView, aspectRatio, zNear, zFar);
+
+    // 4. 두 행렬을 곱하여 최종 View-Projection 행렬을 만듭니다.
+    // 순서가 매우 중요합니다: Projection * View
+    mat4.multiply(viewProjectionMatrix, projectionMatrix, viewMatrix);
+    
+    return viewProjectionMatrix;
+}
 
 export class Renderer
 {
@@ -17,16 +48,18 @@ export class Renderer
 
 
     // WebGPU Resources
-    public SceneTexture     : GPUTexture;   // Texture To Render
-    public AccumTexture     : GPUTexture;   // Texture To Write Path-Traced Result
+    public SceneTexture         : GPUTexture;   // Texture To Render
+    public AccumTexture         : GPUTexture;   // Texture To Write Path-Traced Result
 
-    public UniformsBuffer   : GPUBuffer;
-    public InstancesBuffer  : GPUBuffer;
-    public BVHBuffer        : GPUBuffer;
-    public SubMeshesBuffer  : GPUBuffer;
-    public MaterialsBuffer  : GPUBuffer;
-    public GeometriesBuffer : GPUBuffer;
-    public PrimitiveToSubMesh: GPUBuffer;
+    public UniformsBuffer       : GPUBuffer;
+    public InstancesBuffer      : GPUBuffer;
+    public BVHBuffer            : GPUBuffer;
+    public SubMeshesBuffer      : GPUBuffer;
+    public MaterialsBuffer      : GPUBuffer;
+    public PrimitiveToSubMesh   : GPUBuffer;
+    
+    public VerticesBuffer       : GPUBuffer;
+    public IndicesBuffer        : GPUBuffer;
 
     // WebGPU Pipelines
     public ComputePipeline : GPUComputePipeline;
@@ -42,6 +75,10 @@ export class Renderer
     public World    : World;
     public FrameCount : number;
 
+
+    // 텍스처 관련 (Gemini)
+    public TextureViews: GPUTextureView[] = [];
+    public MaterialSampler: GPUSampler;
 
     constructor
     (
@@ -81,8 +118,10 @@ export class Renderer
         this.BVHBuffer          = GPUBuffer.prototype;
         this.SubMeshesBuffer    = GPUBuffer.prototype;
         this.MaterialsBuffer    = GPUBuffer.prototype;
-        this.GeometriesBuffer   = GPUBuffer.prototype;
         this.PrimitiveToSubMesh = GPUBuffer.prototype;
+
+        this.VerticesBuffer     = GPUBuffer.prototype;
+        this.IndicesBuffer      = GPUBuffer.prototype;
 
 
         // Create WebGPU Pipelines
@@ -97,435 +136,23 @@ export class Renderer
 
         // World Data
         this.World              = World.prototype;
-        this.FrameCount           = 0;
+        this.FrameCount         = 0;
+
+
+
+        this.MaterialSampler = this.Device.createSampler({
+            magFilter: 'linear',
+            minFilter: 'linear',
+            mipmapFilter: 'linear',
+            addressModeU: 'repeat',
+            addressModeV: 'repeat',
+        });
     }
-
-
-    // Test_Init(): void
-    // {
-    //     this.World = World.makeDummy();
-    //     this.FrameCount = 0;
-
-    //     const instAB = this.World.packInstances();
-    //     const bvhAB  = this.World.packBVH();
-    //     const triAB  = this.World.packTriangles();
-    //     const matAB  = this.World.packMaterials();
-        
-    //     function setGPUBuffer(device: GPUDevice, arrayBuffer: ArrayBuffer, usage: GPUBufferUsageFlags): GPUBuffer
-    //     {
-    //         const size = (arrayBuffer.byteLength + 3) & ~3;
-    //         const buffer = device.createBuffer({ size, usage, mappedAtCreation: false });
-    //         device.queue.writeBuffer(buffer, 0, arrayBuffer);
-
-    //         return buffer;
-    //     }
-
-    //     this.InstancesBuffer    = setGPUBuffer(this.Device, instAB, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
-    //     this.BVHBuffer          = setGPUBuffer(this.Device, bvhAB,  GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
-    //     this.TrianglesBuffer    = setGPUBuffer(this.Device, triAB,  GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
-    //     this.MaterialsBuffer    = setGPUBuffer(this.Device, matAB,  GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
-
-        
-    //     this.UniformBuffer = this.Device.createBuffer({
-    //         size: 256,
-    //         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    //         mappedAtCreation: false,
-    //     });
-
-    //     // Initialize WebGPU Resources
-    //     {
-    //         const SceneTextureFlag  : GPUTextureUsageFlags  = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
-    //         const AccumTextureFlag  : GPUTextureUsageFlags  = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC;
-    //         //const UniformBufferFlag : GPUBufferUsageFlags   = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
-
-    //         this.SceneTexture = this.createTexture(this.Canvas.width, this.Canvas.height, "rgba32float", SceneTextureFlag);
-    //         this.AccumTexture = this.createTexture(this.Canvas.width, this.Canvas.height, "rgba32float", AccumTextureFlag);
-    //     }
-
-    //     // this.clearTexture(this.SceneTexture);
-    //     // this.clearTexture(this.AccumTexture);
-
-    //     // Generate WebGPU Pipelines "FILL WITH SHADER CODE"
-    //     {
-    //         const ComputeShaderModuleDescriptor     : GPUShaderModuleDescriptor = { code: computeShaderCode };
-    //         const VertexShaderModuleDescriptor      : GPUShaderModuleDescriptor = { code: vertexShaderCode };
-    //         const FragmentShaderModuleDescriptor    : GPUShaderModuleDescriptor = { code: fragmentShaderCode };
-
-    //         const ComputeShaderEntryPoint           : string = "main";
-    //         const VertexShaderEntryPoint            : string = "vs_main";
-    //         const FragmentShaderEntryPoint          : string = "fs_main";
-
-    //         const ComputeShaderModule   : GPUShaderModule = this.Device.createShaderModule(ComputeShaderModuleDescriptor);
-    //         const VertexShaderModule    : GPUShaderModule = this.Device.createShaderModule(VertexShaderModuleDescriptor);
-    //         const FragmentShaderModule  : GPUShaderModule = this.Device.createShaderModule(FragmentShaderModuleDescriptor);
-
-    //         const ComputePipelineDescriptor: GPUComputePipelineDescriptor =
-    //         {
-    //             layout  : "auto",
-    //             compute : { module: ComputeShaderModule, entryPoint: ComputeShaderEntryPoint },
-    //         };
-
-    //         const RenderPipelineDescriptor: GPURenderPipelineDescriptor =
-    //         {
-    //             layout      : "auto",
-    //             vertex      : { module: VertexShaderModule,     entryPoint: VertexShaderEntryPoint },
-    //             fragment    : { module: FragmentShaderModule,   entryPoint: FragmentShaderEntryPoint, targets : [{ format: this.PreferredFormat }] },
-    //             primitive   : { topology: "triangle-list" },
-    //         };
-
-    //         this.ComputePipeline = this.Device.createComputePipeline(ComputePipelineDescriptor);
-    //         this.RenderPipeline = this.Device.createRenderPipeline(RenderPipelineDescriptor);
-    //     }
-
-    //     // Generate WebGPU BindGroups
-    //     {
-    //         const SceneTextureView: GPUTextureView = this.SceneTexture.createView();
-    //         const AccumTextureView: GPUTextureView = this.AccumTexture.createView();
-
-    //         const ComputeBindGroupDescriptor: GPUBindGroupDescriptor =
-    //         {
-    //             layout: this.ComputePipeline.getBindGroupLayout(0),
-    //             entries:
-    //             [
-    //                 { binding: 0, resource: { buffer: this.UniformBuffer } },
-    //                 { binding: 1, resource: { buffer: this.InstancesBuffer } },
-    //                 { binding: 2, resource: { buffer: this.BVHBuffer } },
-    //                 { binding: 3, resource: { buffer: this.TrianglesBuffer } },
-    //                 { binding: 4, resource: { buffer: this.MaterialsBuffer } },
-    //                 { binding: 5, resource: AccumTextureView },
-    //             ],
-    //         };
-
-    //         const RenderBindGroupDescriptor: GPUBindGroupDescriptor =
-    //         {
-    //             layout: this.RenderPipeline.getBindGroupLayout(0),
-    //             entries: [{ binding: 0, resource: SceneTextureView }],
-    //         }
-
-    //         this.ComputeBindGroup = this.Device.createBindGroup(ComputeBindGroupDescriptor);
-    //         this.RenderBindGroup = this.Device.createBindGroup(RenderBindGroupDescriptor);
-    //     }
-
-
-    //     return;
-    // }
-
-    // Test_Update(): void
-    // {
-    //     const w = this.Canvas.width >>> 0;
-    //     const h = this.Canvas.height >>> 0;
-
-    //     // 카메라 파라미터(씬이 잘 보이도록 기본값)
-    //     const camPos: vec3 = vec3.fromValues(0.0, 0.0, 1.5);
-    //     const camTarget: vec3 = vec3.fromValues(0.0, 0.0, 0.0);
-    //     const worldUp: vec3 = vec3.fromValues(0.0, 1.0, 0.0);
-    //     const fovY_deg = 55.0;
-    //     const aspect = w / Math.max(1, h);
-    //     const tanHalfFovy = Math.tan((fovY_deg * Math.PI / 180) * 0.5);
-
-    //     let forward : vec3 = [0,0,0];
-    //     vec3.subtract(forward, camTarget, camPos);
-    //     vec3.normalize(forward, forward);
-
-    //     let rightW : vec3 = [0,0,0];
-    //     vec3.cross(rightW, forward, worldUp);
-    //     vec3.normalize(rightW, rightW);
-
-    //     let upW : vec3 = [0,0,0];
-    //     vec3.cross(upW, rightW, forward);
-    //     vec3.normalize(upW, upW);
-
-
-    //     // 카메라 기저 계산 (셰이더의 rayDir = cam_dir + sx*cam_right + sy*cam_up 에 맞춤)
-    //     //const forward = norm3(camTarget - camPos);     // cam_dir
-    //     // const rightW  = norm3(cross(forward, worldUp));     // 오른손 기준
-    //     // const upW     = norm3(cross(rightW, forward));
-
-    //     const cam_dir   = forward;
-        
-    //     let cam_right : vec3 = [0,0,0]; 
-    //     vec3.scale(cam_right, rightW, tanHalfFovy * aspect);
-
-    //     let cam_up : vec3 = [0,0,0];
-    //     vec3.scale(cam_up, upW, tanHalfFovy);
-
-    //     // WGSL SceneParams 레이아웃(총 96B)
-    //     // struct SceneParams {
-    //     //   img_size: vec2<u32>;              // 0
-    //     //   max_bounces: u32;                 // 8
-    //     //   samples_per_launch: u32;          // 12
-    //     //   cam_pos: vec3<f32>; _pad0:f32;    // 16
-    //     //   cam_dir: vec3<f32>; _pad1:f32;    // 32
-    //     //   cam_right: vec3<f32>; _pad2:f32;  // 48
-    //     //   cam_up: vec3<f32>; _pad3:f32;     // 64
-    //     //   frame_index: u32; _pad4:vec3<u32>;// 80
-    //     // }
-    //     const buf = new ArrayBuffer(96);
-    //     const dv = new DataView(buf);
-
-    //     // img_size
-    //     dv.setUint32(0, w, true);
-    //     dv.setUint32(4, h, true);
-    //     // max_bounces, samples_per_launch
-    //     dv.setUint32(8,  2, true);
-    //     dv.setUint32(12, 2, true);
-
-    //     // cam_pos
-    //     dv.setFloat32(16, camPos[0], true);
-    //     dv.setFloat32(20, camPos[1], true);
-    //     dv.setFloat32(24, camPos[2], true);
-    //     // pad at 28
-
-    //     // cam_dir
-    //     dv.setFloat32(32, cam_dir[0], true);
-    //     dv.setFloat32(36, cam_dir[1], true);
-    //     dv.setFloat32(40, cam_dir[2], true);
-    //     // pad at 44
-
-    //     // cam_right
-    //     dv.setFloat32(48, cam_right[0], true);
-    //     dv.setFloat32(52, cam_right[1], true);
-    //     dv.setFloat32(56, cam_right[2], true);
-    //     // pad at 60
-
-    //     // cam_up
-    //     dv.setFloat32(64, cam_up[0], true);
-    //     dv.setFloat32(68, cam_up[1], true);
-    //     dv.setFloat32(72, cam_up[2], true);
-    //     // pad at 76
-
-    //     // frame_index
-    //     dv.setUint32(80, (this.FrameCount >>> 0), true);
-    //     // pad u32*3 at 84,88,92 (자동 0)
-
-    //     this.Device.queue.writeBuffer(this.UniformBuffer, 0, buf);
-    // }
-
-    // Test_Render(): void
-    // {
-
-    //     const CommandEncoder: GPUCommandEncoder = this.Device.createCommandEncoder();
-
-    //     // ComputePass (Path Tracing)
-    //     {
-    //         const ComputePass: GPUComputePassEncoder = CommandEncoder.beginComputePass();
-            
-    //         ComputePass.setPipeline(this.ComputePipeline);
-    //         ComputePass.setBindGroup(0, this.ComputeBindGroup);
-    //         ComputePass.dispatchWorkgroups(Math.ceil(this.Canvas.width/8), Math.ceil(this.Canvas.height/8), 1);
-
-    //         ComputePass.end();
-    //     }
-
-    //     // Copy Texture : AccumTexture -> SceneTexture
-    //     {
-    //         const SourceTextureInfo     : GPUTexelCopyTextureInfo   = { texture: this.AccumTexture };
-    //         const DestTextureInfo       : GPUTexelCopyTextureInfo   = { texture: this.SceneTexture };
-    //         const TextureSize           : GPUExtent3DStrict         = { width: this.SceneTexture.width, height: this.SceneTexture.height };
-        
-    //         CommandEncoder.copyTextureToTexture(SourceTextureInfo, DestTextureInfo, TextureSize);
-    //     }
-        
-    //     // RenderPass (Draw SceneTexture)
-    //     {
-    //         const RenderPassDescriptor: GPURenderPassDescriptor =
-    //         {
-    //             colorAttachments:
-    //             [
-    //                 {
-    //                     view: this.Context.getCurrentTexture().createView(),
-    //                     loadOp: "clear",
-    //                     storeOp: "store",
-    //                     clearValue: { r:0, g:0, b:0, a:1 }
-    //                 }
-    //             ]
-    //         };
-
-
-    //         const RenderPass: GPURenderPassEncoder = CommandEncoder.beginRenderPass(RenderPassDescriptor);
-
-    //         RenderPass.setPipeline(this.RenderPipeline);
-    //         RenderPass.setBindGroup(0, this.RenderBindGroup);
-    //         RenderPass.draw(3);
-
-    //         RenderPass.end();
-    //     }
-
-    //     // Submit Encoder
-    //     this.Device.queue.submit([CommandEncoder.finish()]);
-    //     this.FrameCount++;
-
-    //     return;
-    // }
-
 
 
 
     Initialize(World: World): void
     {
-
-        console.log(this.Adapter.features.has('sized_binding_array'));
-
-        const NUM_INSTANCES = 1;
-        const NUM_SUBMESHES = 1;
-        const NUM_MATERIALS = 1;
-        const NUM_VERTICES = 4;
-        const NUM_TRIANGLES = 2;
-        const uniformsData = new ArrayBuffer(128); // 예시 크기, 실제 구조체에 맞게 조정 필요
-        const uniformsF32View = new Float32Array(uniformsData);
-        const uniformsU32View = new Uint32Array(uniformsData);
-        uniformsU32View[0] = 1280;
-        uniformsU32View[1] = 720;
-        uniformsU32View[2] = 8;
-        uniformsU32View[3] = 1;
-        uniformsF32View[4] = 0.0;
-        uniformsF32View[5] = 0.0;
-        uniformsF32View[6] = 5.0;
-        uniformsF32View[7] = 1.0;
-        mat4.identity(uniformsF32View.subarray(8, 24));
-        uniformsU32View[24] = 1;
-        const vertices = new Float32Array([
-            // x, y, z, (padding)
-            -0.5, 0.5, 0.0, 0.0,  // v0 (top-left)
-            0.5, 0.5, 0.0, 0.0,   // v1 (top-right)
-            -0.5, -0.5, 0.0, 0.0, // v2 (bottom-left)
-            0.5, -0.5, 0.0, 0.0,  // v3 (bottom-right)
-        ]);
-        const normals = new Float32Array([
-            // nx, ny, nz, (padding)
-            0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-        ]);
-        const uvs = new Float32Array([
-            // u, v, (padding)
-            0.0, 1.0, 0.0, 0.0,
-            1.0, 1.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0,
-            1.0, 0.0, 0.0, 0.0,
-        ]);
-        const tangents = new Float32Array([
-            // tx, ty, tz, tw
-            1.0, 0.0, 0.0, 1.0,
-            1.0, 0.0, 0.0, 1.0,
-            1.0, 0.0, 0.0, 1.0,
-            1.0, 0.0, 0.0, 1.0,
-        ]);
-        const indices = new Uint32Array([
-            0, 2, 1, // 첫 번째 삼각형
-            1, 2, 3, // 두 번째 삼각형
-        ]);
-        const instanceData = new Float32Array(NUM_INSTANCES * 20); // 80 bytes = 20 floats
-        const instanceU32View = new Uint32Array(instanceData.buffer);
-        const modelMatrix = mat4.create(); // 단위 행렬
-        const modelMatrixInverse = mat4.invert(mat4.create(), modelMatrix)!;
-        instanceData.set(modelMatrix, 0);
-        //instanceData.set(modelMatrixInverse, 16);
-        instanceU32View[32] = 0; // BVHRootIndex: 0
-        const submeshData = new Uint32Array(NUM_SUBMESHES * 4); // 16 bytes = 4 u32s
-        submeshData[0] = 0; // MaterialIndex: 0
-        submeshData[1] = 0;
-        submeshData[2] = 0;
-        submeshData[3] = 0;
-        const materialData = new Float32Array(NUM_MATERIALS * 16); // 64 bytes = 16 floats
-        const materialI32View = new Int32Array(materialData.buffer);
-        materialData.set([1.0, 0.5, 0.5, 1.0], 0); // BaseColor: Reddish
-        materialData.set([0.0, 0.0, 0.0], 4);    // EmissiveColor
-        materialData[7] = 0.1; // Metalic
-        materialData[8] = 0.8; // Roughness
-        materialData[9] = 1.5; // IOR
-        materialData[10] = 1.0; // NormalScale
-        materialI32View[11] = 0; // TextureIndex_BaseColor: 첫 번째 텍스처 사용
-        materialI32View[12] = -1; // TextureIndex_EmissiveColor: 사용 안 함
-        materialI32View[13] = 0; // TextureIndex_Normal: 첫 번째 텍스처 사용
-        materialI32View[14] = -1; // TextureIndex_ORM: 사용 안 함
-        const bvhData = new Float32Array(1 * 8); // 32 bytes = 8 floats
-        const bvhU32View = new Uint32Array(bvhData.buffer);
-        bvhData.set([-0.5, -0.5, 0.0], 0); // Boundary_Min
-        bvhU32View[3] = NUM_TRIANGLES;     // PrimitiveCount: 2
-        bvhData.set([0.5, 0.5, 0.0], 4);   // Boundary_Max
-        bvhU32View[7] = 0;                 // PrimitiveOffset: 0
-        const primitiveToSubMeshData = new Uint32Array(NUM_TRIANGLES);
-        primitiveToSubMeshData[0] = 0; // 삼각형 0번은 서브메쉬 0번에 속함
-        primitiveToSubMeshData[1] = 0; // 삼각형 1번도 서브메쉬 0번에 속함
-        const vertexOffset = 0;
-        const vertexSize = vertices.byteLength;
-        const normalOffset = vertexOffset + vertexSize; // 정점 데이터 바로 뒤에 법선 데이터 시작
-        const normalSize = normals.byteLength;
-        const uvOffset = normalOffset + normalSize;
-        const uvSize = uvs.byteLength;
-        const tangentOffset = uvOffset + uvSize;
-        const tangentSize = tangents.byteLength;
-        const indexOffset = tangentOffset + tangentSize;
-        const indexSize = indices.byteLength;
-        const geometrieslBufferSize = indexOffset + indexSize;
-        const materialSampler = this.Device.createSampler({
-            magFilter: 'linear', // 확대 필터: 선형 보간
-            minFilter: 'linear', // 축소 필터: 선형 보간
-            addressModeU: 'repeat', // U 좌표 래핑 모드: 반복
-            addressModeV: 'repeat', // V 좌표 래핑 모드: 반복
-            // mipmapFilter 등 추가 설정 가능
-        });
-
-        /**
-         * 디버깅용 플레이스홀더 텍스처 배열을 생성합니다.
-         * @param device - 현재 GPUDevice
-         * @param layerCount - 생성할 텍스처 레이어의 수
-         * @returns 생성된 GPUTexture 객체
-         */
-        function createPlaceholderTextureArray(device: GPUDevice, layerCount: number): GPUTexture {
-            const width = 1;
-            const height = 1;
-
-            // 1. 1x1 크기의 텍스처 배열(스택)을 생성합니다.
-            const placeholderTexture = device.createTexture({
-                dimension: '2d',
-                size: {
-                    width: width,
-                    height: height,
-                    depthOrArrayLayers: layerCount, // 스택에 쌓을 텍스처의 개수
-                },
-                format: 'rgba8unorm', // 가장 일반적인 텍스처 포맷
-                usage:
-                    GPUTextureUsage.TEXTURE_BINDING |
-                    GPUTextureUsage.COPY_DST, // CPU에서 데이터를 복사해 넣을 것이므로 COPY_DST가 필수
-            });
-
-            // 2. 1x1 마젠타 색상 픽셀 데이터를 생성합니다. (R=255, G=0, B=255, A=255)
-            const pixelData = new Uint8Array([255, 0, 255, 255]);
-
-            // 3. 각 레이어에 픽셀 데이터를 씁니다.
-            for (let i = 0; i < layerCount; i++) {
-                device.queue.writeTexture(
-                    // 대상: 어느 텍스처의 어느 위치에 쓸 것인가
-                    {
-                        texture: placeholderTexture,
-                        origin: { x: 0, y: 0, z: i }, // z 오프셋으로 레이어를 선택
-                    },
-                    // 소스: 어떤 데이터를 쓸 것인가
-                    pixelData,
-                    // 소스 데이터 레이아웃: 데이터가 메모리에 어떻게 배치되어 있는가
-                    {
-                        bytesPerRow: width * 4, // 1픽셀 가로줄의 바이트 크기 (1px * 4 channels)
-                        rowsPerImage: height,   // 이미지 하나의 세로줄 수
-                    },
-                    // 크기: 얼마만큼의 크기를 쓸 것인가
-                    {
-                        width: width,
-                        height: height,
-                    }
-                );
-            }
-
-            return placeholderTexture;
-        }
-        const baseColorArrayTexture = createPlaceholderTextureArray(this.Device, 3);
-        const emissiveColorArrayTexture = createPlaceholderTextureArray(this.Device, 3);
-        const normalArrayTexture = createPlaceholderTextureArray(this.Device, 3);
-        const ORMArrayTexture = createPlaceholderTextureArray(this.Device, 3);
-
-
 
         // Initialize Scene Stuffs
         this.World = World;
@@ -539,9 +166,6 @@ export class Renderer
             this.UniformsBuffer = this.Device.createBuffer({ size: 256, usage: UniformBufferUsageFlags });
         }
 
-        const buf = new ArrayBuffer(96);
-        this.Device.queue.writeBuffer(this.UniformsBuffer, 0, buf);
-
         // Initialize WebGPU Resources : Storage Buffers
         {
             const StorageBufferUsageFlags: GPUBufferUsageFlags = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
@@ -550,8 +174,23 @@ export class Renderer
             this.BVHBuffer              = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
             this.SubMeshesBuffer        = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
             this.MaterialsBuffer        = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
-            this.GeometriesBuffer       = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
             this.PrimitiveToSubMesh     = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
+            this.VerticesBuffer         = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
+            this.IndicesBuffer          = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
+        }
+
+        // TEST: Modify InstancesBuffer
+        {
+            const data = new Float32Array(33);
+            let offset = 0;
+            data[offset + 0] = 1.0; data[offset + 5] = 1.0; data[offset + 10] = 1.0; data[offset + 15] = 1.0;
+
+            offset = 16;
+            data[offset + 0] = 1.0; data[offset + 5] = 1.0; data[offset + 10] = 1.0; data[offset + 15] = 1.0;
+
+            data[33] = 0;
+
+            this.Device.queue.writeBuffer(this.InstancesBuffer, 0, data);
         }
 
         // Initialize WebGPU Resources : Texture
@@ -562,7 +201,6 @@ export class Renderer
             this.SceneTexture = this.createTexture(this.Canvas.width, this.Canvas.height, "rgba32float", SceneTextureUsageFlags);
             this.AccumTexture = this.createTexture(this.Canvas.width, this.Canvas.height, "rgba32float", AccumTextureUsageFlags);
         }
-
 
         // Generate WebGPU Pipelines
         {
@@ -607,22 +245,21 @@ export class Renderer
                 entries:
                 [
                     { binding: 0, resource: { buffer: this.UniformsBuffer } },
-                    // { binding: 1, resource: { buffer: this.InstancesBuffer }  },
-                    // { binding: 2, resource: { buffer: this.BVHBuffer } },
-                    // { binding: 3, resource: { buffer: this.SubMeshesBuffer } },
-                    // { binding: 4, resource: { buffer: this.MaterialsBuffer } },
-                    // { binding: 5, resource: { buffer: this.GeometriesBuffer, offset: vertexOffset, size: vertexSize } },
-                    // { binding: 6, resource: { buffer: this.GeometriesBuffer, offset: normalOffset, size: normalSize } },
-                    // { binding: 7, resource: { buffer: this.GeometriesBuffer, offset: uvOffset, size: uvSize } },
-                    // { binding: 8, resource: { buffer: this.GeometriesBuffer, offset: tangentOffset, size: tangentSize } },
-                    // { binding: 9, resource: { buffer: this.GeometriesBuffer, offset: indexOffset, size: indexSize } },
-                    // { binding: 10, resource: { buffer: this.PrimitiveToSubMesh } },
+                    { binding: 1, resource: { buffer: this.InstancesBuffer }  },
+                    { binding: 2, resource: { buffer: this.BVHBuffer } },
+                    { binding: 3, resource: { buffer: this.SubMeshesBuffer } },
+                    { binding: 4, resource: { buffer: this.MaterialsBuffer } },
+                    { binding: 5, resource: { buffer: this.PrimitiveToSubMesh } },
+                    { binding: 6, resource: { buffer: this.VerticesBuffer } },
+                    { binding: 7, resource: { buffer: this.IndicesBuffer } },
+
                     // { binding: 11, resource: materialSampler },
                                 // { binding: 9, resource: baseColorArrayTexture.createView() },
                                 // { binding: 10, resource: emissiveColorArrayTexture.createView() },
                                 // { binding: 11, resource: normalArrayTexture.createView() },
                                 // { binding: 12, resource: ORMArrayTexture.createView() },
                     //{ binding: 12, resource: SceneTextureView },
+
                     { binding: 13, resource: AccumTextureView },
                 ],
             };
@@ -630,7 +267,9 @@ export class Renderer
             const RenderBindGroupDescriptor: GPUBindGroupDescriptor =
             {
                 layout: this.RenderPipeline.getBindGroupLayout(0),
-                entries: [{ binding: 0, resource: SceneTextureView }],
+                entries: [
+                    { binding: 0, resource: SceneTextureView }
+                ],
             }
 
             this.ComputeBindGroup = this.Device.createBindGroup(ComputeBindGroupDescriptor);
@@ -644,12 +283,34 @@ export class Renderer
     Update(): void
     {
 
+        const data = new Uint32Array(2);
+        data[0] = this.Canvas.width;
+        data[1] = this.Canvas.height;
+
+        this.Device.queue.writeBuffer(this.UniformsBuffer, 0, data);
+
+        const camData = new Float32Array(19);
+        
+        const camPos = vec3.fromValues(0.6,1,1);
+        const VP = createHumanEyeViewProjection(camPos);
+        const VPINV = mat4.invert(mat4.create(), VP);
+
+        for(let iter=0; iter<16; iter++) camData[iter] = VPINV?.[iter]!;
+
+        camData[16] = camPos[0];
+        camData[17] = camPos[1];
+        camData[18] = camPos[2];
+
+        //console.log(VPINV);
+
+        this.Device.queue.writeBuffer(this.UniformsBuffer, 16, camData);
+
         return;
     }
 
 
 
-    Render(): void
+    async Render(): Promise<void>
     {
 
         const CommandEncoder: GPUCommandEncoder = this.Device.createCommandEncoder();
@@ -670,10 +331,12 @@ export class Renderer
             const SourceTextureInfo     : GPUTexelCopyTextureInfo   = { texture: this.AccumTexture };
             const DestTextureInfo       : GPUTexelCopyTextureInfo   = { texture: this.SceneTexture };
             const TextureSize           : GPUExtent3DStrict         = { width: this.SceneTexture.width, height: this.SceneTexture.height };
-        
+
             CommandEncoder.copyTextureToTexture(SourceTextureInfo, DestTextureInfo, TextureSize);
         }
         
+
+
         // RenderPass (Draw SceneTexture)
         {
             const RenderPassDescriptor: GPURenderPassDescriptor =
@@ -684,17 +347,19 @@ export class Renderer
                         view: this.Context.getCurrentTexture().createView(),
                         loadOp: "clear",
                         storeOp: "store",
-                        clearValue: { r:0, g:0, b:1, a:1 }
+                        clearValue: { r:0, g:0, b:0, a:1 }
                     }
                 ]
             };
 
 
+            
+
             const RenderPass: GPURenderPassEncoder = CommandEncoder.beginRenderPass(RenderPassDescriptor);
 
             RenderPass.setPipeline(this.RenderPipeline);
             RenderPass.setBindGroup(0, this.RenderBindGroup);
-            RenderPass.draw(3);
+            RenderPass.draw(6);
 
             RenderPass.end();
         }
@@ -706,7 +371,234 @@ export class Renderer
         return;
     }
 
+    /**
+     * GLB 파일을 로드하여 파싱하고 GPU 버퍼에 데이터를 업로드합니다.
+     * @param path GLB 파일 경로
+     */
+    public async LoadObjectToGPU(path: string): Promise<void> {
+        console.log("🚀 GLB 파일 로드를 시작합니다...");
 
+        // 1. GLB 파일 로드 및 파싱
+        const loader = new GLTFLoader();
+        const gltf = await loader.loadAsync(path);
+
+        // 2. 데이터 수집을 위한 변수 초기화
+        const allVertices: number[] = [];
+        const allNormals: number[] = [];
+        const allUVs: number[] = [];
+        const allIndices: number[] = [];
+        const allTangents: number[] = [];
+        
+        const subMeshes: { materialIndex: number }[] = [];
+        const materials: any[] = []; // 직렬화된 재질 데이터
+        const primitiveToSubMesh: number[] = [];
+
+        const materialMap = new Map<THREE.Material, number>();
+        const textureMap = new Map<THREE.Texture, number>();
+
+        let vertexOffset = 0;
+        let subMeshIndexCounter = 0;
+
+        const meshes: THREE.Mesh[] = [];
+        gltf.scene.traverse(obj => {
+            if ((obj as THREE.Mesh).isMesh) {
+                meshes.push(obj as THREE.Mesh);
+            }
+        });
+
+        // 3. 모든 메쉬를 순회하며 데이터 추출 및 병합
+        for (const mesh of meshes) {
+            const geometry = mesh.geometry;
+            // Tangent 데이터가 없으면 생성 (Normal Map에 필수)
+            if (!geometry.attributes.tangent) {
+                geometry.computeTangents();
+            }
+
+            const meshMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+
+            // SubMesh (geometry group) 처리
+            geometry.groups.forEach(group => {
+                const material = meshMaterials[group.materialIndex!];
+                let materialIndex = materialMap.get(material);
+                
+                // 새로운 재질인 경우
+                if (materialIndex === undefined) {
+                    materialIndex = materials.length;
+                    materialMap.set(material, materialIndex);
+                    
+                    const stdMat = material as THREE.MeshStandardMaterial;
+                    const ormTexture = stdMat.roughnessMap || stdMat.metalnessMap; // 보통 동일한 텍스처를 사용 (Occlusion, Roughness, Metalness)
+
+                    // 텍스처 인덱스 처리
+                    const baseColorTexIndex = this.processTexture(stdMat.map, textureMap);
+                    const emissiveTexIndex = this.processTexture(stdMat.emissiveMap, textureMap);
+                    const normalTexIndex = this.processTexture(stdMat.normalMap, textureMap);
+                    const ormTexIndex = this.processTexture(ormTexture, textureMap);
+
+                    // WGSL Material 구조체에 맞게 데이터 푸시
+                    materials.push(
+                        ...stdMat.color.toArray(), 1.0, // BaseColor (vec4)
+                        ...stdMat.emissive.toArray(),    // EmissiveColor (vec3)
+                        stdMat.metalness,               // Metalic (f32)
+                        stdMat.roughness,               // Roughness (f32)
+                        1.5,              // IOR (f32) - glTF에 없으면 기본값
+                        stdMat.normalScale?.x || 1.0,   // NormalScale (f32)
+                        0.0, // Padding
+                        baseColorTexIndex,              // TextureIndex_BaseColor (i32)
+                        emissiveTexIndex,             // TextureIndex_EmissiveColor (i32)
+                        normalTexIndex,                 // TextureIndex_Normal (i32)
+                        ormTexIndex,                    // TextureIndex_ORM (i32)
+                    );
+                }
+
+                subMeshes.push({ materialIndex });
+                
+                // Primitive(triangle)가 어떤 SubMesh에 속하는지 매핑
+                const primitiveCount = group.count / 3;
+                for (let i = 0; i < primitiveCount; i++) {
+                    primitiveToSubMesh.push(subMeshIndexCounter);
+                }
+                subMeshIndexCounter++;
+            });
+
+            // 지오메트리 데이터 병합
+            allVertices.push(...geometry.attributes.position.array);
+            allNormals.push(...geometry.attributes.normal.array);
+            allUVs.push(...geometry.attributes.uv.array);
+            allTangents.push(...geometry.attributes.tangent.array);
+            
+            // 인덱스는 vertexOffset을 더해서 추가
+            const indices = geometry.index!.array;
+            for (let i = 0; i < indices.length; i++) {
+                allIndices.push(indices[i] + vertexOffset);
+            }
+            vertexOffset += geometry.attributes.position.count;
+        }
+
+        // 4. BVH 생성
+        console.log("BVH 생성을 시작합니다...");
+        const mergedGeometry = new THREE.BufferGeometry();
+        mergedGeometry.setAttribute('position', new THREE.Float32BufferAttribute(allVertices, 3));
+        mergedGeometry.setIndex(allIndices);
+
+        // a SAH strategy is costlier to build but results in faster raycasting.
+        const bvh = new MeshBVH(mergedGeometry);
+        // `serialize()`는 BVH를 플랫 버퍼로 만듭니다. `roots` 속성이 바로 그 데이터입니다.
+        const bvhNodes = (bvh as any)._roots[0] as Float32Array; // 보통 첫번째 루트에 모든 노드 데이터가 들어있음
+
+        // three-mesh-bvh 노드 데이터를 WGSL 구조체 레이아웃으로 변환
+        const bvhData = new Float32Array(bvhNodes.length);
+        console.log(bvhNodes);
+
+        for(let i = 0; i < bvhNodes.length / 8; i++) {
+            const offset = i * 8;
+            const node = bvhNodes.slice(offset, offset + 8);
+            
+            const isLeaf = node[7] !== 0; // count가 0이 아니면 리프 노드
+            
+            // Boundary Min: x, y, z
+            bvhData[offset + 0] = node[0];
+            bvhData[offset + 1] = node[1];
+            bvhData[offset + 2] = node[2];
+            // PrimitiveCount or 0 for internal
+            (bvhData as any as Uint32Array)[offset + 3] = isLeaf ? node[7] : 0;
+            
+            // Boundary Max: x, y, z
+            bvhData[offset + 4] = node[3];
+            bvhData[offset + 5] = node[4];
+            bvhData[offset + 6] = node[5];
+            // PrimitiveOffset or splitAxis
+            (bvhData as any as Uint32Array)[offset + 7] = node[6]; // offset or splitAxis
+        }
+        console.log(`BVH 생성 완료! 노드 수: ${bvhData.length / 8}`);
+
+        // 5. 최종 TypedArray 생성
+        const verticesArray = new Float32Array(allVertices);
+        const normalsArray = new Float32Array(allNormals);
+        const uvsArray = new Float32Array(allUVs);
+        const tangentsArray = new Float32Array(allTangents);
+        const indicesArray = new Uint32Array(allIndices);
+        
+        const subMeshesArray = new Uint32Array(subMeshes.map(sm => sm.materialIndex));
+        const materialsArray = new Float32Array(materials);
+        const primitiveToSubMeshArray = new Uint32Array(primitiveToSubMesh);
+
+
+        // 6. GPU 버퍼 생성 및 데이터 쓰기
+        console.log("GPU 버퍼 생성 및 데이터 업로드를 시작합니다...");
+
+        this.BVHBuffer = this.createAndWriteBuffer(bvhData, GPUBufferUsage.STORAGE);
+        this.SubMeshesBuffer = this.createAndWriteBuffer(subMeshesArray, GPUBufferUsage.STORAGE);
+        this.MaterialsBuffer = this.createAndWriteBuffer(materialsArray, GPUBufferUsage.STORAGE);
+        this.PrimitiveToSubMesh = this.createAndWriteBuffer(primitiveToSubMeshArray, GPUBufferUsage.STORAGE);
+        
+        // GeometriesBuffer는 하나의 큰 버퍼로 만들고 슬라이싱해서 바인딩
+        const geomBufferOffsets = {
+            vertices: 0,
+            normals: verticesArray.byteLength,
+            uvs: verticesArray.byteLength + normalsArray.byteLength,
+            tangents: verticesArray.byteLength + normalsArray.byteLength + uvsArray.byteLength,
+            indices: verticesArray.byteLength + normalsArray.byteLength + uvsArray.byteLength + tangentsArray.byteLength,
+        };
+        const totalGeomBufferSize = verticesArray.byteLength + normalsArray.byteLength + uvsArray.byteLength + tangentsArray.byteLength + indicesArray.byteLength;
+
+        // this.GeometriesBuffer = this.Device.createBuffer({
+        //     size: totalGeomBufferSize,
+        //     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        // });
+        // this.Device.queue.writeBuffer(this.GeometriesBuffer, geomBufferOffsets.vertices, verticesArray);
+        // this.Device.queue.writeBuffer(this.GeometriesBuffer, geomBufferOffsets.normals, normalsArray);
+        // this.Device.queue.writeBuffer(this.GeometriesBuffer, geomBufferOffsets.uvs, uvsArray);
+        // this.Device.queue.writeBuffer(this.GeometriesBuffer, geomBufferOffsets.tangents, tangentsArray);
+        // this.Device.queue.writeBuffer(this.GeometriesBuffer, geomBufferOffsets.indices, indicesArray);
+        
+        console.log("✅ 모든 데이터가 성공적으로 GPU에 업로드되었습니다.");
+    }
+
+    /**
+     * 텍스처를 처리하고 GPUTextureView를 생성한 뒤 인덱스를 반환합니다.
+     */
+    private async processTexture(texture: THREE.Texture | null, textureMap: Map<THREE.Texture, number>): Promise<number> {
+        if (!texture) return -1; // 텍스처가 없으면 -1 반환
+        if (textureMap.has(texture)) return textureMap.get(texture)!;
+
+        const image = texture.image as ImageBitmap; // gltf 로더는 보통 ImageBitmap을 사용
+        const gpuTexture = this.Device.createTexture({
+            size: [image.width, image.height, 1],
+            format: 'rgba8unorm', // glTF 텍스처에 일반적인 포맷
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+
+        this.Device.queue.copyExternalImageToTexture(
+            { source: image },
+            { texture: gpuTexture },
+            [image.width, image.height]
+        );
+
+        const textureIndex = this.TextureViews.length;
+        this.TextureViews.push(gpuTexture.createView());
+        textureMap.set(texture, textureIndex);
+        
+        return textureIndex;
+    }
+
+    private createAndWriteBuffer(data: BufferSource, usage: GPUBufferUsageFlags): GPUBuffer 
+    {
+        const buffer = this.Device.createBuffer({
+            size: data.byteLength,
+            usage: usage | GPUBufferUsage.COPY_DST,
+            mappedAtCreation: true,
+        });
+        
+        // 데이터 타입에 따라 복사
+        if (data instanceof Uint32Array) {
+            new Uint32Array(buffer.getMappedRange()).set(data);
+        } else if (data instanceof Float32Array) {
+            new Float32Array(buffer.getMappedRange()).set(data);
+        }
+        buffer.unmap();
+        return buffer;
+    }
 
     private createTexture(
         TextureWidth    : number,
@@ -725,35 +617,4 @@ export class Renderer
         return this.Device.createTexture(TextureDescriptor);
     }
 
-
-
-    private createBuffer(BufferSize: number, BufferUsage: GPUBufferUsageFlags): GPUBuffer
-    {
-        const BufferDescriptor: GPUBufferDescriptor =
-        {
-            size: BufferSize,
-            usage: BufferUsage,
-        };
-
-        return this.Device.createBuffer(BufferDescriptor);
-    }
-
-
-
-    private clearTexture(Texture: GPUTexture): void
-    {
-
-        const bpp       = 16;
-        const unpadded  = Texture.width * bpp;
-        const padded    = Math.ceil(unpadded >> 8) << 8;
-
-        const DestinationInfo   : GPUTexelCopyTextureInfo       = { texture: Texture };
-        const DataToWrite       : GPUAllowSharedBufferSource    = new Uint8Array(Texture.height * padded);
-        const DataLayout        : GPUTexelCopyBufferLayout      = { bytesPerRow: padded, rowsPerImage: Texture.height };
-        const WriteSize         : GPUExtent3DStrict             = { width: Texture.width, height: Texture.height };
-
-        this.Device.queue.writeTexture(DestinationInfo, DataToWrite, DataLayout, WriteSize);
-
-        return;
-    }
 };
