@@ -15,19 +15,19 @@ async function main()
     Canvas.width = 600;
     Canvas.height = 450;
 
-    console.log(Device.limits);
-    console.log(GPUBufferUsage);
-
     TestWorld = new World();
     TestRenderer = new Renderer(Adapter, Device, Canvas);
   }
 
+  await TestWorld.Load();
+
+  TestWorld.Initialize();
   TestRenderer.Initialize(TestWorld);
 
   function frame()
   {
 
-    //TestRenderer.Test_Update();
+    TestRenderer.Update();
     TestRenderer.Render();
 
     requestAnimationFrame(frame);

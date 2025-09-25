@@ -5,3 +5,9 @@ Minimal Path Tracer Using WebGPU
 npm i gl-matrix
 
 npm i @webgpu/types
+
+npm install three
+npm install --save-dev @types/three
+
+npm install three three-mesh-bvh
+npm install --save-dev @types/three

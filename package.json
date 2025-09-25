@@ -9,11 +9,14 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/three": "^0.180.0",
     "typescript": "~5.8.3",
     "vite": "^7.1.6"
   },
   "dependencies": {
     "@webgpu/types": "^0.1.65",
-    "gl-matrix": "^3.4.4"
+    "gl-matrix": "^3.4.4",
+    "three": "^0.180.0",
+    "three-mesh-bvh": "^0.9.1"
   }
 }
