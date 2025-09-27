@@ -1,24 +1,18 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-
-import { mat4 } from "gl-matrix";
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
+import { mat4 } from "gl-matrix";
+
+import { type Mesh } from './Mesh.ts';
+import { Wrapper } from './Wrapper.ts';
 
 // Resources ===================================
 
-interface Instance
+export interface Instance
 {
     MeshID      : string;
     ModelMatrix : mat4;
-}
-
-
-
-interface Mesh
-{
-    BVHBuffer   : Float32Array;
-    Data        : THREE.Mesh;
 }
 
 // World ===================================
@@ -26,8 +20,8 @@ interface Mesh
 export class World 
 {
     // Resource Pools
-    private InstancesPool    : Map<string, Instance>;
-    private MeshesPool       : Map<string, Mesh>;
+    public InstancesPool    : Map<string, Instance>;
+    public MeshesPool       : Map<string, Mesh>;
 
 
     
@@ -41,8 +35,10 @@ export class World
     async Load(): Promise<void>
     {
 
+        // Loading Models ...
         const LampMesh = await this.LoadModel("../assets/Lamp.glb");
 
+        // Registering Models ...
         this.MeshesPool.set("Lamp", LampMesh);
 
         return;
@@ -61,11 +57,9 @@ export class World
         for (const MeshIdx in Model.scene.children)
         {
             const Mesh = Model.scene.children[MeshIdx] as THREE.Mesh;
-            
             if (!Mesh.isMesh) continue;
-
+            
             Mesh.geometry.applyMatrix4(Mesh.matrixWorld);
-
             Geometries.push(Mesh.geometry);
 
             if (Array.isArray(Mesh.material)) { Materials.push(...Mesh.material); }
@@ -76,20 +70,19 @@ export class World
         const MergedMesh = new THREE.Mesh(mergeGeometries(Geometries, true), Materials);
 
         // Build BVH Buffer
-        let BVHBuffer: Float32Array;
+        let BlasBuffer: Float32Array;
         {
             const GroupData = MergedMesh.geometry.groups;
             MergedMesh.geometry.groups = [];
 
             const BVHData = new MeshBVH(MergedMesh.geometry, { strategy: SAH, maxLeafTris: 10 });
-            BVHBuffer = (BVHData as any)._roots;
-
+            BlasBuffer = new Float32Array((BVHData as any)._roots[0]);
             MergedMesh.geometry.groups = GroupData;
         }
 
         const MeshGenerated: Mesh =
         {
-            BVHBuffer: BVHBuffer,
+            Blas: BlasBuffer,
             Data: MergedMesh,
         }; 
 
@@ -111,4 +104,6 @@ export class World
 
         return;
     }
+
+
 }

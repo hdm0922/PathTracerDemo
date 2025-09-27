@@ -89,7 +89,6 @@ struct Vertex
 //==========================================================================
 
 @group(0) @binding(0) var<uniform> UniformsBuffer           : Uniforms;
-
 @group(0) @binding(1) var<storage, read> InstancesBuffer    : array<Instance>;
 @group(0) @binding(2) var<storage, read> BVHBuffer          : array<BVH>;
 @group(0) @binding(3) var<storage, read> SubMeshesBuffer    : array<SubMesh>;
@@ -97,12 +96,6 @@ struct Vertex
 @group(0) @binding(5) var<storage, read> PrimitiveToSubMesh : array<u32>;
 @group(0) @binding(6) var<storage, read> VerticesBuffer     : array<Vertex>;
 @group(0) @binding(7) var<storage, read> IndicesBuffer      : array<u32>;
-
-@group(0) @binding(11)  var MaterialSampler                  : sampler;
-// @group(0) @binding(9)  var TexturePool_BaseColor            : binding_array<texture_2d<f32>, MAX_BASE_COLOR_TEXTURES>;
-// @group(0) @binding(10) var TexturePool_EmissiveColor        : binding_array<texture_2d<f32>, MAX_BASE_COLOR_TEXTURES>; 
-// @group(0) @binding(11) var TexturePool_Normal               : binding_array<texture_2d<f32>, MAX_BASE_COLOR_TEXTURES>; 
-// @group(0) @binding(12) var TexturePool_ORM                  : binding_array<texture_2d<f32>, MAX_BASE_COLOR_TEXTURES>;
 @group(0) @binding(12) var SceneTexture                     : texture_2d<f32>;
 @group(0) @binding(13) var AccumTexture                     : texture_storage_2d<rgba32float, write>;
 

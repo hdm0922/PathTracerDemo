@@ -1,13 +1,14 @@
-import { World } from "./World";
 import { vec3, mat4 } from "gl-matrix";
 
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { MeshBVH } from 'three-mesh-bvh';
-
-import computeShaderCode from './shaders/PathTracer.wgsl?raw';
+import computeShaderCode from './shaders/ComputeShader.wgsl?raw';
 import vertexShaderCode from './shaders/testVertex.wgsl?raw';
 import fragmentShaderCode from './shaders/testFragment.wgsl?raw';
+
+import { type Mesh } from "./Mesh";
+import { type Instance, World } from "./World";
+import { Wrapper } from "./Wrapper";
+
+import { buildTLAS } from "./TlasBuilder";
 
 function createHumanEyeViewProjection(camWorldPosition: vec3): mat4 {
     // 1. 최종 결과를 저장할 행렬과 중간 계산용 행렬들을 생성합니다.
@@ -46,10 +47,10 @@ export class Renderer
     public readonly Context         : GPUCanvasContext;
     public readonly PreferredFormat : GPUTextureFormat;
 
+ /////////////////////////////////////
+ /////////////////////////////////////
 
-    // WebGPU Resources
-    public SceneTexture         : GPUTexture;   // Texture To Render
-    public AccumTexture         : GPUTexture;   // Texture To Write Path-Traced Result
+
 
     public UniformsBuffer       : GPUBuffer;
     public InstancesBuffer      : GPUBuffer;
@@ -61,24 +62,41 @@ export class Renderer
     public VerticesBuffer       : GPUBuffer;
     public IndicesBuffer        : GPUBuffer;
 
+    // 텍스처 관련 (Gemini)
+    public MaterialSampler: GPUSampler;
+
+
+    ////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////
+
+    // WebGPU Resources
+    public SceneTexture         : GPUTexture;
+    public AccumTexture         : GPUTexture;
+
+    public SceneBuffer          : GPUBuffer;
+    public GeometryBuffer       : GPUBuffer;
+    public AccelBuffer          : GPUBuffer;
+
+    public Textures             : GPUTexture[];
+
     // WebGPU Pipelines
     public ComputePipeline : GPUComputePipeline;
     public RenderPipeline  : GPURenderPipeline;
-
 
     // WebGPU BindGroups
     public ComputeBindGroup: GPUBindGroup;
     public RenderBindGroup: GPUBindGroup;
 
-
     // World Data
     public World    : World;
     public FrameCount : number;
 
+    // Data Offsets
+    public Offset_MeshDescriptorBuffer: number;
+    public Offset_MaterialBuffer : number;
+    public Offset_PrimitiveBuffer: number;
+    public Offset_BlasBuffer : number;
 
-    // 텍스처 관련 (Gemini)
-    public TextureViews: GPUTextureView[] = [];
-    public MaterialSampler: GPUSampler;
 
     constructor
     (
@@ -112,6 +130,13 @@ export class Renderer
         // Create WebGPU Resources
         this.SceneTexture       = GPUTexture.prototype;
         this.AccumTexture       = GPUTexture.prototype;
+
+        this.SceneBuffer        = GPUBuffer.prototype;
+        this.GeometryBuffer     = GPUBuffer.prototype;
+        this.AccelBuffer        = GPUBuffer.prototype;
+
+        this.Textures           = [];
+
 
         this.UniformsBuffer     = GPUBuffer.prototype;
         this.InstancesBuffer    = GPUBuffer.prototype;
@@ -147,62 +172,311 @@ export class Renderer
             addressModeU: 'repeat',
             addressModeV: 'repeat',
         });
+
+
+        this.Offset_BlasBuffer = 0;
+        this.Offset_MaterialBuffer = 0;
+        this.Offset_MeshDescriptorBuffer = 0;
+        this.Offset_PrimitiveBuffer = 0;
     }
 
-
-
-    Initialize(World: World): void
+    BuildMeshData(World: World): [Float32Array, Float32Array, Float32Array, ImageBitmap[]]
     {
 
+        interface MeshRawData
+        {
+            BlasArray       : Float32Array,
+            VertexArray     : Float32Array,
+            PrimitiveArray  : Uint32Array,
+            MaterialArray   : Float32Array,
+            TextureArray    : Array<ImageBitmap>,
+        };
+
+
+
+        interface MeshDescriptor
+        {
+            BlasOffset      : number,
+            VertexOffset    : number,
+            PrimitiveOffset : number,
+            MaterialOffset  : number,
+            TextureOffset   : number,
+        };
+
+
+
+        function convertMapToArray<T>(InMap: Map<string, T>): [T[], Map<string, number>]
+        {
+            const ArrayData: T[] = [...InMap.values()];
+
+            const IDToIndexMap: Map<string, number> = new Map<string, number>();
+            {
+                const IDData: string[] = [...InMap.keys()];
+
+                for (let iter=0; iter<IDData.length; iter++)
+                    IDToIndexMap.set(IDData[iter], iter);
+            }
+
+            return [ArrayData, IDToIndexMap];
+        }
+
+
+
+
+        // World로부터 Instance, Mesh 정보들 모두 가져오기
+        let InstanceArray           : Instance[];
+        let MeshArray               : Mesh[];
+        let MeshIDToIndexMap        : Map<string, number>;
+        {
+            InstanceArray = convertMapToArray(World.InstancesPool)[0];
+
+            const UsedMeshes: Map<string, Mesh> = new Map<string, Mesh>();
+            for (const instance of InstanceArray) UsedMeshes.set(instance.MeshID, World.MeshesPool.get(instance.MeshID)!);
+
+            [MeshArray, MeshIDToIndexMap] = convertMapToArray(UsedMeshes);
+        }
+
+
+
+        // 모든 메시를 하나의 RawData로 병합하기
+        let MergedMeshRawData: MeshRawData;
+        const MeshDescriptorArray : Array<MeshDescriptor> = new Array<MeshDescriptor>(MeshArray.length);
+        {
+            const MergedMeshDescriptor: MeshDescriptor =
+            {
+                BlasOffset      : 0,
+                VertexOffset    : 0,
+                PrimitiveOffset : 0,
+                MaterialOffset  : 0,
+                TextureOffset   : 0,
+            };
+
+            const MeshRawDataArray : Array<MeshRawData> = new Array<MeshRawData>(MeshArray.length);
+            for (let iter=0; iter<MeshArray.length; iter++)
+            {
+                const BlasArray                     = Wrapper.WrapBlasArray(MeshArray[iter]);
+                const VertexArray                   = Wrapper.WrapVertexArray(MeshArray[iter]);
+                const PrimitiveArray                = Wrapper.WrapPrimitiveArray(MeshArray[iter]);
+                const [MaterialArray, TextureArray] = Wrapper.WrapMaterialsAndTexturesArray(MeshArray[iter]);
+
+                const RawData: MeshRawData =
+                {
+                    BlasArray       : BlasArray,
+                    VertexArray     : VertexArray,
+                    PrimitiveArray  : PrimitiveArray,
+                    MaterialArray   : MaterialArray,
+                    TextureArray    : TextureArray
+                };
+
+                const Descriptor: MeshDescriptor =
+                {
+                    BlasOffset      : MergedMeshDescriptor.BlasOffset,
+                    VertexOffset    : MergedMeshDescriptor.VertexOffset,
+                    PrimitiveOffset : MergedMeshDescriptor.PrimitiveOffset,
+                    MaterialOffset  : MergedMeshDescriptor.MaterialOffset,
+                    TextureOffset   : MergedMeshDescriptor.TextureOffset,
+                };
+
+                MeshRawDataArray[iter] = RawData;
+                MeshDescriptorArray[iter] = Descriptor;
+
+                MergedMeshDescriptor.BlasOffset       += BlasArray.length;
+                MergedMeshDescriptor.VertexOffset     += VertexArray.length;
+                MergedMeshDescriptor.PrimitiveOffset  += PrimitiveArray.length;
+                MergedMeshDescriptor.MaterialOffset   += MaterialArray.length;
+                MergedMeshDescriptor.TextureOffset    += TextureArray.length;
+            }
+            
+            MergedMeshRawData =
+            {
+                BlasArray       : new Float32Array(MergedMeshDescriptor.BlasOffset),
+                VertexArray     : new Float32Array(MergedMeshDescriptor.VertexOffset),
+                PrimitiveArray  : new Uint32Array(MergedMeshDescriptor.PrimitiveOffset),
+                MaterialArray   : new Float32Array(MergedMeshDescriptor.MaterialOffset),
+                TextureArray    : new Array<ImageBitmap>(MergedMeshDescriptor.TextureOffset),
+            };
+
+            for (let iter=0; iter<MeshArray.length; iter++)
+            {
+                const RawData = MeshRawDataArray[iter];
+                const Descriptor = MeshDescriptorArray[iter];
+
+                MergedMeshRawData.BlasArray.set(RawData.BlasArray, Descriptor.BlasOffset);
+                MergedMeshRawData.VertexArray.set(RawData.VertexArray, Descriptor.VertexOffset);
+                MergedMeshRawData.PrimitiveArray.set(RawData.PrimitiveArray, Descriptor.PrimitiveOffset);
+                MergedMeshRawData.MaterialArray.set(RawData.MaterialArray, Descriptor.MaterialOffset);
+
+                for (let idx=0; idx<RawData.TextureArray.length; idx++)
+                    MergedMeshRawData.TextureArray[Descriptor.TextureOffset + idx] = RawData.TextureArray[idx];
+            }
+
+        }
+
+
+        // Tlas 빌드하기
+        const TlasArray : Float32Array = buildTLAS(InstanceArray, MeshArray, MeshIDToIndexMap);
+
+
+        // Instance 정보들과 MeshDescriptor정보들을 RawData로 변환
+        const InstanceRawData: Float32Array = Wrapper.WrapInstances(InstanceArray, MeshIDToIndexMap);
+        const MeshDescriptorRawData: Float32Array = new Float32Array(8 * MeshDescriptorArray.length);
+        for (let iter=0; iter<MeshDescriptorArray.length; iter++)
+        {
+            const Offset = 8 * iter;
+
+            MeshDescriptorRawData[Offset + 0] = MeshDescriptorArray[iter].BlasOffset;
+            MeshDescriptorRawData[Offset + 1] = MeshDescriptorArray[iter].PrimitiveOffset;
+            MeshDescriptorRawData[Offset + 2] = MeshDescriptorArray[iter].VertexOffset;
+            MeshDescriptorRawData[Offset + 3] = MeshDescriptorArray[iter].MaterialOffset;
+            
+            MeshDescriptorRawData[Offset + 7] = MeshDescriptorArray[iter].TextureOffset;
+        }
+    
+
+
+
+
+        // SceneBuffer에 쓸 데이터 준비하기 (Instance, MeshDescriptor, Material)
+        this.Offset_MeshDescriptorBuffer = InstanceRawData.length;
+        this.Offset_MaterialBuffer = this.Offset_MeshDescriptorBuffer + MeshDescriptorRawData.length;
+        
+        const SceneBufferLength = this.Offset_MaterialBuffer + MergedMeshRawData.MaterialArray.length;
+        const SceneBufferData: Float32Array = new Float32Array(SceneBufferLength);
+        {
+            SceneBufferData.set(InstanceRawData, 0);
+            SceneBufferData.set(MeshDescriptorRawData, this.Offset_MeshDescriptorBuffer);
+            SceneBufferData.set(MergedMeshRawData.MaterialArray, this.Offset_MaterialBuffer);
+        }
+
+
+
+        // GeometryBuffer에 쓸 데이터 준비하기 (Vertex, Primitive)
+        this.Offset_PrimitiveBuffer = MergedMeshRawData.VertexArray.length;
+
+        const GeometryBufferLength = this.Offset_PrimitiveBuffer + MergedMeshRawData.PrimitiveArray.length;
+        const GeometryBufferData: Float32Array = new Float32Array(GeometryBufferLength);
+        {
+            GeometryBufferData.set(MergedMeshRawData.VertexArray, 0);
+            GeometryBufferData.set(MergedMeshRawData.PrimitiveArray, this.Offset_PrimitiveBuffer);     
+        }
+
+
+
+        // AccelBuffer에 쓸 데이터 준비하기 (Tlas, Blas)
+        this.Offset_BlasBuffer = TlasArray.length;
+
+        const AccelBufferLength = this.Offset_BlasBuffer + MergedMeshRawData.BlasArray.length;
+        const AccelBufferData: Float32Array = new Float32Array(AccelBufferLength);
+        {
+            AccelBufferData.set(TlasArray, 0);
+            AccelBufferData.set(MergedMeshRawData.BlasArray, this.Offset_BlasBuffer);
+        }
+
+
+        // TextureArray에 쓸 데이터 준비하기 (Textures)
+        MergedMeshRawData.TextureArray;
+
+
+        return [SceneBufferData, GeometryBufferData, AccelBufferData, MergedMeshRawData.TextureArray];
+    }
+    
+
+    async Initialize(World: World): Promise<void>
+    {
         // Initialize Scene Stuffs
         this.World = World;
         this.FrameCount = 0;
 
+        // Build Scene
+        const [SceneBufferData, GeometryBufferData, AccelBufferData, ImageBitmaps] = this.BuildMeshData(World);
 
-        // Initialize WebGPU Resources : Uniform Buffer
+
+        // Create Uniform Buffer
         {
             const UniformBufferUsageFlags: GPUBufferUsageFlags = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
-            
+
             this.UniformsBuffer = this.Device.createBuffer({ size: 256, usage: UniformBufferUsageFlags });
         }
 
-        // Initialize WebGPU Resources : Storage Buffers
+        // Create Storage Buffers
         {
             const StorageBufferUsageFlags: GPUBufferUsageFlags = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
+
+
+            // 1. Scene Buffer
+            const SceneBufferDescriptor: GPUBufferDescriptor = { size: SceneBufferData.byteLength, usage: StorageBufferUsageFlags };
             
-            this.InstancesBuffer        = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
-            this.BVHBuffer              = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
-            this.SubMeshesBuffer        = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
-            this.MaterialsBuffer        = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
-            this.PrimitiveToSubMesh     = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
-            this.VerticesBuffer         = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
-            this.IndicesBuffer          = this.Device.createBuffer({ size: 256, usage: StorageBufferUsageFlags });
+            this.SceneBuffer = this.Device.createBuffer(SceneBufferDescriptor);
+            this.Device.queue.writeBuffer(this.SceneBuffer, 0, SceneBufferData.buffer);
+
+            
+
+            // 2. GeometryBuffer
+            const GeometryBufferDescriptor: GPUBufferDescriptor = { size: GeometryBufferData.byteLength, usage: StorageBufferUsageFlags };
+
+            this.GeometryBuffer = this.Device.createBuffer(GeometryBufferDescriptor);
+            this.Device.queue.writeBuffer(this.GeometryBuffer, 0, GeometryBufferData.buffer);
+
+
+
+            // 3. AccelBuffer
+            const AccelBufferDescriptor: GPUBufferDescriptor = { size: AccelBufferData.byteLength, usage: StorageBufferUsageFlags };
+
+            this.AccelBuffer = this.Device.createBuffer(AccelBufferDescriptor);
+            this.Device.queue.writeBuffer(this.AccelBuffer, 0, AccelBufferData.buffer);
         }
 
-        // TEST: Modify InstancesBuffer
+        // Create TextureViews
         {
-            const data = new Float32Array(33);
-            let offset = 0;
-            data[offset + 0] = 1.0; data[offset + 5] = 1.0; data[offset + 10] = 1.0; data[offset + 15] = 1.0;
+            const TextureFormat     : GPUTextureFormat      = "rgba8unorm";
+            const TextureUsageFlags : GPUTextureUsageFlags  = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT;
 
-            offset = 16;
-            data[offset + 0] = 1.0; data[offset + 5] = 1.0; data[offset + 10] = 1.0; data[offset + 15] = 1.0;
+            for (let iter=0; iter<ImageBitmaps.length; iter++)
+            {
+                const TextureDescriptor: GPUTextureDescriptor =
+                {
+                    size    : [ImageBitmaps[iter].width, ImageBitmaps[iter].height, 1],
+                    format  : TextureFormat,
+                    usage   : TextureUsageFlags
+                };
 
-            data[33] = 0;
+                const TextureCreated = this.Device.createTexture(TextureDescriptor);
 
-            this.Device.queue.writeBuffer(this.InstancesBuffer, 0, data);
+                this.Device.queue.copyExternalImageToTexture(
+                    { source: ImageBitmaps[iter] },
+                    { texture: TextureCreated },
+                    [ImageBitmaps[iter].width, ImageBitmaps[iter].height]
+                );
+
+                this.Textures.push(TextureCreated);
+            }
+
         }
 
-        // Initialize WebGPU Resources : Texture
+        // Create Scene Texture, AccumTexture
         {
-            const SceneTextureUsageFlags  : GPUTextureUsageFlags  = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC;
+            const SceneTextureUsageFlags  : GPUTextureUsageFlags  = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST;
             const AccumTextureUsageFlags  : GPUTextureUsageFlags  = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC;
 
-            this.SceneTexture = this.createTexture(this.Canvas.width, this.Canvas.height, "rgba32float", SceneTextureUsageFlags);
-            this.AccumTexture = this.createTexture(this.Canvas.width, this.Canvas.height, "rgba32float", AccumTextureUsageFlags);
+            const SceneTextureDescriptor: GPUTextureDescriptor =
+            {
+                size: { width: this.Canvas.width, height: this.Canvas.height },
+                format: "rgba32float",
+                usage: SceneTextureUsageFlags
+            };
+
+            const AccumTextureDescriptor: GPUTextureDescriptor =
+            {
+                size: { width: this.Canvas.width, height: this.Canvas.height },
+                format: "rgba32float",
+                usage: AccumTextureUsageFlags
+            };
+
+            this.SceneTexture = this.Device.createTexture(SceneTextureDescriptor);
+            this.AccumTexture = this.Device.createTexture(AccumTextureDescriptor);
         }
 
-        // Generate WebGPU Pipelines
+        // Create Compute Pipeline, Render Pipeline
         {
             const ComputeShaderModuleDescriptor     : GPUShaderModuleDescriptor = { code: computeShaderCode };
             const VertexShaderModuleDescriptor      : GPUShaderModuleDescriptor = { code: vertexShaderCode };
@@ -234,33 +508,23 @@ export class Renderer
             this.RenderPipeline = this.Device.createRenderPipeline(RenderPipelineDescriptor);
         }
 
-        // Generate WebGPU BindGroups
+        // Create Bindgroups
         {
             const SceneTextureView: GPUTextureView = this.SceneTexture.createView();
             const AccumTextureView: GPUTextureView = this.AccumTexture.createView();
-
+            
             const ComputeBindGroupDescriptor: GPUBindGroupDescriptor =
             {
                 layout: this.ComputePipeline.getBindGroupLayout(0),
                 entries:
                 [
                     { binding: 0, resource: { buffer: this.UniformsBuffer } },
-                    { binding: 1, resource: { buffer: this.InstancesBuffer }  },
-                    { binding: 2, resource: { buffer: this.BVHBuffer } },
-                    { binding: 3, resource: { buffer: this.SubMeshesBuffer } },
-                    { binding: 4, resource: { buffer: this.MaterialsBuffer } },
-                    { binding: 5, resource: { buffer: this.PrimitiveToSubMesh } },
-                    { binding: 6, resource: { buffer: this.VerticesBuffer } },
-                    { binding: 7, resource: { buffer: this.IndicesBuffer } },
+                    { binding: 1, resource: { buffer: this.SceneBuffer }  },
+                    { binding: 2, resource: { buffer: this.GeometryBuffer } },
+                    { binding: 3, resource: { buffer: this.AccelBuffer } },
 
-                    // { binding: 11, resource: materialSampler },
-                                // { binding: 9, resource: baseColorArrayTexture.createView() },
-                                // { binding: 10, resource: emissiveColorArrayTexture.createView() },
-                                // { binding: 11, resource: normalArrayTexture.createView() },
-                                // { binding: 12, resource: ORMArrayTexture.createView() },
-                    //{ binding: 12, resource: SceneTextureView },
-
-                    { binding: 13, resource: AccumTextureView },
+                    { binding: 10, resource: SceneTextureView },
+                    { binding: 11, resource: AccumTextureView },
                 ],
             };
 
@@ -270,15 +534,16 @@ export class Renderer
                 entries: [
                     { binding: 0, resource: SceneTextureView }
                 ],
-            }
+            };
 
-            this.ComputeBindGroup = this.Device.createBindGroup(ComputeBindGroupDescriptor);
-            this.RenderBindGroup = this.Device.createBindGroup(RenderBindGroupDescriptor);
+            this.ComputeBindGroup   = this.Device.createBindGroup(ComputeBindGroupDescriptor);
+            this.RenderBindGroup    = this.Device.createBindGroup(RenderBindGroupDescriptor);
         }
 
 
         return;
     }
+
 
     Update(): void
     {
@@ -301,7 +566,6 @@ export class Renderer
         camData[17] = camPos[1];
         camData[18] = camPos[2];
 
-        //console.log(VPINV);
 
         this.Device.queue.writeBuffer(this.UniformsBuffer, 16, camData);
 
@@ -371,250 +635,5 @@ export class Renderer
         return;
     }
 
-    /**
-     * GLB 파일을 로드하여 파싱하고 GPU 버퍼에 데이터를 업로드합니다.
-     * @param path GLB 파일 경로
-     */
-    public async LoadObjectToGPU(path: string): Promise<void> {
-        console.log("🚀 GLB 파일 로드를 시작합니다...");
-
-        // 1. GLB 파일 로드 및 파싱
-        const loader = new GLTFLoader();
-        const gltf = await loader.loadAsync(path);
-
-        // 2. 데이터 수집을 위한 변수 초기화
-        const allVertices: number[] = [];
-        const allNormals: number[] = [];
-        const allUVs: number[] = [];
-        const allIndices: number[] = [];
-        const allTangents: number[] = [];
-        
-        const subMeshes: { materialIndex: number }[] = [];
-        const materials: any[] = []; // 직렬화된 재질 데이터
-        const primitiveToSubMesh: number[] = [];
-
-        const materialMap = new Map<THREE.Material, number>();
-        const textureMap = new Map<THREE.Texture, number>();
-
-        let vertexOffset = 0;
-        let subMeshIndexCounter = 0;
-
-        const meshes: THREE.Mesh[] = [];
-        gltf.scene.traverse(obj => {
-            if ((obj as THREE.Mesh).isMesh) {
-                meshes.push(obj as THREE.Mesh);
-            }
-        });
-
-        // 3. 모든 메쉬를 순회하며 데이터 추출 및 병합
-        for (const mesh of meshes) {
-            const geometry = mesh.geometry;
-            // Tangent 데이터가 없으면 생성 (Normal Map에 필수)
-            if (!geometry.attributes.tangent) {
-                geometry.computeTangents();
-            }
-
-            const meshMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-
-            // SubMesh (geometry group) 처리
-            geometry.groups.forEach(group => {
-                const material = meshMaterials[group.materialIndex!];
-                let materialIndex = materialMap.get(material);
-                
-                // 새로운 재질인 경우
-                if (materialIndex === undefined) {
-                    materialIndex = materials.length;
-                    materialMap.set(material, materialIndex);
-                    
-                    const stdMat = material as THREE.MeshStandardMaterial;
-                    const ormTexture = stdMat.roughnessMap || stdMat.metalnessMap; // 보통 동일한 텍스처를 사용 (Occlusion, Roughness, Metalness)
-
-                    // 텍스처 인덱스 처리
-                    const baseColorTexIndex = this.processTexture(stdMat.map, textureMap);
-                    const emissiveTexIndex = this.processTexture(stdMat.emissiveMap, textureMap);
-                    const normalTexIndex = this.processTexture(stdMat.normalMap, textureMap);
-                    const ormTexIndex = this.processTexture(ormTexture, textureMap);
-
-                    // WGSL Material 구조체에 맞게 데이터 푸시
-                    materials.push(
-                        ...stdMat.color.toArray(), 1.0, // BaseColor (vec4)
-                        ...stdMat.emissive.toArray(),    // EmissiveColor (vec3)
-                        stdMat.metalness,               // Metalic (f32)
-                        stdMat.roughness,               // Roughness (f32)
-                        1.5,              // IOR (f32) - glTF에 없으면 기본값
-                        stdMat.normalScale?.x || 1.0,   // NormalScale (f32)
-                        0.0, // Padding
-                        baseColorTexIndex,              // TextureIndex_BaseColor (i32)
-                        emissiveTexIndex,             // TextureIndex_EmissiveColor (i32)
-                        normalTexIndex,                 // TextureIndex_Normal (i32)
-                        ormTexIndex,                    // TextureIndex_ORM (i32)
-                    );
-                }
-
-                subMeshes.push({ materialIndex });
-                
-                // Primitive(triangle)가 어떤 SubMesh에 속하는지 매핑
-                const primitiveCount = group.count / 3;
-                for (let i = 0; i < primitiveCount; i++) {
-                    primitiveToSubMesh.push(subMeshIndexCounter);
-                }
-                subMeshIndexCounter++;
-            });
-
-            // 지오메트리 데이터 병합
-            allVertices.push(...geometry.attributes.position.array);
-            allNormals.push(...geometry.attributes.normal.array);
-            allUVs.push(...geometry.attributes.uv.array);
-            allTangents.push(...geometry.attributes.tangent.array);
-            
-            // 인덱스는 vertexOffset을 더해서 추가
-            const indices = geometry.index!.array;
-            for (let i = 0; i < indices.length; i++) {
-                allIndices.push(indices[i] + vertexOffset);
-            }
-            vertexOffset += geometry.attributes.position.count;
-        }
-
-        // 4. BVH 생성
-        console.log("BVH 생성을 시작합니다...");
-        const mergedGeometry = new THREE.BufferGeometry();
-        mergedGeometry.setAttribute('position', new THREE.Float32BufferAttribute(allVertices, 3));
-        mergedGeometry.setIndex(allIndices);
-
-        // a SAH strategy is costlier to build but results in faster raycasting.
-        const bvh = new MeshBVH(mergedGeometry);
-        // `serialize()`는 BVH를 플랫 버퍼로 만듭니다. `roots` 속성이 바로 그 데이터입니다.
-        const bvhNodes = (bvh as any)._roots[0] as Float32Array; // 보통 첫번째 루트에 모든 노드 데이터가 들어있음
-
-        // three-mesh-bvh 노드 데이터를 WGSL 구조체 레이아웃으로 변환
-        const bvhData = new Float32Array(bvhNodes.length);
-        console.log(bvhNodes);
-
-        for(let i = 0; i < bvhNodes.length / 8; i++) {
-            const offset = i * 8;
-            const node = bvhNodes.slice(offset, offset + 8);
-            
-            const isLeaf = node[7] !== 0; // count가 0이 아니면 리프 노드
-            
-            // Boundary Min: x, y, z
-            bvhData[offset + 0] = node[0];
-            bvhData[offset + 1] = node[1];
-            bvhData[offset + 2] = node[2];
-            // PrimitiveCount or 0 for internal
-            (bvhData as any as Uint32Array)[offset + 3] = isLeaf ? node[7] : 0;
-            
-            // Boundary Max: x, y, z
-            bvhData[offset + 4] = node[3];
-            bvhData[offset + 5] = node[4];
-            bvhData[offset + 6] = node[5];
-            // PrimitiveOffset or splitAxis
-            (bvhData as any as Uint32Array)[offset + 7] = node[6]; // offset or splitAxis
-        }
-        console.log(`BVH 생성 완료! 노드 수: ${bvhData.length / 8}`);
-
-        // 5. 최종 TypedArray 생성
-        const verticesArray = new Float32Array(allVertices);
-        const normalsArray = new Float32Array(allNormals);
-        const uvsArray = new Float32Array(allUVs);
-        const tangentsArray = new Float32Array(allTangents);
-        const indicesArray = new Uint32Array(allIndices);
-        
-        const subMeshesArray = new Uint32Array(subMeshes.map(sm => sm.materialIndex));
-        const materialsArray = new Float32Array(materials);
-        const primitiveToSubMeshArray = new Uint32Array(primitiveToSubMesh);
-
-
-        // 6. GPU 버퍼 생성 및 데이터 쓰기
-        console.log("GPU 버퍼 생성 및 데이터 업로드를 시작합니다...");
-
-        this.BVHBuffer = this.createAndWriteBuffer(bvhData, GPUBufferUsage.STORAGE);
-        this.SubMeshesBuffer = this.createAndWriteBuffer(subMeshesArray, GPUBufferUsage.STORAGE);
-        this.MaterialsBuffer = this.createAndWriteBuffer(materialsArray, GPUBufferUsage.STORAGE);
-        this.PrimitiveToSubMesh = this.createAndWriteBuffer(primitiveToSubMeshArray, GPUBufferUsage.STORAGE);
-        
-        // GeometriesBuffer는 하나의 큰 버퍼로 만들고 슬라이싱해서 바인딩
-        const geomBufferOffsets = {
-            vertices: 0,
-            normals: verticesArray.byteLength,
-            uvs: verticesArray.byteLength + normalsArray.byteLength,
-            tangents: verticesArray.byteLength + normalsArray.byteLength + uvsArray.byteLength,
-            indices: verticesArray.byteLength + normalsArray.byteLength + uvsArray.byteLength + tangentsArray.byteLength,
-        };
-        const totalGeomBufferSize = verticesArray.byteLength + normalsArray.byteLength + uvsArray.byteLength + tangentsArray.byteLength + indicesArray.byteLength;
-
-        // this.GeometriesBuffer = this.Device.createBuffer({
-        //     size: totalGeomBufferSize,
-        //     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-        // });
-        // this.Device.queue.writeBuffer(this.GeometriesBuffer, geomBufferOffsets.vertices, verticesArray);
-        // this.Device.queue.writeBuffer(this.GeometriesBuffer, geomBufferOffsets.normals, normalsArray);
-        // this.Device.queue.writeBuffer(this.GeometriesBuffer, geomBufferOffsets.uvs, uvsArray);
-        // this.Device.queue.writeBuffer(this.GeometriesBuffer, geomBufferOffsets.tangents, tangentsArray);
-        // this.Device.queue.writeBuffer(this.GeometriesBuffer, geomBufferOffsets.indices, indicesArray);
-        
-        console.log("✅ 모든 데이터가 성공적으로 GPU에 업로드되었습니다.");
-    }
-
-    /**
-     * 텍스처를 처리하고 GPUTextureView를 생성한 뒤 인덱스를 반환합니다.
-     */
-    private async processTexture(texture: THREE.Texture | null, textureMap: Map<THREE.Texture, number>): Promise<number> {
-        if (!texture) return -1; // 텍스처가 없으면 -1 반환
-        if (textureMap.has(texture)) return textureMap.get(texture)!;
-
-        const image = texture.image as ImageBitmap; // gltf 로더는 보통 ImageBitmap을 사용
-        const gpuTexture = this.Device.createTexture({
-            size: [image.width, image.height, 1],
-            format: 'rgba8unorm', // glTF 텍스처에 일반적인 포맷
-            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
-        });
-
-        this.Device.queue.copyExternalImageToTexture(
-            { source: image },
-            { texture: gpuTexture },
-            [image.width, image.height]
-        );
-
-        const textureIndex = this.TextureViews.length;
-        this.TextureViews.push(gpuTexture.createView());
-        textureMap.set(texture, textureIndex);
-        
-        return textureIndex;
-    }
-
-    private createAndWriteBuffer(data: BufferSource, usage: GPUBufferUsageFlags): GPUBuffer 
-    {
-        const buffer = this.Device.createBuffer({
-            size: data.byteLength,
-            usage: usage | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: true,
-        });
-        
-        // 데이터 타입에 따라 복사
-        if (data instanceof Uint32Array) {
-            new Uint32Array(buffer.getMappedRange()).set(data);
-        } else if (data instanceof Float32Array) {
-            new Float32Array(buffer.getMappedRange()).set(data);
-        }
-        buffer.unmap();
-        return buffer;
-    }
-
-    private createTexture(
-        TextureWidth    : number,
-        TextureHeight   : number,
-        TextureFormat   : GPUTextureFormat,
-        TextureUsage    : GPUTextureUsageFlags
-    ): GPUTexture
-    {
-        const TextureDescriptor: GPUTextureDescriptor =
-        {
-            size: { width: TextureWidth, height: TextureHeight },
-            format: TextureFormat,
-            usage: TextureUsage,
-        }
-
-        return this.Device.createTexture(TextureDescriptor);
-    }
 
 };

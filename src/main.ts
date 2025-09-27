@@ -1,9 +1,10 @@
 import { Renderer } from "./Renderer";
 import { World } from "./World";
 
+
 async function main()
 {
-  
+
   // Create
   let TestRenderer: Renderer;
   let TestWorld: World;
@@ -15,15 +16,22 @@ async function main()
     Canvas.width = 600;
     Canvas.height = 450;
 
+    console.log(Device.limits.maxSampledTexturesPerShaderStage);
+
     TestWorld = new World();
     TestRenderer = new Renderer(Adapter, Device, Canvas);
   }
 
+  // Load
   await TestWorld.Load();
 
+
+  // Initialize
   TestWorld.Initialize();
   TestRenderer.Initialize(TestWorld);
 
+
+  // Loop
   function frame()
   {
 
