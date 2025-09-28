@@ -10,31 +10,59 @@ import { Wrapper } from "./Wrapper";
 
 import { buildTLAS } from "./TlasBuilder";
 
-function createHumanEyeViewProjection(camWorldPosition: vec3): mat4 {
-    // 1. 최종 결과를 저장할 행렬과 중간 계산용 행렬들을 생성합니다.
-    const viewMatrix = mat4.create();
-    const projectionMatrix = mat4.create();
-    const viewProjectionMatrix = mat4.create();
+function makeViewProjection(
+  cameraPos: vec3,
+  aspect: number,
+  options?: {
+    fovYDeg?: number;  // 기본 60도
+    near?: number;     // 기본 0.1
+    far?: number;      // 기본 1000
+    zZeroToOne?: boolean; // 기본 true(WebGPU)
+  }
+): mat4 {
+  const fovYDeg = options?.fovYDeg ?? 60;
+  const near    = options?.near    ?? 0.1;
+  const far     = options?.far     ?? 1000.0;
+  const zZO     = options?.zZeroToOne ?? false; // WebGPU면 true 권장 => true하니까 이상해지던데?? false해야 잘됨;;;
 
-    // 2. View Matrix 계산 (카메라의 위치와 방향)
-    const cameraTarget = vec3.fromValues(0, 0, 0); // 바라볼 목표 지점
-    const worldUp = vec3.fromValues(0, 1, 0);       // 월드의 '위' 방향
+  // --- View ---
+  const eye    = vec3.clone(cameraPos);
+  const center = vec3.fromValues(0, 0, 0);
+  const up     = vec3.fromValues(0, 1, 0);
 
-    mat4.lookAt(viewMatrix, camWorldPosition, cameraTarget, worldUp);
-    
-    // 3. Projection Matrix 계산 (카메라의 렌즈 특성)
-    const fieldOfView = (55 * Math.PI) / 180; // 55도를 라디안으로 변환
-    const aspectRatio = 16.0 / 9.0;
-    const zNear = 0.1;
-    const zFar = 1000.0;
+  // eye와 center가 같을 때 lookAt 불능 방지
+  if (vec3.squaredDistance(eye, center) < 1e-20) {
+    // 원점에 너무 가까우면 살짝 뒤로 밀어줌
+    eye[2] = 1.0;
+  }
 
-    mat4.perspective(projectionMatrix, fieldOfView, aspectRatio, zNear, zFar);
+  const view = mat4.create();
+  mat4.lookAt(view, eye, center, up);
 
-    // 4. 두 행렬을 곱하여 최종 View-Projection 행렬을 만듭니다.
-    // 순서가 매우 중요합니다: Projection * View
-    mat4.multiply(viewProjectionMatrix, projectionMatrix, viewMatrix);
-    
-    return viewProjectionMatrix;
+  // --- Projection (기본은 OpenGL 규약용) ---
+  const fovYRad = (fovYDeg * Math.PI) / 180.0;
+  const projGL = mat4.create();
+  mat4.perspective(projGL, fovYRad, aspect, near, far);
+
+  // --- Z 규약 보정: OpenGL(-1..1) → WebGPU/D3D/Vulkan(0..1) ---
+  // z' = z*0.5 + 0.5 를 클립 공간에서 적용하는 행렬
+  let proj = projGL;
+  if (zZO) {
+    const depthFix = mat4.fromValues(
+      1, 0,   0,   0,
+      0, 1,   0,   0,
+      0, 0, 0.5, 0.5,
+      0, 0,   0,   1
+    );
+    proj = mat4.create();
+    mat4.multiply(proj, depthFix, projGL); // proj = depthFix * projGL
+  }
+
+  // --- ViewProjection ---
+  const viewProj = mat4.create();
+  mat4.multiply(viewProj, proj, view); // proj * view
+
+  return viewProj;
 }
 
 export class Renderer
@@ -47,32 +75,11 @@ export class Renderer
     public readonly Context         : GPUCanvasContext;
     public readonly PreferredFormat : GPUTextureFormat;
 
- /////////////////////////////////////
- /////////////////////////////////////
-
-
-
-    public UniformsBuffer       : GPUBuffer;
-    public InstancesBuffer      : GPUBuffer;
-    public BVHBuffer            : GPUBuffer;
-    public SubMeshesBuffer      : GPUBuffer;
-    public MaterialsBuffer      : GPUBuffer;
-    public PrimitiveToSubMesh   : GPUBuffer;
-    
-    public VerticesBuffer       : GPUBuffer;
-    public IndicesBuffer        : GPUBuffer;
-
-    // 텍스처 관련 (Gemini)
-    public MaterialSampler: GPUSampler;
-
-
-    ////////////////////////////////////////////////////
-    ////////////////////////////////////////////////////
-
     // WebGPU Resources
     public SceneTexture         : GPUTexture;
     public AccumTexture         : GPUTexture;
 
+    public UniformBuffer        : GPUBuffer;
     public SceneBuffer          : GPUBuffer;
     public GeometryBuffer       : GPUBuffer;
     public AccelBuffer          : GPUBuffer;
@@ -92,10 +99,11 @@ export class Renderer
     public FrameCount : number;
 
     // Data Offsets
-    public Offset_MeshDescriptorBuffer: number;
-    public Offset_MaterialBuffer : number;
-    public Offset_PrimitiveBuffer: number;
-    public Offset_BlasBuffer : number;
+    public Offset_MeshDescriptorBuffer      : number;
+    public Offset_MaterialBuffer            : number;
+    public Offset_IndexBuffer               : number;
+    public Offset_PrimitiveToMaterialBuffer : number;
+    public Offset_BlasBuffer                : number;
 
 
     constructor
@@ -131,23 +139,12 @@ export class Renderer
         this.SceneTexture       = GPUTexture.prototype;
         this.AccumTexture       = GPUTexture.prototype;
 
+        this.UniformBuffer      = GPUBuffer.prototype;
         this.SceneBuffer        = GPUBuffer.prototype;
         this.GeometryBuffer     = GPUBuffer.prototype;
         this.AccelBuffer        = GPUBuffer.prototype;
 
         this.Textures           = [];
-
-
-        this.UniformsBuffer     = GPUBuffer.prototype;
-        this.InstancesBuffer    = GPUBuffer.prototype;
-        this.BVHBuffer          = GPUBuffer.prototype;
-        this.SubMeshesBuffer    = GPUBuffer.prototype;
-        this.MaterialsBuffer    = GPUBuffer.prototype;
-        this.PrimitiveToSubMesh = GPUBuffer.prototype;
-
-        this.VerticesBuffer     = GPUBuffer.prototype;
-        this.IndicesBuffer      = GPUBuffer.prototype;
-
 
         // Create WebGPU Pipelines
         this.ComputePipeline    = GPUComputePipeline.prototype;
@@ -164,20 +161,234 @@ export class Renderer
         this.FrameCount         = 0;
 
 
-
-        this.MaterialSampler = this.Device.createSampler({
-            magFilter: 'linear',
-            minFilter: 'linear',
-            mipmapFilter: 'linear',
-            addressModeU: 'repeat',
-            addressModeV: 'repeat',
-        });
-
-
         this.Offset_BlasBuffer = 0;
         this.Offset_MaterialBuffer = 0;
         this.Offset_MeshDescriptorBuffer = 0;
-        this.Offset_PrimitiveBuffer = 0;
+        this.Offset_IndexBuffer = 0;
+        this.Offset_PrimitiveToMaterialBuffer = 0;
+    }
+
+    PackWorldDataToArrayBuffers(World: World): [ArrayBuffer, ArrayBuffer, ArrayBuffer, ImageBitmap[]]
+    {
+        interface MeshRawData
+        {
+            BlasArray                   : Float32Array,
+            VertexArray                 : Float32Array,
+            IndexArray                  : Uint32Array,
+            PrimitiveToMaterialArray    : Uint32Array,
+            MaterialArray               : Float32Array,
+            TextureArray                : Array<ImageBitmap>,
+        };
+
+        interface MeshDescriptor
+        {
+            BlasOffset                  : number,
+            VertexOffset                : number,
+            IndexOffset                 : number,
+            PrimitiveToMaterialOffset   : number,
+            MaterialOffset              : number,
+            TextureOffset               : number,
+        };
+
+        function convertMapToArray<T>(InMap: Map<string, T>): [T[], Map<string, number>]
+        {
+            const ArrayData: T[] = [...InMap.values()];
+
+            const IDToIndexMap: Map<string, number> = new Map<string, number>();
+            {
+                const IDData: string[] = [...InMap.keys()];
+
+                for (let iter=0; iter<IDData.length; iter++)
+                    IDToIndexMap.set(IDData[iter], iter);
+            }
+
+            return [ArrayData, IDToIndexMap];
+        }
+
+
+
+        // World로부터 Instance, Mesh 정보들 모두 가져오기
+        let InstanceArray           : Instance[];
+        let MeshArray               : Mesh[];
+        let MeshIDToIndexMap        : Map<string, number>;
+        {
+            InstanceArray = convertMapToArray(World.InstancesPool)[0];
+
+            const UsedMeshes: Map<string, Mesh> = new Map<string, Mesh>();
+            for (const instance of InstanceArray) UsedMeshes.set(instance.MeshID, World.MeshesPool.get(instance.MeshID)!);
+
+            [MeshArray, MeshIDToIndexMap] = convertMapToArray(UsedMeshes);
+        }
+
+
+
+        // 모든 메시를 하나의 RawData로 병합하기
+        let MergedMeshRawData: MeshRawData;
+        const MeshDescriptorArray : Array<MeshDescriptor> = new Array<MeshDescriptor>(MeshArray.length);
+        {
+            const MergedMeshDescriptor: MeshDescriptor =
+            {
+                BlasOffset                  : 0,
+                VertexOffset                : 0,
+                IndexOffset                 : 0,
+                PrimitiveToMaterialOffset   : 0,
+                MaterialOffset              : 0,
+                TextureOffset               : 0,
+            };
+
+            const MeshRawDataArray : Array<MeshRawData> = new Array<MeshRawData>(MeshArray.length);
+            for (let iter=0; iter<MeshArray.length; iter++)
+            {
+                const BlasArray                     = Wrapper.WrapBlasArray(MeshArray[iter]);
+                const VertexArray                   = Wrapper.WrapVertexArray(MeshArray[iter]);
+                const IndexArray                    = Wrapper.WrapIndexArray(MeshArray[iter]);
+                const PrimitiveToMaterialArray      = Wrapper.WrapPrimitiveToMaterialArray(MeshArray[iter]);
+                const [MaterialArray, TextureArray] = Wrapper.WrapMaterialsAndTexturesArray(MeshArray[iter]);
+
+                const RawData: MeshRawData =
+                {
+                    BlasArray                   : BlasArray,
+                    VertexArray                 : VertexArray,
+                    IndexArray                  : IndexArray,
+                    PrimitiveToMaterialArray    : PrimitiveToMaterialArray,
+                    MaterialArray               : MaterialArray,
+                    TextureArray                : TextureArray
+                };
+
+                const Descriptor: MeshDescriptor =
+                {
+                    BlasOffset                  : MergedMeshDescriptor.BlasOffset,
+                    VertexOffset                : MergedMeshDescriptor.VertexOffset,
+                    IndexOffset                 : MergedMeshDescriptor.IndexOffset,
+                    PrimitiveToMaterialOffset   : MergedMeshDescriptor.PrimitiveToMaterialOffset,
+                    MaterialOffset              : MergedMeshDescriptor.MaterialOffset,
+                    TextureOffset               : MergedMeshDescriptor.TextureOffset,
+                };
+
+                MeshRawDataArray[iter]      = RawData;
+                MeshDescriptorArray[iter]   = Descriptor;
+
+                MergedMeshDescriptor.BlasOffset                 += BlasArray.length;
+                MergedMeshDescriptor.VertexOffset               += VertexArray.length;
+                MergedMeshDescriptor.IndexOffset                += IndexArray.length;
+                MergedMeshDescriptor.PrimitiveToMaterialOffset  += PrimitiveToMaterialArray.length;
+                MergedMeshDescriptor.MaterialOffset             += MaterialArray.length;
+                MergedMeshDescriptor.TextureOffset              += TextureArray.length;
+            }
+            
+            MergedMeshRawData =
+            {
+                BlasArray                   : new Float32Array          (MergedMeshDescriptor.BlasOffset),
+                VertexArray                 : new Float32Array          (MergedMeshDescriptor.VertexOffset),
+                IndexArray                  : new Uint32Array           (MergedMeshDescriptor.IndexOffset),
+                PrimitiveToMaterialArray    : new Uint32Array           (MergedMeshDescriptor.PrimitiveToMaterialOffset),
+                MaterialArray               : new Float32Array          (MergedMeshDescriptor.MaterialOffset),
+                TextureArray                : new Array<ImageBitmap>    (MergedMeshDescriptor.TextureOffset),
+            };
+
+            for (let iter=0; iter<MeshArray.length; iter++)
+            {
+                const RawData = MeshRawDataArray[iter];
+                const Descriptor = MeshDescriptorArray[iter];
+
+                MergedMeshRawData.BlasArray.set(RawData.BlasArray, Descriptor.BlasOffset);
+                MergedMeshRawData.VertexArray.set(RawData.VertexArray, Descriptor.VertexOffset);
+                MergedMeshRawData.IndexArray.set(RawData.IndexArray, Descriptor.IndexOffset);
+                MergedMeshRawData.PrimitiveToMaterialArray.set(RawData.PrimitiveToMaterialArray, Descriptor.PrimitiveToMaterialOffset);
+                MergedMeshRawData.MaterialArray.set(RawData.MaterialArray, Descriptor.MaterialOffset);
+
+                for (let idx=0; idx<RawData.TextureArray.length; idx++)
+                    MergedMeshRawData.TextureArray[Descriptor.TextureOffset + idx] = RawData.TextureArray[idx];
+            }
+
+        }
+
+
+        // Tlas 빌드하기
+        const TlasArray : Float32Array = buildTLAS(InstanceArray, MeshArray, MeshIDToIndexMap);
+
+
+        // Instance 정보들과 MeshDescriptor정보들을 RawData로 변환
+        const InstanceRawData: Float32Array = Wrapper.WrapInstances(InstanceArray, MeshIDToIndexMap);
+        const MeshDescriptorRawData: Float32Array = new Float32Array(8 * MeshDescriptorArray.length);
+        for (let iter=0; iter<MeshDescriptorArray.length; iter++)
+        {
+            const Offset = 8 * iter;
+
+            MeshDescriptorRawData[Offset + 0] = MeshDescriptorArray[iter].BlasOffset;
+            MeshDescriptorRawData[Offset + 1] = MeshDescriptorArray[iter].VertexOffset;
+            MeshDescriptorRawData[Offset + 2] = MeshDescriptorArray[iter].IndexOffset;
+            MeshDescriptorRawData[Offset + 3] = MeshDescriptorArray[iter].PrimitiveToMaterialOffset;
+
+            MeshDescriptorRawData[Offset + 4] = MeshDescriptorArray[iter].MaterialOffset;
+            MeshDescriptorRawData[Offset + 5] = MeshDescriptorArray[iter].TextureOffset;
+        }
+    
+
+
+        // SceneBuffer에 쓸 데이터 준비하기 (Instance, MeshDescriptor, Material)
+        this.Offset_MeshDescriptorBuffer = InstanceRawData.length;
+        this.Offset_MaterialBuffer = this.Offset_MeshDescriptorBuffer + MeshDescriptorRawData.length;
+        
+        const SceneBufferLength = this.Offset_MaterialBuffer + MergedMeshRawData.MaterialArray.length;
+        const SceneBufferData: ArrayBuffer = new ArrayBuffer(SceneBufferLength * 4);
+        {
+            const Float32View: Float32Array = new Float32Array(SceneBufferData);
+
+            Float32View.set(InstanceRawData, 0);
+            Float32View.set(MeshDescriptorRawData, this.Offset_MeshDescriptorBuffer);
+            Float32View.set(MergedMeshRawData.MaterialArray, this.Offset_MaterialBuffer);
+        }
+
+
+
+        // GeometryBuffer에 쓸 데이터 준비하기 (Vertex, Primitive)
+        this.Offset_IndexBuffer = MergedMeshRawData.VertexArray.length;
+        this.Offset_PrimitiveToMaterialBuffer = this.Offset_IndexBuffer + MergedMeshRawData.IndexArray.length;
+
+        const GeometryBufferLength = this.Offset_PrimitiveToMaterialBuffer + MergedMeshRawData.PrimitiveToMaterialArray.length;
+        const GeometryBufferData: ArrayBuffer = new ArrayBuffer(GeometryBufferLength * 4);
+        {
+            const Float32View: Float32Array = new Float32Array(GeometryBufferData);
+            const Uint32View: Uint32Array = new Uint32Array(GeometryBufferData);
+
+            Float32View.set(MergedMeshRawData.VertexArray, 0);
+            Uint32View.set(MergedMeshRawData.IndexArray, this.Offset_IndexBuffer);
+            Uint32View.set(MergedMeshRawData.PrimitiveToMaterialArray, this.Offset_PrimitiveToMaterialBuffer);
+        }
+
+        // const Float32View: Float32Array = new Float32Array(GeometryBufferData);
+        // const Uint32View: Uint32Array = new Uint32Array(GeometryBufferData);
+        // const vertexID_0 = MergedMeshRawData.IndexArray[0]; // 모델의 0번째 삼각형의 0번째 인덱스의 버텍스ID
+        // console.log(vertexID_0);
+        // console.log(MergedMeshRawData.VertexArray[12 * vertexID_0]);
+        // console.log(Float32View[12 * vertexID_0]);
+        //console.log(Float32View[MergedMeshRawData.IndexArray[0]]);
+        // console.log(MergedMeshRawData.IndexArray[0]);
+        // console.log(GeometryBufferData[3341]);
+        // -0.0476427786052227 0.0012953999685123563 -0.040594279766082764
+        // -0.03974591940641403 0.002207260113209486 -0.048099979758262634
+        // -0.0399719774723053 0.0012953999685123563 -0.04837175831198692
+
+
+        // AccelBuffer에 쓸 데이터 준비하기 (Tlas, Blas)
+        this.Offset_BlasBuffer = TlasArray.length;
+
+        const AccelBufferLength = this.Offset_BlasBuffer + MergedMeshRawData.BlasArray.length;
+        const AccelBufferData: ArrayBuffer = new ArrayBuffer(AccelBufferLength * 4);
+        {
+            const Float32View: Float32Array = new Float32Array(AccelBufferData);
+
+            Float32View.set(TlasArray, 0);
+            Float32View.set(MergedMeshRawData.BlasArray, this.Offset_BlasBuffer);
+        }
+
+
+        // TextureArray에 쓸 데이터 준비하기 (Textures)
+        MergedMeshRawData.TextureArray;
+
+        return [SceneBufferData, GeometryBufferData, AccelBufferData, MergedMeshRawData.TextureArray];
+
     }
 
     BuildMeshData(World: World): [Float32Array, Float32Array, Float32Array, ImageBitmap[]]
@@ -185,22 +396,24 @@ export class Renderer
 
         interface MeshRawData
         {
-            BlasArray       : Float32Array,
-            VertexArray     : Float32Array,
-            PrimitiveArray  : Uint32Array,
-            MaterialArray   : Float32Array,
-            TextureArray    : Array<ImageBitmap>,
+            BlasArray                   : Float32Array,
+            VertexArray                 : Float32Array,
+            IndexArray                  : Uint32Array,
+            PrimitiveToMaterialArray    : Uint32Array,
+            MaterialArray               : Float32Array,
+            TextureArray                : Array<ImageBitmap>,
         };
 
 
 
         interface MeshDescriptor
         {
-            BlasOffset      : number,
-            VertexOffset    : number,
-            PrimitiveOffset : number,
-            MaterialOffset  : number,
-            TextureOffset   : number,
+            BlasOffset                  : number,
+            VertexOffset                : number,
+            IndexOffset                 : number,
+            PrimitiveToMaterialOffset   : number,
+            MaterialOffset              : number,
+            TextureOffset               : number,
         };
 
 
@@ -244,11 +457,12 @@ export class Renderer
         {
             const MergedMeshDescriptor: MeshDescriptor =
             {
-                BlasOffset      : 0,
-                VertexOffset    : 0,
-                PrimitiveOffset : 0,
-                MaterialOffset  : 0,
-                TextureOffset   : 0,
+                BlasOffset                  : 0,
+                VertexOffset                : 0,
+                IndexOffset                 : 0,
+                PrimitiveToMaterialOffset   : 0,
+                MaterialOffset              : 0,
+                TextureOffset               : 0,
             };
 
             const MeshRawDataArray : Array<MeshRawData> = new Array<MeshRawData>(MeshArray.length);
@@ -256,44 +470,49 @@ export class Renderer
             {
                 const BlasArray                     = Wrapper.WrapBlasArray(MeshArray[iter]);
                 const VertexArray                   = Wrapper.WrapVertexArray(MeshArray[iter]);
-                const PrimitiveArray                = Wrapper.WrapPrimitiveArray(MeshArray[iter]);
+                const IndexArray                    = Wrapper.WrapIndexArray(MeshArray[iter]);
+                const PrimitiveToMaterialArray      = Wrapper.WrapPrimitiveToMaterialArray(MeshArray[iter]);
                 const [MaterialArray, TextureArray] = Wrapper.WrapMaterialsAndTexturesArray(MeshArray[iter]);
 
                 const RawData: MeshRawData =
                 {
-                    BlasArray       : BlasArray,
-                    VertexArray     : VertexArray,
-                    PrimitiveArray  : PrimitiveArray,
-                    MaterialArray   : MaterialArray,
-                    TextureArray    : TextureArray
+                    BlasArray                   : BlasArray,
+                    VertexArray                 : VertexArray,
+                    IndexArray                  : IndexArray,
+                    PrimitiveToMaterialArray    : PrimitiveToMaterialArray,
+                    MaterialArray               : MaterialArray,
+                    TextureArray                : TextureArray
                 };
 
                 const Descriptor: MeshDescriptor =
                 {
-                    BlasOffset      : MergedMeshDescriptor.BlasOffset,
-                    VertexOffset    : MergedMeshDescriptor.VertexOffset,
-                    PrimitiveOffset : MergedMeshDescriptor.PrimitiveOffset,
-                    MaterialOffset  : MergedMeshDescriptor.MaterialOffset,
-                    TextureOffset   : MergedMeshDescriptor.TextureOffset,
+                    BlasOffset                  : MergedMeshDescriptor.BlasOffset,
+                    VertexOffset                : MergedMeshDescriptor.VertexOffset,
+                    IndexOffset                 : MergedMeshDescriptor.IndexOffset,
+                    PrimitiveToMaterialOffset   : MergedMeshDescriptor.PrimitiveToMaterialOffset,
+                    MaterialOffset              : MergedMeshDescriptor.MaterialOffset,
+                    TextureOffset               : MergedMeshDescriptor.TextureOffset,
                 };
 
-                MeshRawDataArray[iter] = RawData;
-                MeshDescriptorArray[iter] = Descriptor;
+                MeshRawDataArray[iter]      = RawData;
+                MeshDescriptorArray[iter]   = Descriptor;
 
-                MergedMeshDescriptor.BlasOffset       += BlasArray.length;
-                MergedMeshDescriptor.VertexOffset     += VertexArray.length;
-                MergedMeshDescriptor.PrimitiveOffset  += PrimitiveArray.length;
-                MergedMeshDescriptor.MaterialOffset   += MaterialArray.length;
-                MergedMeshDescriptor.TextureOffset    += TextureArray.length;
+                MergedMeshDescriptor.BlasOffset                 += BlasArray.length;
+                MergedMeshDescriptor.VertexOffset               += VertexArray.length;
+                MergedMeshDescriptor.IndexOffset                += IndexArray.length;
+                MergedMeshDescriptor.PrimitiveToMaterialOffset  += PrimitiveToMaterialArray.length;
+                MergedMeshDescriptor.MaterialOffset             += MaterialArray.length;
+                MergedMeshDescriptor.TextureOffset              += TextureArray.length;
             }
             
             MergedMeshRawData =
             {
-                BlasArray       : new Float32Array(MergedMeshDescriptor.BlasOffset),
-                VertexArray     : new Float32Array(MergedMeshDescriptor.VertexOffset),
-                PrimitiveArray  : new Uint32Array(MergedMeshDescriptor.PrimitiveOffset),
-                MaterialArray   : new Float32Array(MergedMeshDescriptor.MaterialOffset),
-                TextureArray    : new Array<ImageBitmap>(MergedMeshDescriptor.TextureOffset),
+                BlasArray                   : new Float32Array          (MergedMeshDescriptor.BlasOffset),
+                VertexArray                 : new Float32Array          (MergedMeshDescriptor.VertexOffset),
+                IndexArray                  : new Uint32Array           (MergedMeshDescriptor.IndexOffset),
+                PrimitiveToMaterialArray    : new Uint32Array           (MergedMeshDescriptor.PrimitiveToMaterialOffset),
+                MaterialArray               : new Float32Array          (MergedMeshDescriptor.MaterialOffset),
+                TextureArray                : new Array<ImageBitmap>    (MergedMeshDescriptor.TextureOffset),
             };
 
             for (let iter=0; iter<MeshArray.length; iter++)
@@ -303,7 +522,8 @@ export class Renderer
 
                 MergedMeshRawData.BlasArray.set(RawData.BlasArray, Descriptor.BlasOffset);
                 MergedMeshRawData.VertexArray.set(RawData.VertexArray, Descriptor.VertexOffset);
-                MergedMeshRawData.PrimitiveArray.set(RawData.PrimitiveArray, Descriptor.PrimitiveOffset);
+                MergedMeshRawData.IndexArray.set(RawData.IndexArray, Descriptor.IndexOffset);
+                MergedMeshRawData.PrimitiveToMaterialArray.set(RawData.PrimitiveToMaterialArray, Descriptor.PrimitiveToMaterialOffset);
                 MergedMeshRawData.MaterialArray.set(RawData.MaterialArray, Descriptor.MaterialOffset);
 
                 for (let idx=0; idx<RawData.TextureArray.length; idx++)
@@ -325,16 +545,14 @@ export class Renderer
             const Offset = 8 * iter;
 
             MeshDescriptorRawData[Offset + 0] = MeshDescriptorArray[iter].BlasOffset;
-            MeshDescriptorRawData[Offset + 1] = MeshDescriptorArray[iter].PrimitiveOffset;
-            MeshDescriptorRawData[Offset + 2] = MeshDescriptorArray[iter].VertexOffset;
-            MeshDescriptorRawData[Offset + 3] = MeshDescriptorArray[iter].MaterialOffset;
-            
-            MeshDescriptorRawData[Offset + 7] = MeshDescriptorArray[iter].TextureOffset;
+            MeshDescriptorRawData[Offset + 1] = MeshDescriptorArray[iter].VertexOffset;
+            MeshDescriptorRawData[Offset + 2] = MeshDescriptorArray[iter].IndexOffset;
+            MeshDescriptorRawData[Offset + 3] = MeshDescriptorArray[iter].PrimitiveToMaterialOffset;
+
+            MeshDescriptorRawData[Offset + 4] = MeshDescriptorArray[iter].MaterialOffset;
+            MeshDescriptorRawData[Offset + 5] = MeshDescriptorArray[iter].TextureOffset;
         }
     
-
-
-
 
         // SceneBuffer에 쓸 데이터 준비하기 (Instance, MeshDescriptor, Material)
         this.Offset_MeshDescriptorBuffer = InstanceRawData.length;
@@ -351,15 +569,22 @@ export class Renderer
 
 
         // GeometryBuffer에 쓸 데이터 준비하기 (Vertex, Primitive)
-        this.Offset_PrimitiveBuffer = MergedMeshRawData.VertexArray.length;
+        this.Offset_IndexBuffer = MergedMeshRawData.VertexArray.length;
+        this.Offset_PrimitiveToMaterialBuffer = this.Offset_IndexBuffer + MergedMeshRawData.IndexArray.length;
 
-        const GeometryBufferLength = this.Offset_PrimitiveBuffer + MergedMeshRawData.PrimitiveArray.length;
+        const GeometryBufferLength = this.Offset_PrimitiveToMaterialBuffer + MergedMeshRawData.PrimitiveToMaterialArray.length;
         const GeometryBufferData: Float32Array = new Float32Array(GeometryBufferLength);
         {
             GeometryBufferData.set(MergedMeshRawData.VertexArray, 0);
-            GeometryBufferData.set(MergedMeshRawData.PrimitiveArray, this.Offset_PrimitiveBuffer);     
+            GeometryBufferData.set(MergedMeshRawData.IndexArray, this.Offset_IndexBuffer);
+            GeometryBufferData.set(MergedMeshRawData.PrimitiveToMaterialArray, this.Offset_PrimitiveToMaterialBuffer);  
         }
 
+        console.log(MergedMeshRawData.IndexArray[0]);
+        console.log(GeometryBufferData[3341]);
+        // -0.0476427786052227 0.0012953999685123563 -0.040594279766082764
+        // -0.03974591940641403 0.002207260113209486 -0.048099979758262634
+        // -0.0399719774723053 0.0012953999685123563 -0.04837175831198692
 
 
         // AccelBuffer에 쓸 데이터 준비하기 (Tlas, Blas)
@@ -376,7 +601,6 @@ export class Renderer
         // TextureArray에 쓸 데이터 준비하기 (Textures)
         MergedMeshRawData.TextureArray;
 
-
         return [SceneBufferData, GeometryBufferData, AccelBufferData, MergedMeshRawData.TextureArray];
     }
     
@@ -388,14 +612,14 @@ export class Renderer
         this.FrameCount = 0;
 
         // Build Scene
-        const [SceneBufferData, GeometryBufferData, AccelBufferData, ImageBitmaps] = this.BuildMeshData(World);
+        const [SceneBufferData, GeometryBufferData, AccelBufferData, ImageBitmaps] = this.PackWorldDataToArrayBuffers(World);
 
 
         // Create Uniform Buffer
         {
             const UniformBufferUsageFlags: GPUBufferUsageFlags = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
 
-            this.UniformsBuffer = this.Device.createBuffer({ size: 256, usage: UniformBufferUsageFlags });
+            this.UniformBuffer = this.Device.createBuffer({ size: 256, usage: UniformBufferUsageFlags });
         }
 
         // Create Storage Buffers
@@ -407,7 +631,7 @@ export class Renderer
             const SceneBufferDescriptor: GPUBufferDescriptor = { size: SceneBufferData.byteLength, usage: StorageBufferUsageFlags };
             
             this.SceneBuffer = this.Device.createBuffer(SceneBufferDescriptor);
-            this.Device.queue.writeBuffer(this.SceneBuffer, 0, SceneBufferData.buffer);
+            this.Device.queue.writeBuffer(this.SceneBuffer, 0, SceneBufferData);
 
             
 
@@ -415,15 +639,13 @@ export class Renderer
             const GeometryBufferDescriptor: GPUBufferDescriptor = { size: GeometryBufferData.byteLength, usage: StorageBufferUsageFlags };
 
             this.GeometryBuffer = this.Device.createBuffer(GeometryBufferDescriptor);
-            this.Device.queue.writeBuffer(this.GeometryBuffer, 0, GeometryBufferData.buffer);
-
-
+            this.Device.queue.writeBuffer(this.GeometryBuffer, 0, GeometryBufferData);
 
             // 3. AccelBuffer
             const AccelBufferDescriptor: GPUBufferDescriptor = { size: AccelBufferData.byteLength, usage: StorageBufferUsageFlags };
 
             this.AccelBuffer = this.Device.createBuffer(AccelBufferDescriptor);
-            this.Device.queue.writeBuffer(this.AccelBuffer, 0, AccelBufferData.buffer);
+            this.Device.queue.writeBuffer(this.AccelBuffer, 0, AccelBufferData);
         }
 
         // Create TextureViews
@@ -518,7 +740,7 @@ export class Renderer
                 layout: this.ComputePipeline.getBindGroupLayout(0),
                 entries:
                 [
-                    { binding: 0, resource: { buffer: this.UniformsBuffer } },
+                    { binding: 0, resource: { buffer: this.UniformBuffer } },
                     { binding: 1, resource: { buffer: this.SceneBuffer }  },
                     { binding: 2, resource: { buffer: this.GeometryBuffer } },
                     { binding: 3, resource: { buffer: this.AccelBuffer } },
@@ -540,7 +762,6 @@ export class Renderer
             this.RenderBindGroup    = this.Device.createBindGroup(RenderBindGroupDescriptor);
         }
 
-
         return;
     }
 
@@ -548,26 +769,44 @@ export class Renderer
     Update(): void
     {
 
-        const data = new Uint32Array(2);
-        data[0] = this.Canvas.width;
-        data[1] = this.Canvas.height;
-
-        this.Device.queue.writeBuffer(this.UniformsBuffer, 0, data);
-
-        const camData = new Float32Array(19);
-        
-        const camPos = vec3.fromValues(0.6,1,1);
-        const VP = createHumanEyeViewProjection(camPos);
+        // Camera Property
+        const camPos = vec3.fromValues(0,0,1);
+        const VP = makeViewProjection(camPos, this.Canvas.width / this.Canvas.height);
         const VPINV = mat4.invert(mat4.create(), VP);
+        //console.log(VPINV);
 
-        for(let iter=0; iter<16; iter++) camData[iter] = VPINV?.[iter]!;
+        const ELEMENT_COUNT = 32;
+        const UniformData = new ArrayBuffer(4 * ELEMENT_COUNT);
+        {
+            const Float32View = new Float32Array(UniformData);
+            const Uint32View = new Uint32Array(UniformData);
 
-        camData[16] = camPos[0];
-        camData[17] = camPos[1];
-        camData[18] = camPos[2];
+            Uint32View[0] = this.Canvas.width;
+            Uint32View[1] = this.Canvas.height;
+            Uint32View[2] = 1;
+            Uint32View[3] = 1;
+            
+            for(let iter=0; iter<16; iter++) Float32View[4 + iter] = VPINV?.[iter]!;
+
+            Float32View[20] = camPos[0];
+            Float32View[21] = camPos[1];
+            Float32View[22] = camPos[2];
+
+            Uint32View[23] = this.FrameCount;
+
+            Uint32View[24] = this.Offset_MeshDescriptorBuffer;
+            Uint32View[25] = this.Offset_MaterialBuffer;
+            Uint32View[26] = this.Offset_IndexBuffer;
+            Uint32View[27] = this.Offset_PrimitiveToMaterialBuffer;
+            Uint32View[28] = this.Offset_BlasBuffer;
+
+            Uint32View[29] = 1; // Instance Count : TEMP
+            Uint32View[30] = 1; // Mesh Count : TEMP
+            Uint32View[31] = 3; // Material Count : TEMP
+        }
 
 
-        this.Device.queue.writeBuffer(this.UniformsBuffer, 16, camData);
+        this.Device.queue.writeBuffer(this.UniformBuffer, 0, UniformData);
 
         return;
     }

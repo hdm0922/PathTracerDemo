@@ -18,16 +18,6 @@ type BuildNode = {
   right?: BuildNode;
 };
 
-// ===== 행렬 보정 =====
-function toMatrix4(m: THREE.Matrix4 | number[] | Float32Array): THREE.Matrix4 {
-  if (m instanceof THREE.Matrix4) return m;
-  const M = new THREE.Matrix4();
-  // 입력이 column-major 16개 수라고 가정
-  const arr = (Array.isArray(m) ? Float32Array.from(m) : m) as Float32Array;
-  M.fromArray(arr);
-  return M;
-}
-
 // ===== 인스턴스별 World AABB =====
 function worldAABBFromInstance(inst: Instance, mesh: Mesh): THREE.Box3 {
   const geom = mesh.Data.geometry as THREE.BufferGeometry;
@@ -168,7 +158,6 @@ export function buildTLASCore(
     }
 
     // 내부노드: left 먼저, 그 다음 right
-    const leftIdx = emit(node.left!);
     const rightIdx = emit(node.right!);
     // 내부노드 규약: count=0, offset=rightChildIndex (left는 암묵적으로 idx+1)
     packer.setNode(idx, node.bounds.min, node.bounds.max, 0, rightIdx);

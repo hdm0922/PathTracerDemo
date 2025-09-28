@@ -5,7 +5,6 @@ import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { mat4 } from "gl-matrix";
 
 import { type Mesh } from './Mesh.ts';
-import { Wrapper } from './Wrapper.ts';
 
 // Resources ===================================
 
@@ -77,7 +76,7 @@ export class World
 
             const BVHData = new MeshBVH(MergedMesh.geometry, { strategy: SAH, maxLeafTris: 10 });
             BlasBuffer = new Float32Array((BVHData as any)._roots[0]);
-            MergedMesh.geometry.groups = GroupData;
+            MergedMesh.geometry.groups = GroupData;            
         }
 
         const MeshGenerated: Mesh =

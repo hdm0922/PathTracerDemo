@@ -17,6 +17,7 @@
     "@webgpu/types": "^0.1.65",
     "gl-matrix": "^3.4.4",
     "three": "^0.180.0",
-    "three-mesh-bvh": "^0.9.1"
+    "three-mesh-bvh": "^0.9.1",
+    "wgpu-matrix": "^3.4.0"
   }
 }

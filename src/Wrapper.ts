@@ -81,6 +81,31 @@ export class Wrapper
         return VerticesArray;
     }
 
+    static WrapIndexArray(InMesh: Mesh): Uint32Array
+    {
+        return new Uint32Array(InMesh.Data.geometry.index?.array!);
+    }
+
+    static WrapPrimitiveToMaterialArray(InMesh: Mesh): Uint32Array
+    {
+        const VERTICES_PER_PRIMITIVE = 3; // Triangle
+        const PrimitiveCount = InMesh.Data.geometry.index?.array!.length! / VERTICES_PER_PRIMITIVE;
+
+        const PrimitiveToMaterialArray: Uint32Array = new Uint32Array(PrimitiveCount);
+
+        // Mapping PrimitiveID -> Material
+        for (const SubMeshGroup of InMesh.Data.geometry.groups)
+        {
+            for (let idx=0; idx<SubMeshGroup.count; idx += VERTICES_PER_PRIMITIVE)
+            {
+                const PrimitiveID = (SubMeshGroup.start + idx) / VERTICES_PER_PRIMITIVE;
+                PrimitiveToMaterialArray[PrimitiveID] = SubMeshGroup.materialIndex!;
+            }
+        }
+
+        return PrimitiveToMaterialArray;
+    }
+
     static WrapPrimitiveArray(InMesh: Mesh): Uint32Array
     {
         const VERTICES_PER_PRIMITIVE = 3; // Triangle
