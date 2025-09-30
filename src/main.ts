@@ -5,20 +5,18 @@ async function main()
 {
 
   // Create
-  let TestRenderer: Renderer;
-  let TestWorld: World;
+  let TestRenderer  : Renderer;
+  let TestWorld     : World;
   {
     const Adapter   = await navigator.gpu?.requestAdapter()     as GPUAdapter;
     const Device    = await Adapter?.requestDevice()            as GPUDevice;
     const Canvas    = document.querySelector('canvas')          as HTMLCanvasElement;
 
-    Canvas.width = 600;
-    Canvas.height = 450;
+    Canvas.width    = 600;
+    Canvas.height   = 450;
 
-    //console.log(Device.limits.maxSampledTexturesPerShaderStage);
-
-    TestWorld = new World();
-    TestRenderer = new Renderer(Adapter, Device, Canvas);
+    TestWorld       = new World();
+    TestRenderer    = new Renderer(Adapter, Device, Canvas);
   }
 
   // Load

@@ -88,14 +88,6 @@ struct Vertex
 
 
 
-struct Primitive
-{
-    Index: vec3<u32>,
-    MaterialID: u32,
-};
-
-
-
 struct BVHNode
 {
     Boundary_Min    : vec3<f32>,
@@ -117,10 +109,13 @@ struct Ray
 
 
 
-struct HitInfo
+struct Triangle
 {
-    Distance    : f32,
-    TargetID    : u32,
+    Vertex_0    : Vertex,
+    Vertex_1    : Vertex,
+    Vertex_2    : Vertex,
+
+    MaterialID  : u32,
 };
 
 //==========================================================================
@@ -140,7 +135,7 @@ struct HitInfo
 // Helpers =================================================================
 //==========================================================================
 
-fn GetInstance(InstanceID: u32) -> Instance
+fn GetInstance(InstanceID : u32) -> Instance
 {
     let Offset: u32 = InstanceID * 36u;
 
@@ -172,12 +167,12 @@ fn GetInstance(InstanceID: u32) -> Instance
     return OutInstance;
 }
 
-fn GetMeshDescriptor(MeshID: u32) -> MeshDescriptor
+fn GetMeshDescriptor(MeshID : u32) -> MeshDescriptor
 {
 
     let Offset : u32 = UniformBuffer.Offset_MeshDescriptorBuffer + (8u * MeshID);
 
-    var OutMeshDescriptor: MeshDescriptor = MeshDescriptor();
+    var OutMeshDescriptor : MeshDescriptor = MeshDescriptor();
 
     OutMeshDescriptor.BlasOffset                    = SceneBuffer[Offset + 0u];
     OutMeshDescriptor.VertexOffset                  = SceneBuffer[Offset + 1u];
@@ -189,7 +184,41 @@ fn GetMeshDescriptor(MeshID: u32) -> MeshDescriptor
     return OutMeshDescriptor;
 }
 
-fn GetBVHNode(InMeshDescriptor: MeshDescriptor, BlasID: u32) -> BVHNode
+fn GetMaterial(MaterialID : u32) -> Material
+{
+
+    let Offset : u32 = UniformBuffer.Offset_MeshDescriptorBuffer + (20u * MaterialID);
+
+    var OutMaterial : Material = Material();
+
+    OutMaterial.BaseColor.r         = bitcast<f32>(SceneBuffer[Offset + 0u]);
+    OutMaterial.BaseColor.g         = bitcast<f32>(SceneBuffer[Offset + 1u]);
+    OutMaterial.BaseColor.b         = bitcast<f32>(SceneBuffer[Offset + 2u]);
+    OutMaterial.BaseColor.a         = bitcast<f32>(SceneBuffer[Offset + 3u]);
+
+    OutMaterial.EmissiveColor.r     = bitcast<f32>(SceneBuffer[Offset + 4u]);
+    OutMaterial.EmissiveColor.g     = bitcast<f32>(SceneBuffer[Offset + 5u]);
+    OutMaterial.EmissiveColor.b     = bitcast<f32>(SceneBuffer[Offset + 6u]);
+    OutMaterial.EmissiveIntensity   = bitcast<f32>(SceneBuffer[Offset + 7u]);
+
+    OutMaterial.Metalness           = bitcast<f32>(SceneBuffer[Offset + 8u]);
+    OutMaterial.Roughness           = bitcast<f32>(SceneBuffer[Offset + 9u]);
+    OutMaterial.BlendMode           = SceneBuffer[Offset + 10u];
+    OutMaterial.OpacityMask         = bitcast<f32>(SceneBuffer[Offset + 11u]);
+
+    OutMaterial.NormalScale.x       = bitcast<f32>(SceneBuffer[Offset + 12u]);
+    OutMaterial.NormalScale.y       = bitcast<f32>(SceneBuffer[Offset + 13u]);
+    OutMaterial.IOR                 = bitcast<f32>(SceneBuffer[Offset + 14u]);
+
+    OutMaterial.BaseColorTextureID  = SceneBuffer[Offset + 16u];
+    OutMaterial.ORMTextureID        = SceneBuffer[Offset + 17u];
+    OutMaterial.EmissiveTextureID   = SceneBuffer[Offset + 18u];
+    OutMaterial.NormalTextureID     = SceneBuffer[Offset + 19u];
+
+    return OutMaterial;
+}
+
+fn GetBVHNode(InMeshDescriptor : MeshDescriptor, BlasID : u32) -> BVHNode
 {
 
     let Offset: u32 = UniformBuffer.Offset_BlasBuffer + InMeshDescriptor.BlasOffset + (8u * BlasID);
@@ -205,9 +234,8 @@ fn GetBVHNode(InMeshDescriptor: MeshDescriptor, BlasID: u32) -> BVHNode
     return OutBVHNode;
 }
 
-fn GetVertex(InMeshDescriptor: MeshDescriptor, VertexID: u32) -> Vertex
+fn GetVertex(InMeshDescriptor : MeshDescriptor, VertexID : u32) -> Vertex
 {
-
     let Offset : u32 = InMeshDescriptor.VertexOffset + (12u * VertexID);
 
     var OutVertex: Vertex = Vertex();
@@ -219,9 +247,35 @@ fn GetVertex(InMeshDescriptor: MeshDescriptor, VertexID: u32) -> Vertex
     return OutVertex;
 }
 
+fn GetTriangle(InMeshDescriptor : MeshDescriptor, PrimitiveID : u32) -> Triangle
+{
+    let Offset = UniformBuffer.Offset_IndexBuffer + InMeshDescriptor.IndexOffset;
+
+    var OutTriangle : Triangle = Triangle();
+
+    let VertexID_0 : u32 = GeometryBuffer[Offset + (3u * PrimitiveID) + 0u];
+    let VertexID_1 : u32 = GeometryBuffer[Offset + (3u * PrimitiveID) + 1u];
+    let VertexID_2 : u32 = GeometryBuffer[Offset + (3u * PrimitiveID) + 2u];
+
+    OutTriangle.Vertex_0 = GetVertex(InMeshDescriptor, VertexID_0);
+    OutTriangle.Vertex_1 = GetVertex(InMeshDescriptor, VertexID_1);
+    OutTriangle.Vertex_2 = GetVertex(InMeshDescriptor, VertexID_2);
+
+    let PrimitiveToMaterialIndex : u32 = UniformBuffer.Offset_PrimitiveToMaterialBuffer + InMeshDescriptor.PrimitiveToMaterialOffset + PrimitiveID;
+    OutTriangle.MaterialID = GeometryBuffer[PrimitiveToMaterialIndex];
+
+    return OutTriangle;
+}
+
+
 //==========================================================================
-// Functions ===============================================================
+// Maths ===================================================================
 //==========================================================================
+
+fn DoesRangesOverlap(Range1: vec2<f32>, Range2: vec2<f32>) -> bool
+{
+    return Range1.x <= Range2.y && Range2.x <= Range1.y;
+}
 
 fn TransformVec3WithMat4x4(InVector3: vec3<f32>, TransformMatrix: mat4x4<f32>) -> vec3<f32>
 {
@@ -241,21 +295,11 @@ fn TransformRayWithMat4x4(InRay: Ray, TransformMatrix: mat4x4<f32>, bNormalize: 
     return Ray(TransformedRay_Start, TransformedRay_Direction);
 }
 
-fn GenerateRayFromThreadID(ThreadID: vec2<u32>) -> Ray
+fn GetRayTriangleHitDistance(InRay: Ray, InTriangle : Triangle) -> f32
 {
-    let PixelUV             : vec2<f32> = (vec2<f32>(ThreadID.xy) + 0.5) / vec2<f32>(UniformBuffer.Resolution);
-    let PixelNDC            : vec3<f32> = vec3<f32>(2.0 * PixelUV - 1.0, 0.0);
-
-    let PixelClip_NearPlane : vec3<f32> = vec3<f32>(PixelNDC.xy, 0.0);
-    let PixelClip_Direction : vec3<f32> = vec3<f32>(0.0, 0.0, 1.0);
-
-    let Ray_Clip            : Ray = Ray(PixelClip_NearPlane, PixelClip_Direction);
-
-    return TransformRayWithMat4x4(Ray_Clip, UniformBuffer.ViewProjectionMatrix_Inverse, true);
-}
-
-fn GetRayTriangleHitDistance(InRay: Ray, P0: vec3<f32>, P1: vec3<f32>, P2: vec3<f32>) -> f32
-{
+    let P0 = InTriangle.Vertex_0.Position;
+    let P1 = InTriangle.Vertex_1.Position;
+    let P2 = InTriangle.Vertex_2.Position;
 
     let Edge_1 = P1 - P0;
     let Edge_2 = P2 - P0;
@@ -285,35 +329,14 @@ fn GetRayTriangleHitDistance(InRay: Ray, P0: vec3<f32>, P1: vec3<f32>, P2: vec3<
     return t;
 }
 
-fn GetRayTriangleHitDistanceFromPrimitiveID(InRay: Ray, InMeshDescriptor: MeshDescriptor, PrimitiveID: u32) -> f32
-{
-
-    let Offset = UniformBuffer.Offset_IndexBuffer + InMeshDescriptor.IndexOffset;
-
-    let VertexID_0 : u32 = GeometryBuffer[Offset + (3u * PrimitiveID) + 0u];
-    let VertexID_1 : u32 = GeometryBuffer[Offset + (3u * PrimitiveID) + 1u];
-    let VertexID_2 : u32 = GeometryBuffer[Offset + (3u * PrimitiveID) + 2u];
-
-    let Vertex_0 : Vertex = GetVertex(InMeshDescriptor, VertexID_0);
-    let Vertex_1 : Vertex = GetVertex(InMeshDescriptor, VertexID_1);
-    let Vertex_2 : Vertex = GetVertex(InMeshDescriptor, VertexID_2);
-
-    return GetRayTriangleHitDistance(InRay, Vertex_0.Position, Vertex_1.Position, Vertex_2.Position);
-}
-
-//==========================================================================
-// TEST Functions ==========================================================
-//==========================================================================
-
-// 채우기
-fn TEST_AABB(InRay: Ray, InBVH: BVHNode) -> vec2<f32>
+fn GetRayAABBIntersectionRange(InRay: Ray, InBVHNode: BVHNode) -> vec2<f32>
 {
     // 광선 방향의 역수를 계산하여 나눗셈을 곱셈으로 최적화합니다.
     let InvDirection = 1.0 / InRay.Direction;
 
     // 각 축(x, y, z)에 대해 광선이 경계 상자의 '슬랩'에 들어오고 나가는 시간을 계산합니다.
-    let t1 = (InBVH.Boundary_Min - InRay.Start) * InvDirection;
-    let t2 = (InBVH.Boundary_Max - InRay.Start) * InvDirection;
+    let t1 = (InBVHNode.Boundary_Min - InRay.Start) * InvDirection;
+    let t2 = (InBVHNode.Boundary_Max - InRay.Start) * InvDirection;
 
     // 각 축에 대한 최소(t_min) 및 최대(t_max) 충돌 시간을 찾습니다.
     // min()과 max()를 사용하여 방향에 관계없이 올바른 값을 보장합니다.
@@ -327,119 +350,30 @@ fn TEST_AABB(InRay: Ray, InBVH: BVHNode) -> vec2<f32>
 
     // t_min이 t_max보다 크면 광선이 AABB와 교차하지 않는 것입니다.
     // 이 경우 음수 값을 포함한 vec2를 반환하여 교차하지 않음을 나타낼 수 있습니다.
-    if (t_min > t_max) {
-        return vec2<f32>(-1.0, -1.0);
-    }
+    if (t_min > t_max) { return vec2<f32>(-1.0, -1.0); }
 
     // 최소 및 최대 충돌 거리를 반환합니다.
     return vec2<f32>(t_min, t_max);
 }
 
-fn TEST_DOES_RANGES_OVERLAP(Range1: vec2<f32>, Range2: vec2<f32>) -> bool
+//==========================================================================
+// Functions ===============================================================
+//==========================================================================
+
+fn GenerateRayFromThreadID(ThreadID: vec2<u32>) -> Ray
 {
-    return Range1.x <= Range2.y && Range2.x <= Range1.y;
+    let PixelUV             : vec2<f32> = (vec2<f32>(ThreadID.xy) + 0.5) / vec2<f32>(UniformBuffer.Resolution);
+    let PixelNDC            : vec3<f32> = vec3<f32>(2.0 * PixelUV - 1.0, 0.0);
+
+    let PixelClip_NearPlane : vec3<f32> = vec3<f32>(PixelNDC.xy, 0.0);
+    let PixelClip_Direction : vec3<f32> = vec3<f32>(0.0, 0.0, 1.0);
+
+    let Ray_Clip            : Ray = Ray(PixelClip_NearPlane, PixelClip_Direction);
+
+    return TransformRayWithMat4x4(Ray_Clip, UniformBuffer.ViewProjectionMatrix_Inverse, true);
 }
 
-fn TEST_RAY_HIT_TRIANGLE(ThreadID: vec2<u32>) -> bool
-{
-    var TestRay : Ray = GenerateRayFromThreadID(ThreadID);
-
-    let PlaneZ = -7.5;
-    let TriWidth = 3.0;
-
-        // -0.0476427786052227 0.0012953999685123563 -0.040594279766082764
-        // -0.03974591940641403 0.002207260113209486 -0.048099979758262634
-        // -0.0399719774723053 0.0012953999685123563 -0.04837175831198692
-    var p0: vec3<f32> = vec3<f32>(-0.0476427786052227,0.0012953999685123563,-0.040594279766082764);
-    var p1: vec3<f32> = vec3<f32>(-0.03974591940641403, 0.002207260113209486, -0.048099979758262634);
-    var p2: vec3<f32> = vec3<f32>(-0.0399719774723053, 0.0012953999685123563, -0.04837175831198692);
-
-    p0 = vec3<f32>(-TriWidth, -TriWidth, PlaneZ);
-    p1 = vec3<f32>(TriWidth, -TriWidth, PlaneZ);
-    p2 = vec3<f32>(0, TriWidth, PlaneZ);
-
-    let dist = GetRayTriangleHitDistance(TestRay, p0, p1, p2);
-
-    return (dist > 0.0);
-}
-
-fn TEST_GET_HIT_PRIMITIVE_2(InRay: Ray) -> vec3<u32>
-{
-    var BestHit_InstanceID  : u32       = 0u;
-    var BestHit_PrimitiveID : u32       = 0u;
-    var RayValidRange       : vec2<f32> = vec2<f32>(1e-4, 1e10);
-
-    for (var InstanceID: u32 = 0u; InstanceID < UniformBuffer.InstanceCount; InstanceID++)
-    {
-        let CurrentInstance         : Instance          = GetInstance(InstanceID);
-        let CurrentMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(CurrentInstance.MeshID);
-        let LocalRay                : Ray               = TransformRayWithMat4x4(InRay, CurrentInstance.ModelMatrix_Inverse, false);
-        let IntersectionRange       : vec2<f32>         = TEST_AABB(LocalRay, GetBVHNode(CurrentMeshDescriptor, 0u));
-
-        if (!TEST_DOES_RANGES_OVERLAP(RayValidRange, IntersectionRange)) { continue; }
-        
-        // Blas Tree 순회
-        var Stack           : array<u32, 96>;
-        var StackPointer    : i32 = -1;
-        StackPointer++; Stack[StackPointer] = 0;
-       
-
-        while (StackPointer > -1)
-        {
-            let BlasID          : u32       = Stack[StackPointer]; StackPointer--;
-            let CurrentBVHNode  : BVHNode   = GetBVHNode(CurrentMeshDescriptor, BlasID);
-            let bIsLeafNode     : bool      = bool(CurrentBVHNode.PrimitiveCount & 0xffff0000u);
-                   
-            if (!bIsLeafNode)
-            {
-                let LChildBlasID    : u32 = BlasID + 1u;
-                let RChildBlasID    : u32 = CurrentBVHNode.PrimitiveOffset;
-
-                // SplitAxis 정보로부터 LChild, RChild의 서열을 정리
-                let SplitAxis       : u32 = CurrentBVHNode.PrimitiveCount & 0x0000ffffu;
-                var NearChildBlasID : u32 = RChildBlasID; if (LocalRay.Direction[SplitAxis] > 0.0) { NearChildBlasID = LChildBlasID; }
-                let FarChildBlasID  : u32 = (LChildBlasID + RChildBlasID) - NearChildBlasID;
-
-                let NearChildBVH            : BVHNode       = GetBVHNode(CurrentMeshDescriptor, NearChildBlasID);
-                let NearIntersectionRange   : vec2<f32>     = TEST_AABB(LocalRay, NearChildBVH);
-                let bNearDidHit             : bool          = TEST_DOES_RANGES_OVERLAP(RayValidRange, NearIntersectionRange);
-                
-                if (!bNearDidHit) { continue; }
-                
-                let FarChildBVH             : BVHNode       = GetBVHNode(CurrentMeshDescriptor, FarChildBlasID);
-                let FarIntersectionRange    : vec2<f32>     = TEST_AABB(LocalRay, FarChildBVH);
-                let bFarDidHit              : bool          = TEST_DOES_RANGES_OVERLAP(RayValidRange, FarIntersectionRange);
-
-                if (bFarDidHit) { StackPointer++; Stack[StackPointer] = FarChildBlasID; }
-                StackPointer++; Stack[StackPointer] = NearChildBlasID;
-
-                continue;
-            }
-
-            let PrimitiveStartID : u32 = CurrentBVHNode.PrimitiveOffset;
-            let PrimitiveEndID   : u32 = PrimitiveStartID + (CurrentBVHNode.PrimitiveCount & 0x0000ffffu);
-
-            for (var PrimitiveID : u32 = PrimitiveStartID; PrimitiveID < PrimitiveEndID; PrimitiveID++)
-            {
-                let PrimitiveHitDistance: f32 = GetRayTriangleHitDistanceFromPrimitiveID(LocalRay, CurrentMeshDescriptor, PrimitiveID);
-                if (RayValidRange.y < PrimitiveHitDistance) { continue; }
-
-                // Material의 Alpha Test 여부 읽기...
-                // if (bAlphaTestResult_IgnorePrimitive) { continue; }
-                
-                // 최종 살아남은 Primitive를 선택
-                RayValidRange.y         = PrimitiveHitDistance;
-                BestHit_InstanceID      = InstanceID;
-                BestHit_PrimitiveID     = PrimitiveID;
-            }
-        }
-    }
-
-    return vec3<u32>(BestHit_InstanceID, BestHit_PrimitiveID, bitcast<u32>(RayValidRange.y));
-
-}
-
-fn TEST_GET_HIT_PRIMITIVE(InRay: Ray) -> vec3<u32>
+fn TraceRay(InRay: Ray) -> vec3<u32>
 {
 
     var BestHit_InstanceID  : u32       = 0u;
@@ -448,20 +382,19 @@ fn TEST_GET_HIT_PRIMITIVE(InRay: Ray) -> vec3<u32>
 
     for (var InstanceID: u32 = 0u; InstanceID < UniformBuffer.InstanceCount; InstanceID++)
     {
+        // 현재 Instance 기준으로 정보 가져오기
         let CurrentInstance         : Instance          = GetInstance(InstanceID);
         let CurrentMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(CurrentInstance.MeshID);
         let LocalRay                : Ray               = TransformRayWithMat4x4(InRay, CurrentInstance.ModelMatrix_Inverse, false);
-        let IntersectionRange       : vec2<f32>         = TEST_AABB(LocalRay, GetBVHNode(CurrentMeshDescriptor, 0u));
+        let IntersectionRange       : vec2<f32>         = GetRayAABBIntersectionRange(LocalRay, GetBVHNode(CurrentMeshDescriptor, 0u));
 
-        if (!TEST_DOES_RANGES_OVERLAP(RayValidRange, IntersectionRange)) { continue; }
-
+        if (!DoesRangesOverlap(RayValidRange, IntersectionRange)) { continue; }
         
         // Blas Tree 순회
         var Stack           : array<u32, 96>;
         var StackPointer    : i32 = -1;
         StackPointer++; Stack[StackPointer] = 0;
        
-
         while (StackPointer > -1)
         {
             let BlasID          : u32       = Stack[StackPointer]; StackPointer--;
@@ -476,11 +409,11 @@ fn TEST_GET_HIT_PRIMITIVE(InRay: Ray) -> vec3<u32>
                 let LChildBVH   : BVHNode = GetBVHNode(CurrentMeshDescriptor, LChildBlasID);
                 let RChildBVH   : BVHNode = GetBVHNode(CurrentMeshDescriptor, RChildBlasID);
 
-                let LIntersectionRange  : vec2<f32> = TEST_AABB(LocalRay, LChildBVH);
-                let RIntersectionRange  : vec2<f32> = TEST_AABB(LocalRay, RChildBVH);
+                let LIntersectionRange  : vec2<f32> = GetRayAABBIntersectionRange(LocalRay, LChildBVH);
+                let RIntersectionRange  : vec2<f32> = GetRayAABBIntersectionRange(LocalRay, RChildBVH);
 
-                let bLDidHit : bool = TEST_DOES_RANGES_OVERLAP(RayValidRange, LIntersectionRange);
-                let bRDidHit : bool = TEST_DOES_RANGES_OVERLAP(RayValidRange, RIntersectionRange);
+                let bLDidHit : bool = DoesRangesOverlap(RayValidRange, LIntersectionRange);
+                let bRDidHit : bool = DoesRangesOverlap(RayValidRange, RIntersectionRange);
 
                 let HitState : u32 = (u32(bLDidHit) << 1) + u32(bRDidHit);
 
@@ -516,7 +449,9 @@ fn TEST_GET_HIT_PRIMITIVE(InRay: Ray) -> vec3<u32>
 
             for (var PrimitiveID : u32 = PrimitiveStartID; PrimitiveID < PrimitiveEndID; PrimitiveID++)
             {
-                let PrimitiveHitDistance: f32 = GetRayTriangleHitDistanceFromPrimitiveID(LocalRay, CurrentMeshDescriptor, PrimitiveID);
+                let CurrentTriangle         : Triangle  = GetTriangle(CurrentMeshDescriptor, PrimitiveID);
+                let PrimitiveHitDistance    : f32       = GetRayTriangleHitDistance(LocalRay, CurrentTriangle);
+                
                 if (RayValidRange.y < PrimitiveHitDistance) { continue; }
 
                 // Material의 Alpha Test 여부 읽기...
@@ -531,6 +466,46 @@ fn TEST_GET_HIT_PRIMITIVE(InRay: Ray) -> vec3<u32>
     }
 
     return vec3<u32>(BestHit_InstanceID, BestHit_PrimitiveID, bitcast<u32>(RayValidRange.y));
+}
+
+//==========================================================================
+// TEST Functions ==========================================================
+//==========================================================================
+
+fn TEST_GET_BARYCENTRIC_COORD(Point: vec3<f32>, InTriangle: Triangle) -> vec3<f32>
+{
+
+    let A = InTriangle.Vertex_0.Position;
+    let B = InTriangle.Vertex_1.Position;
+    let C = InTriangle.Vertex_2.Position;
+
+    // 삼각형의 두 변 벡터를 계산합니다 (A를 원점으로).
+    let v0 = B - A;
+    let v1 = C - A;
+    // 점에서 A를 뺀 벡터를 계산합니다.
+    let v2 = Point - A;
+
+    // u와 v를 구하기 위한 연립방정식을 풀기 위해 dot product를 계산합니다.
+    let d00 = dot(v0, v0);
+    let d01 = dot(v0, v1);
+    let d11 = dot(v1, v1);
+    let d20 = dot(v2, v0);
+    let d21 = dot(v2, v1);
+
+    // Cramer의 법칙을 사용하여 u와 v를 계산합니다.
+    let denom = d00 * d11 - d01 * d01;
+    // 분모가 0에 가까우면 퇴화된(degenerate) 삼각형이므로 계산이 불안정할 수 있습니다.
+    if (abs(denom) < 0.000001) {
+        // 기본값으로 A에 모든 가중치를 할당하여 오류를 방지합니다.
+        return vec3f(1.0, 0.0, 0.0);
+    }
+
+    let invDenom = 1.0 / denom;
+    let u = (d11 * d20 - d01 * d21) * invDenom;
+    let v = (d00 * d21 - d01 * d20) * invDenom;
+    let w = 1.0 - u - v;
+
+    return vec3f(w, u, v);
 }
 
 //==========================================================================
@@ -549,20 +524,43 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         if (!bPixelInBoundary_X || !bPixelInBoundary_Y) { return; }
     }
 
-
-
-
-
-
-    var ResultColor = vec3<f32>(0,0,0);
-
     // 현재 Pixel의 Ray 생성
     let CurrentRay: Ray = GenerateRayFromThreadID(ThreadID.xy);
 
-    let HitPrimitiveData: vec3<u32> = TEST_GET_HIT_PRIMITIVE(CurrentRay);
-    if (bitcast<f32>(HitPrimitiveData.z) < 1e10) { ResultColor.b = 1.0; }
+    // Current Ray가 씬에서 처음 만나는 Primitive의 정보 계산
+    let HitPrimitiveData: vec3<u32> = TraceRay(CurrentRay);
 
-    //ResultColor.r = (HitPrimitiveData.x == 0) ? 1.0 : 0.0;
+
+
+
+
+
+
+    // WORKING : Lighting
+    var ResultColor = vec3<f32>(0,0,0);
+    if (bitcast<f32>(HitPrimitiveData.z) < 1e10)
+    {
+        let HitInstanceID       : u32               = HitPrimitiveData.x;
+        let HitPrimitiveID      : u32               = HitPrimitiveData.y;
+        let HitDistance         : f32               = bitcast<f32>(HitPrimitiveData.z);
+
+        let HitInstance         : Instance          = GetInstance(HitInstanceID);
+        let HitMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(HitInstance.MeshID);
+        let HitPrimitive        : Triangle          = GetTriangle(HitMeshDescriptor, HitPrimitiveID);
+
+        let HitPoint            : vec3<f32>         = CurrentRay.Start + (HitDistance * CurrentRay.Direction);
+        let BaryCentricCoord    : vec3<f32>         = TEST_GET_BARYCENTRIC_COORD(HitPoint, HitPrimitive);
+        let HitNormal           : vec3<f32>         = normalize((HitPrimitive.Vertex_0.Normal * BaryCentricCoord.x) + (HitPrimitive.Vertex_1.Normal * BaryCentricCoord.y) + (HitPrimitive.Vertex_2.Normal * BaryCentricCoord.z));
+ 
+        let PrimitiveMaterial   : Material          = GetMaterial(HitPrimitive.MaterialID);
+
+        
+
+        ResultColor.r = 0.7;
+    }
+
+
+
 
     // TEMP 
     {
