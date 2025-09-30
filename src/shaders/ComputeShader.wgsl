@@ -198,10 +198,10 @@ fn GetBVHNode(InMeshDescriptor: MeshDescriptor, BlasID: u32) -> BVHNode
     var OutBVHNode: BVHNode = BVHNode();
 
     OutBVHNode.Boundary_Min = bitcast<vec3<f32>>(vec3<u32>(AccelBuffer[Offset + 0u], AccelBuffer[Offset + 1u], AccelBuffer[Offset + 2u]));
-    OutBVHNode.PrimitiveCount = AccelBuffer[Offset + 3u];
+    OutBVHNode.Boundary_Max = bitcast<vec3<f32>>(vec3<u32>(AccelBuffer[Offset + 3u], AccelBuffer[Offset + 4u], AccelBuffer[Offset + 5u]));
 
-    OutBVHNode.Boundary_Max = bitcast<vec3<f32>>(vec3<u32>(AccelBuffer[Offset + 4u], AccelBuffer[Offset + 5u], AccelBuffer[Offset + 6u]));
-    OutBVHNode.PrimitiveOffset = AccelBuffer[Offset + 7u];
+    OutBVHNode.PrimitiveOffset  = AccelBuffer[Offset + 6u];
+    OutBVHNode.PrimitiveCount   = AccelBuffer[Offset + 7u];
 
     return OutBVHNode;
 }
@@ -265,23 +265,23 @@ fn GetRayTriangleHitDistance(InRay: Ray, P0: vec3<f32>, P1: vec3<f32>, P2: vec3<
     let det = dot(Edge_1, pvec);
     let EPS  : f32 = 1e-8;
 
-    if (abs(det) < EPS) { return -1.0; }
+    if (abs(det) < EPS) { return 1e11; }
 
     let invDet = 1.0 / det;
     let tvec   = InRay.Start - P0;
 
     let u = dot(tvec, pvec) * invDet;
-    if (u < 0.0 || u > 1.0) { return -1.0; }
+    if (u < 0.0 || u > 1.0) { return 1e11; }
 
     let qvec = cross(tvec, Edge_1);
     let v = dot(InRay.Direction, qvec) * invDet;
-    if (v < 0.0 || (u + v) > 1.0) { return -1.0; }
+    if (v < 0.0 || (u + v) > 1.0) { return 1e11; }
 
     let t = dot(Edge_2, qvec) * invDet;
 
-    // ★ 추가: 앞쪽 히트만 유효(자기교차 방지용 최소값 포함)
-    // let tMin: f32 = 1e-4;          // 필요에 따라 조정/파라미터화
-    // if (t <= tMin) { return -1.0; }
+    //★ 추가: 앞쪽 히트만 유효(자기교차 방지용 최소값 포함)
+    let tMin: f32 = 1e-4;          // 필요에 따라 조정/파라미터화
+    if (t <= tMin) { return 1e11; }
 
     return t;
 }
@@ -309,12 +309,36 @@ fn GetRayTriangleHitDistanceFromPrimitiveID(InRay: Ray, InMeshDescriptor: MeshDe
 // 채우기
 fn TEST_AABB(InRay: Ray, InBVH: BVHNode) -> vec2<f32>
 {
-    return vec2<f32>(0.0, 0.0);
+    // 광선 방향의 역수를 계산하여 나눗셈을 곱셈으로 최적화합니다.
+    let InvDirection = 1.0 / InRay.Direction;
+
+    // 각 축(x, y, z)에 대해 광선이 경계 상자의 '슬랩'에 들어오고 나가는 시간을 계산합니다.
+    let t1 = (InBVH.Boundary_Min - InRay.Start) * InvDirection;
+    let t2 = (InBVH.Boundary_Max - InRay.Start) * InvDirection;
+
+    // 각 축에 대한 최소(t_min) 및 최대(t_max) 충돌 시간을 찾습니다.
+    // min()과 max()를 사용하여 방향에 관계없이 올바른 값을 보장합니다.
+    let t_min_vec = min(t1, t2);
+    let t_max_vec = max(t1, t2);
+
+    // 모든 축에서 가장 '늦게' 들어오는 시간(최소 충돌 거리)과
+    // 가장 '빨리' 나가는 시간(최대 충돌 거리)을 찾습니다.
+    let t_min = max(t_min_vec.x, max(t_min_vec.y, t_min_vec.z));
+    let t_max = min(t_max_vec.x, min(t_max_vec.y, t_max_vec.z));
+
+    // t_min이 t_max보다 크면 광선이 AABB와 교차하지 않는 것입니다.
+    // 이 경우 음수 값을 포함한 vec2를 반환하여 교차하지 않음을 나타낼 수 있습니다.
+    if (t_min > t_max) {
+        return vec2<f32>(-1.0, -1.0);
+    }
+
+    // 최소 및 최대 충돌 거리를 반환합니다.
+    return vec2<f32>(t_min, t_max);
 }
 
 fn TEST_DOES_RANGES_OVERLAP(Range1: vec2<f32>, Range2: vec2<f32>) -> bool
 {
-    return false;
+    return Range1.x <= Range2.y && Range2.x <= Range1.y;
 }
 
 fn TEST_RAY_HIT_TRIANGLE(ThreadID: vec2<u32>) -> bool
@@ -340,12 +364,13 @@ fn TEST_RAY_HIT_TRIANGLE(ThreadID: vec2<u32>) -> bool
     return (dist > 0.0);
 }
 
-fn TEST_GET_HIT_PRIMITIVE(InRay: Ray) -> vec3<u32>
+fn TEST_GET_HIT_PRIMITIVE(InRay: Ray) -> vec4<u32>
 {
 
-    var BestHit_InstanceID: u32 = 0u;
-    var BestHit_PrimitiveID: u32 = 0u;
-    var RayValidRange: vec2<f32> = vec2<f32>(1e-4, 1e10);
+    var DEBUG_VALUE         : u32       = 0;
+    var BestHit_InstanceID  : u32       = 0;
+    var BestHit_PrimitiveID : u32       = 99999u;
+    var RayValidRange       : vec2<f32> = vec2<f32>(1e-4, 1e10);
 
     for (var InstanceID: u32 = 0u; InstanceID < UniformBuffer.InstanceCount; InstanceID++)
     {
@@ -356,52 +381,91 @@ fn TEST_GET_HIT_PRIMITIVE(InRay: Ray) -> vec3<u32>
 
         if (!TEST_DOES_RANGES_OVERLAP(RayValidRange, IntersectionRange)) { continue; }
 
-
+        
         // Blas Tree 순회
         var Stack           : array<u32, 96>;
         var StackPointer    : i32 = -1;
         StackPointer++; Stack[StackPointer] = 0;
+       
+
         while (StackPointer > -1)
         {
-            let BlasID          : u32 = Stack[StackPointer]; StackPointer--;
-            let CurrentBVHNode  : BVHNode = GetBVHNode(CurrentMeshDescriptor, BlasID);
-            let bIsLeafNode     : bool = (CurrentBVHNode.PrimitiveCount > 0);
+            let BlasID          : u32       = Stack[StackPointer]; StackPointer--;
+            let CurrentBVHNode  : BVHNode   = GetBVHNode(CurrentMeshDescriptor, BlasID);
+            let bIsLeafNode     : bool      = bool(CurrentBVHNode.PrimitiveCount & 0xffff0000u);
+         
+            DEBUG_VALUE = BlasID + 1;
+            
+            
 
             if (!bIsLeafNode)
             {
-                let LChildBVH   : BVHNode = GetBVHNode(CurrentMeshDescriptor, BlasID + 1u);
-                let RChildBVH   : BVHNode = GetBVHNode(CurrentMeshDescriptor, CurrentBVHNode.PrimitiveOffset);
+                let LChildBlasID : u32 = BlasID + 1u;
+                let RChildBlasID : u32 = CurrentBVHNode.PrimitiveOffset;
+
+                let LChildBVH   : BVHNode = GetBVHNode(CurrentMeshDescriptor, LChildBlasID);
+                let RChildBVH   : BVHNode = GetBVHNode(CurrentMeshDescriptor, RChildBlasID);
 
                 let LIntersectionRange  : vec2<f32> = TEST_AABB(LocalRay, LChildBVH);
                 let RIntersectionRange  : vec2<f32> = TEST_AABB(LocalRay, RChildBVH);
 
-                // 충돌 범위 비교해서 Stack에 ID 삽입...
+                let bLDidHit : bool = TEST_DOES_RANGES_OVERLAP(RayValidRange, LIntersectionRange);
+                let bRDidHit : bool = TEST_DOES_RANGES_OVERLAP(RayValidRange, RIntersectionRange);
+
+                // if (bRDidHit) {StackPointer++; Stack[StackPointer] = RChildBlasID;}
+                // if (bLDidHit) {StackPointer++; Stack[StackPointer] = LChildBlasID;}
+                // if (true) { continue; }
+
+                let HitState : u32 = (u32(bLDidHit) << 1) + u32(bRDidHit);
+
+                switch (HitState)
+                {
+                    case 1u: { StackPointer++; Stack[StackPointer] = RChildBlasID; break; }
+                    case 2u: { StackPointer++; Stack[StackPointer] = LChildBlasID; break; }
+                    case 3u: 
+                    {
+
+                        if (LIntersectionRange.x < RIntersectionRange.x)
+                        {
+                            StackPointer++; Stack[StackPointer] = RChildBlasID;
+                            StackPointer++; Stack[StackPointer] = LChildBlasID;
+                        }
+                        else
+                        {
+                            StackPointer++; Stack[StackPointer] = LChildBlasID;
+                            StackPointer++; Stack[StackPointer] = RChildBlasID;
+                        }
+
+                        break;
+                    }
+                    default: { break; }
+                }
 
                 continue;
             }
 
-            // [Offset, Offset + Count) 범위의 Index => PrimitiveID는 Offset/3 부터 시작
-            let PrimitiveStartID: u32 = CurrentBVHNode.PrimitiveOffset / 3u;
-            let PrimitiveEndID  : u32 = PrimitiveStartID + (CurrentBVHNode.PrimitiveCount / 3u);
+            let PrimitiveStartID : u32 = CurrentBVHNode.PrimitiveOffset;
+            let PrimitiveEndID   : u32 = PrimitiveStartID + (CurrentBVHNode.PrimitiveCount & 0x0000ffffu);
 
-            for (var PrimitiveID: u32 = PrimitiveStartID; PrimitiveID < PrimitiveEndID; PrimitiveID++)
+            //if (true) { BestHit_InstanceID = PrimitiveEndID - PrimitiveStartID; }
+
+            for (var PrimitiveID : u32 = PrimitiveStartID; PrimitiveID < PrimitiveEndID; PrimitiveID++)
             {
                 let PrimitiveHitDistance: f32 = GetRayTriangleHitDistanceFromPrimitiveID(LocalRay, CurrentMeshDescriptor, PrimitiveID);
                 if (RayValidRange.y < PrimitiveHitDistance) { continue; }
 
                 // Material의 Alpha Test 여부 읽기...
                 // if (bAlphaTestResult_IgnorePrimitive) { continue; }
-
+                
                 // 최종 살아남은 Primitive를 선택
                 RayValidRange.y         = PrimitiveHitDistance;
                 BestHit_InstanceID      = InstanceID;
                 BestHit_PrimitiveID     = PrimitiveID;
             }
         }
-
     }
 
-    return vec3<u32>(BestHit_InstanceID, BestHit_PrimitiveID, bitcast<u32>(RayValidRange.y));
+    return vec4<u32>(BestHit_InstanceID, BestHit_PrimitiveID, bitcast<u32>(RayValidRange.y), DEBUG_VALUE);
 }
 
 //==========================================================================
@@ -430,10 +494,29 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     // 현재 Pixel의 Ray 생성
     let CurrentRay: Ray = GenerateRayFromThreadID(ThreadID.xy);
 
-    let HitPrimitiveData: vec3<u32> = TEST_GET_HIT_PRIMITIVE(CurrentRay);
-    
+    let HitPrimitiveData: vec4<u32> = TEST_GET_HIT_PRIMITIVE(CurrentRay);
+    if (bitcast<f32>(HitPrimitiveData.z) < 1e10) { ResultColor.b = 1.0; }
 
+
+    let DEBUG_VALUE = HitPrimitiveData.w;
+    //if (DEBUG_VALUE > 0) { ResultColor.g = 1.0; }
+    ResultColor.g = f32(DEBUG_VALUE) / 20.0;
+
+    //ResultColor.r = f32(HitPrimitiveData.x);
+
+    // let inst = GetInstance(0);
+    // let desc = GetMeshDescriptor(inst.MeshID);
+    // let blasTest = GetBVHNode(desc, 11);
+    // if (blasTest.PrimitiveCount == 4294901770u) { ResultColor.r = f32(blasTest.PrimitiveCount & 0x0000ffffu) /13; }
+
+
+    //if (HitPrimitiveData.x == 50192) { ResultColor.b = 1.0; }
+    // ResultColor.b = 0.4;
+    
+    //ResultColor.r = f32(HitPrimitiveData.x) / 50000.0;
+    
     // // Bounce 고려 X
+
     // let INF = 1e20;
     // var BestHitInfo: HitInfo = HitInfo();
     // BestHitInfo.Distance = INF;

@@ -74,9 +74,71 @@ export class World
             const GroupData = MergedMesh.geometry.groups;
             MergedMesh.geometry.groups = [];
 
-            const BVHData = new MeshBVH(MergedMesh.geometry, { strategy: SAH, maxLeafTris: 10 });
+            
+
+            // const originalIndicesBefore = MergedMesh.geometry.index!.array.slice();
+            // console.log('BVH 생성 전 원본 인덱스 (첫 12개):', originalIndicesBefore);
+
+
+            const BVHData = new MeshBVH(MergedMesh.geometry, { strategy: SAH, maxLeafTris: 10, indirect: false });
             BlasBuffer = new Float32Array((BVHData as any)._roots[0]);
-            MergedMesh.geometry.groups = GroupData;            
+            MergedMesh.geometry.groups = GroupData;
+
+            const floatView = new Float32Array((BVHData as any)._roots[0]);
+            const intView = new Int32Array((BVHData as any)._roots[0]);
+            const uintView = new Uint32Array((BVHData as any)._roots[0]);
+
+            // console.log(uintView);
+            // console.log(floatView);
+            console.log(BVHData.geometry.index);
+            console.log(BVHData.geometry.attributes["position"]);
+            for (let iter=0; iter<29; iter++)
+            {
+                let vertexID = BVHData.geometry.index?.array[iter]!;
+
+                let PosX = BVHData.geometry.attributes["position"].array[3*vertexID];
+                let PosY = BVHData.geometry.attributes["position"].array[3*vertexID+1];
+                let PosZ = BVHData.geometry.attributes["position"].array[3*vertexID+2];
+                console.log("Vertex Position: [", PosX, PosY, PosZ, "]");
+            }
+
+            //console.log(intView);
+            for (let iter=0; iter<intView.length / 8; iter++)
+            {
+                const offset = intView[8*iter + 6];
+                const count = intView[8*iter + 7];
+                
+                if (count & 0xffff0000)
+                {
+                    //console.log(iter); break;
+                    const primStartID = offset;
+                    const primEndID = offset + (count & 0x0000ffff);
+
+                    //if (offset % 3) console.log(offset);
+                    //if (primEndID * 3 >= BVHData.geometry.index?.count!) console.log(iter * 8);
+                    //console.log(primEndID - primStartID);
+                    // const triCount = count & 0x0000ffff;
+                    // if (3*(offset + triCount) >= BVHData.geometry.index?.count!) console.log(offset, triCount);
+                    // //if (offset >= intView.length / 8) { console.log(offset); }
+                    continue;
+                }
+
+                
+                
+            }
+            const serializedData = MeshBVH.serialize(BVHData);
+            //console.log(serializedData);
+            //console.log(BlasBuffer);
+            //console.log(BlasBuffer);
+            //console.log(MeshBVH.serialize(BVHData).roots[0]);
+            //console.log(BVHData.geometry.index);
+            //console.log(intView);
+            // console.log(floatView.subarray(600, 624));
+            // console.log(uintView.subarray(600, 624));
+            // console.log(intView.subarray(600, 624));
+            // min3, max3, offset, count
+
+            //console.log(BVHData.geometry.index);
         }
 
         const MeshGenerated: Mesh =
