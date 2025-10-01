@@ -20,7 +20,7 @@ struct Uniform
 
     Offset_BlasBuffer                   : u32,
     InstanceCount                       : u32,
-    MeshCount                           : u32,
+    LightSourceCount                    : u32,
     MaterialCount                       : u32,
 };
 
@@ -276,7 +276,6 @@ fn GetTriangle(InMeshDescriptor : MeshDescriptor, PrimitiveID : u32) -> Triangle
     return OutTriangle;
 }
 
-
 //==========================================================================
 // Maths ===================================================================
 //==========================================================================
@@ -363,6 +362,87 @@ fn GetRayAABBIntersectionRange(InRay: Ray, InBVHNode: BVHNode) -> vec2<f32>
 
     // 최소 및 최대 충돌 거리를 반환합니다.
     return vec2<f32>(t_min, t_max);
+}
+
+fn GetBaryCentricWeights(Point: vec3<f32>, InTriangle: Triangle) -> vec3<f32>
+{
+    let A = InTriangle.Vertex_0.Position;
+    let B = InTriangle.Vertex_1.Position;
+    let C = InTriangle.Vertex_2.Position;
+
+    let v0 = B - A;
+    let v1 = C - A;
+    let v2 = Point - A;
+
+    let d00 = dot(v0, v0);
+    let d01 = dot(v0, v1);
+    let d11 = dot(v1, v1);
+    let d20 = dot(v2, v0);
+    let d21 = dot(v2, v1);
+
+    let denom = d00 * d11 - d01 * d01;
+
+    if (abs(denom) < 1e-6) { return vec3<f32>(1.0, 0.0, 0.0); }
+
+    let invDenom = 1.0 / denom;
+    let u = (d11 * d20 - d01 * d21) * invDenom;
+    let v = (d00 * d21 - d01 * d20) * invDenom;
+    let w = 1.0 - u - v;
+
+    return vec3f(w, u, v);
+}
+
+fn GetHitNormal(Point: vec3<f32>, InTriangle: Triangle) -> vec3<f32>
+{
+    let BaryCentricWeight : vec3<f32> = GetBaryCentricWeights(Point, InTriangle);
+
+    let VertexAttribute_0 : vec3<f32> = InTriangle.Vertex_0.Normal * BaryCentricWeight.x;
+    let VertexAttribute_1 : vec3<f32> = InTriangle.Vertex_1.Normal * BaryCentricWeight.y;
+    let VertexAttribute_2 : vec3<f32> = InTriangle.Vertex_2.Normal * BaryCentricWeight.z;
+
+    return normalize(VertexAttribute_0 + VertexAttribute_1 + VertexAttribute_2);
+}
+
+//==========================================================================
+// PBR Helpers =============================================================
+//==========================================================================
+
+fn GetGGXDistributionFactor(N : vec3<f32>, H : vec3<f32>, Roughness : f32) -> f32
+{
+    let a: f32 = Roughness * Roughness;
+    let a2: f32 = a * a;
+    let NdotH: f32 = max(dot(N, H), 0.0);
+    let NdotH2: f32 = NdotH * NdotH;
+
+    let num: f32 = a2;
+    var den: f32 = (NdotH2 * (a2 - 1.0) + 1.0);
+    den = 3.141592 * den * den;
+
+    // 분모가 0에 가까워지는 것을 방지
+    return num / max(den, 0.000001);
+}
+
+fn GetGeometrySchlickGGX(NdotV: f32, Roughness: f32) -> f32
+{
+    let r: f32 = (Roughness + 1.0);
+    let k: f32 = (r * r) / 8.0;
+    let num: f32 = NdotV;
+    let den: f32 = NdotV * (1.0 - k) + k;
+    return num / den;
+}
+
+fn GetGeometrySmith(N: vec3f, V: vec3f, L: vec3f, Roughness: f32) -> f32
+{
+    let NdotV: f32 = max(dot(N, V), 0.0);
+    let NdotL: f32 = max(dot(N, L), 0.0);
+    let ggx2: f32 = GetGeometrySchlickGGX(NdotV, Roughness);
+    let ggx1: f32 = GetGeometrySchlickGGX(NdotL, Roughness);
+    return ggx1 * ggx2;
+}
+
+fn GetFresnelSchlick(Cosine: f32, F0: vec3f) -> vec3<f32>
+{
+    return F0 + (vec3f(1.0) - F0) * pow(clamp(1.0 - Cosine, 0.0, 1.0), 5.0);
 }
 
 //==========================================================================
@@ -482,45 +562,50 @@ fn TraceRay(InRay: Ray) -> HitResult
     return BestHitResult;
 }
 
+fn ComputeBRDF(HitPointToLight: vec3f, View: vec3f, HitNormal: vec3f, HitMaterial: Material) -> vec3<f32>
+{
+    let L : vec3<f32> = HitPointToLight;
+    let V : vec3<f32> = View;
+    let N : vec3<f32> = HitNormal;
+
+    // 1. 재질 속성 준비
+    let baseColor   : vec3<f32> = vec3f(1.0);
+    let metallic    : f32       = HitMaterial.Metalness;
+    let roughness   : f32       = HitMaterial.Roughness;
+
+    // 2. 핵심 벡터 및 값 계산
+    let H           : vec3<f32> = normalize(V + L);
+    let NdotV       : f32       = max(dot(N, V), 0.0);
+    let NdotL       : f32       = max(dot(N, L), 0.0);
+    let VdotH       : f32       = max(dot(V, H), 0.0);
+    
+    // 3. 반사율(F0) 및 난반사/정반사 색상 결정 (메탈릭 워크플로우)
+    let F0          : vec3<f32> = mix(vec3f(0.04), baseColor, metallic);
+    let diffuse     : vec3<f32> = baseColor * (1.0 - metallic);
+
+    // 4. Cook-Torrance BRDF의 D, G, F 항 계산
+    let D           : f32       = GetGGXDistributionFactor(N, H, roughness);
+    let G           : f32       = GetGeometrySmith(N, V, L, roughness);
+    let F           : vec3<f32> = GetFresnelSchlick(VdotH, F0);
+
+    // 5. 정반사(specular) BRDF 항 조합
+    let numerator: vec3f = D * G * F;
+    let denominator: f32 = 4.0 * NdotV * NdotL + 0.001; // 0으로 나누는 것 방지
+    let specular_brdf: vec3f = numerator / denominator;
+
+    // 6. 에너지 보존을 고려하여 최종 BRDF 계산
+    let kS: vec3f = F; // 프레넬 항이 정반사광의 비율
+    var kD: vec3f = vec3f(1.0) - kS;
+    kD *= (1.0 - metallic); // 금속은 난반사가 없도록 처리
+
+    // 최종 BRDF = (난반사 기여도) + (정반사 기여도)
+    // 난반사 BRDF는 Lambertian 모델(diffuse_color / PI)을 따름
+    return kD * diffuse / 3.141592 + specular_brdf;
+}
+
 //==========================================================================
 // TEST Functions ==========================================================
 //==========================================================================
-
-fn TEST_GET_BARYCENTRIC_COORD(Point: vec3<f32>, InTriangle: Triangle) -> vec3<f32>
-{
-
-    let A = InTriangle.Vertex_0.Position;
-    let B = InTriangle.Vertex_1.Position;
-    let C = InTriangle.Vertex_2.Position;
-
-    // 삼각형의 두 변 벡터를 계산합니다 (A를 원점으로).
-    let v0 = B - A;
-    let v1 = C - A;
-    // 점에서 A를 뺀 벡터를 계산합니다.
-    let v2 = Point - A;
-
-    // u와 v를 구하기 위한 연립방정식을 풀기 위해 dot product를 계산합니다.
-    let d00 = dot(v0, v0);
-    let d01 = dot(v0, v1);
-    let d11 = dot(v1, v1);
-    let d20 = dot(v2, v0);
-    let d21 = dot(v2, v1);
-
-    // Cramer의 법칙을 사용하여 u와 v를 계산합니다.
-    let denom = d00 * d11 - d01 * d01;
-    // 분모가 0에 가까우면 퇴화된(degenerate) 삼각형이므로 계산이 불안정할 수 있습니다.
-    if (abs(denom) < 0.000001) {
-        // 기본값으로 A에 모든 가중치를 할당하여 오류를 방지합니다.
-        return vec3f(1.0, 0.0, 0.0);
-    }
-
-    let invDenom = 1.0 / denom;
-    let u = (d11 * d20 - d01 * d21) * invDenom;
-    let v = (d00 * d21 - d01 * d20) * invDenom;
-    let w = 1.0 - u - v;
-
-    return vec3f(w, u, v);
-}
 
 fn TEST_DistributionGGX(N: vec3f, H: vec3f, roughness: f32)-> f32 
 {
@@ -550,6 +635,7 @@ fn TEST_GeometrySchlickGGX(NdotV: f32, roughness: f32) -> f32
 
 fn TEST_GeometrySmith(N: vec3f, V: vec3f, L: vec3f, roughness: f32) -> f32 
 {
+
     let NdotV: f32 = max(dot(N, V), 0.0);
     let NdotL: f32 = max(dot(N, L), 0.0);
     let ggx2: f32 = TEST_GeometrySchlickGGX(NdotV, roughness);
@@ -567,7 +653,6 @@ fn TEST_FresnelSchlick(cosTheta: f32, F0: vec3f) -> vec3f
 fn TEST_CalculatePBR_BRDF(L: vec3f, V: vec3f, N: vec3f, material: Material) -> vec3f 
 {
     // 1. 재질 속성 준비
-    //let baseColor: vec3f = material.BaseColor.rgb;
     let baseColor: vec3f = vec3f(1.0);
     let metallic: f32 = material.Metalness;
     let roughness: f32 = material.Roughness;
@@ -759,45 +844,46 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         if (!bPixelInBoundary_X || !bPixelInBoundary_Y) { return; }
     }
 
+
+
+
     // --- 1. 셰이더 시작 시 난수 상태 초기화 ---
     // 픽셀 좌표와 프레임 번호를 조합하여 이 스레드만의 고유한 초기 시드를 생성합니다.
     var rand_state: RandState;
     let initial_seed = ThreadID.x * 1973u + ThreadID.y * 9277u + UniformBuffer.FrameIndex * 26699u;
     rand_state.seed = pcg_hash(initial_seed);
 
+
+
+
+
     // 현재 Pixel의 Ray 생성
     var CurrentRay  : Ray       = GenerateRayFromThreadID(ThreadID.xy);
     var ResultColor : vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 
-    let TEST_ENV_COLOR  : vec3<f32> = vec3<f32>(0.2, 0.1, 0.1); // 환경 색(약간 보라색)
-    var TEST_WEIGHT     : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+    let EnvironmentColor    : vec3<f32> = vec3<f32>(0.2, 0.1, 0.1);
+    var Weight              : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
 
-    for (var bounce : u32 = 0u; bounce < 3; bounce++)
+    for (var bounce : u32 = 0u; bounce < UniformBuffer.MAX_BOUNCE; bounce++)
     {
         // Current Ray가 씬에서 처음 만나는 Primitive의 정보 계산
-        let HitPrimitiveData: HitResult = TraceRay(CurrentRay);
+        let HitPrimitiveData : HitResult = TraceRay(CurrentRay);
 
         // 부딪히지 않았다면 환경구에 부딪힌 것으로 간주, 저장된 가중치 정산하고 Bounce Loop 탈출
-        if (!HitPrimitiveData.IsValidHit) { ResultColor = TEST_WEIGHT * TEST_ENV_COLOR; break; }
+        if (!HitPrimitiveData.IsValidHit) { ResultColor = Weight * EnvironmentColor; break; }
 
 
-        
-        let HitInstanceID       : u32               = HitPrimitiveData.InstanceID;
-        let HitPrimitiveID      : u32               = HitPrimitiveData.PrimitiveID;
-        let HitDistance         : f32               = HitPrimitiveData.HitDistance;
-
-        let HitInstance         : Instance          = GetInstance(HitInstanceID);
+        // HitPrimitiveData 를 해석
+        let HitInstance         : Instance          = GetInstance(HitPrimitiveData.InstanceID);
         let HitMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(HitInstance.MeshID);
-        let HitPrimitive        : Triangle          = GetTriangle(HitMeshDescriptor, HitPrimitiveID);
+        let HitPrimitive        : Triangle          = GetTriangle(HitMeshDescriptor, HitPrimitiveData.PrimitiveID);
 
-        let HitPoint            : vec3<f32>         = CurrentRay.Start + (HitDistance * CurrentRay.Direction);
-        let BaryCentricCoord    : vec3<f32>         = TEST_GET_BARYCENTRIC_COORD(HitPoint, HitPrimitive);
-        let HitNormal           : vec3<f32>         = normalize((HitPrimitive.Vertex_0.Normal * BaryCentricCoord.x) + (HitPrimitive.Vertex_1.Normal * BaryCentricCoord.y) + (HitPrimitive.Vertex_2.Normal * BaryCentricCoord.z));
- 
+        let HitPoint            : vec3<f32>         = CurrentRay.Start + (HitPrimitiveData.HitDistance * CurrentRay.Direction);
+        let HitNormal           : vec3<f32>         = GetHitNormal(HitPoint, HitPrimitive);
         let HitMaterial         : Material          = GetMaterial(HitPrimitive.MaterialID);
 
-        // NEE 기법 : Scene의 모든 광원에 직접 쿼리
-        for (var LightID : u32 = 0u; LightID < 1u; LightID++)
+        // Direct Light 계산 : NEE(Next Event Estimation) 기법
+        for (var LightID : u32 = 0u; LightID < UniformBuffer.LightSourceCount; LightID++)
         {
             // (현재는 태양빛 하나만 만들어 사용, 추후 Storage Buffer에 붙여 GPU에 제공)
             let LightIntensity      : f32               = 100.0;
@@ -810,16 +896,18 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
             // Shadow Ray (HitPoint -> Light Source) 가 중간에 막혔으면 필요없음
             if (ShadowRayHitResult.IsValidHit) { continue; }
 
-            let BRDF_Result : vec3<f32> = TEST_CalculatePBR_BRDF(-LightDirection, -CurrentRay.Direction, HitNormal, HitMaterial);
-            let DirectLightContribution : vec3<f32> = BRDF_Result * LightColor * LightIntensity * max(dot(-LightDirection,HitNormal), 0.0);
-            ResultColor += TEST_WEIGHT * DirectLightContribution;
+            let BRDFValue : vec3<f32> = ComputeBRDF(-LightDirection, -CurrentRay.Direction, HitNormal, HitMaterial);
+            let LightWeight : vec3<f32> = Weight * BRDFValue * max(dot(-LightDirection,HitNormal), 0.0);
+
+            ResultColor += LightWeight * LightColor * LightIntensity;
         }
+
+        // Indirect Light 계산
 
         let random_1 : f32 = random(&rand_state);
         let random_2 : f32 = random(&rand_state);
-        // 1. 간접광 경로 샘플링 및 가중치 계산
         let indirectSample = sample_indirect_path(-CurrentRay.Direction, HitNormal, HitMaterial, random_1, random_2);
-        TEST_WEIGHT *= indirectSample.weight;
+        Weight *= indirectSample.weight;
 
         CurrentRay = Ray(HitPoint, indirectSample.direction);
     }
