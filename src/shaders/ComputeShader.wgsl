@@ -388,9 +388,6 @@ fn TraceRay(InRay: Ray) -> HitResult
     var BestHitResult : HitResult = HitResult();
     var RayValidRange : vec2<f32> = vec2<f32>(1e-4, 1e10);
     
-    // BestHitResult.InstanceID = 0u;
-    // BestHitResult.PrimitiveID = 0u;
-    // BestHitResult.HitDistance = 0.0;
     BestHitResult.IsValidHit = false;
 
     for (var InstanceID: u32 = 0u; InstanceID < UniformBuffer.InstanceCount; InstanceID++)
@@ -573,14 +570,14 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 
 
         // Test SunLight (나중에 Storage Buffer에 넣고 관리하기)
-        let LightIntensity  : f32       = 1.0;
-        let LightColor      : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
-        let LightDirection  : vec3<f32> = normalize(vec3<f32>(0.9, 1.0, 0.6));
+        let LightIntensity      : f32               = 1.0;
+        let LightColor          : vec3<f32>         = vec3<f32>(1.0, 1.0, 1.0);
+        let LightDirection      : vec3<f32>         = normalize(vec3<f32>(0.9, 1.0, 0.6));
 
-        let ShadowRay           : Ray = Ray(HitPoint + 1e-6 * HitNormal, -LightDirection);
-        let ShadowRayHitResult  : HitResult = TraceRay(ShadowRay);
+        let ShadowRay           : Ray               = Ray(HitPoint + 1e-6 * HitNormal, -LightDirection);
+        let ShadowRayHitResult  : HitResult         = TraceRay(ShadowRay);
 
-        let Albedo : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+        let Albedo              : vec3<f32>         = vec3<f32>(1.0, 1.0, 1.0);
 
         // Did Not Hit Any Instances -> Light Hit
         if (ShadowRayHitResult.IsValidHit)

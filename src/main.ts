@@ -22,6 +22,7 @@ async function main()
   // Load
   await TestWorld.Load();
 
+  
 
   // Initialize
   TestWorld.Initialize();

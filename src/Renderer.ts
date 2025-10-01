@@ -358,20 +358,6 @@ export class Renderer
             Uint32View.set(MergedMeshRawData.PrimitiveToMaterialArray, this.Offset_PrimitiveToMaterialBuffer);
         }
 
-        // const Float32View: Float32Array = new Float32Array(GeometryBufferData);
-        // const Uint32View: Uint32Array = new Uint32Array(GeometryBufferData);
-        // const vertexID_0 = MergedMeshRawData.IndexArray[0]; // 모델의 0번째 삼각형의 0번째 인덱스의 버텍스ID
-        // console.log(vertexID_0);
-        // console.log(MergedMeshRawData.VertexArray[12 * vertexID_0]);
-        // console.log(Float32View[12 * vertexID_0]);
-        //console.log(Float32View[MergedMeshRawData.IndexArray[0]]);
-        // console.log(MergedMeshRawData.IndexArray[0]);
-        // console.log(GeometryBufferData[3341]);
-        // -0.0476427786052227 0.0012953999685123563 -0.040594279766082764
-        // -0.03974591940641403 0.002207260113209486 -0.048099979758262634
-        // -0.0399719774723053 0.0012953999685123563 -0.04837175831198692
-
-
         // AccelBuffer에 쓸 데이터 준비하기 (Tlas, Blas)
         this.Offset_BlasBuffer = TlasArray.length;
 

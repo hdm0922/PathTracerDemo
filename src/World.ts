@@ -38,8 +38,11 @@ export class World
         // Loading Models ...
         const LampMesh = await this.LoadModel("../assets/Lamp.glb");
         
+        //const SofaMesh = await this.LoadModel("../assets/Sofa.glb");
+
         // Registering Models ...
         this.MeshesPool.set("Lamp", LampMesh);
+        //this.MeshesPool.set("Sofa", SofaMesh);
 
         return;
     }
@@ -49,15 +52,34 @@ export class World
         const ModelLoader   = new GLTFLoader();
         const Model         = await ModelLoader.loadAsync(Path);
 
+
+        //console.log(Model);
+        
+
+        const Meshes        : THREE.Mesh[]              = [];
         const Geometries    : THREE.BufferGeometry[]    = [];
         const Materials     : THREE.Material[]          = [];
 
-        // For Each Model Found : Gather Information To Geometries, Materials
-        for (const MeshIdx in Model.scene.children)
+        function traverseGLTF(object : THREE.Object3D) : void
         {
-            const Mesh = Model.scene.children[MeshIdx] as THREE.Mesh;
-            if (!Mesh.isMesh) continue;
-            
+            if ((object as THREE.Mesh).isMesh) Meshes.push(object as THREE.Mesh);
+
+            if (!object.children || !(object.children.length > 0)) return;
+                
+            for (const child of object.children) traverseGLTF(child);
+
+            return;
+        }
+
+        traverseGLTF(Model.scene);
+
+        //console.log(Meshes);
+
+        //console.log(Geometries);
+
+        // For Each Model Found : Gather Information To Geometries, Materials
+        for (const Mesh of Meshes)
+        {            
             Mesh.geometry.applyMatrix4(Mesh.matrixWorld);
             Geometries.push(Mesh.geometry);
 
