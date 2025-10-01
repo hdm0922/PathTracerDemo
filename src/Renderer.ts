@@ -65,6 +65,7 @@ function makeViewProjection(
   return viewProj;
 }
 
+
 export class Renderer
 {
 
@@ -768,9 +769,11 @@ export class Renderer
 
     Update(): void
     {
+        this.FrameCount++;
+
 
         // Camera Property
-        const camPos = vec3.fromValues(0,0,1);
+        const camPos = vec3.fromValues(0,0,0);
         const VP = makeViewProjection(camPos, this.Canvas.width / this.Canvas.height);
         const VPINV = mat4.invert(mat4.create(), VP);
         //console.log(VPINV);

@@ -118,6 +118,15 @@ struct Triangle
     MaterialID  : u32,
 };
 
+
+
+struct HitResult
+{
+    InstanceID  : u32,
+    PrimitiveID : u32,
+    HitDistance : f32,
+    IsValidHit  : bool,
+};
 //==========================================================================
 //GPU Bindings =============================================================
 //==========================================================================
@@ -373,12 +382,16 @@ fn GenerateRayFromThreadID(ThreadID: vec2<u32>) -> Ray
     return TransformRayWithMat4x4(Ray_Clip, UniformBuffer.ViewProjectionMatrix_Inverse, true);
 }
 
-fn TraceRay(InRay: Ray) -> vec3<u32>
+fn TraceRay(InRay: Ray) -> HitResult
 {
 
-    var BestHit_InstanceID  : u32       = 0u;
-    var BestHit_PrimitiveID : u32       = 0u;
-    var RayValidRange       : vec2<f32> = vec2<f32>(1e-4, 1e10);
+    var BestHitResult : HitResult = HitResult();
+    var RayValidRange : vec2<f32> = vec2<f32>(1e-4, 1e10);
+    
+    // BestHitResult.InstanceID = 0u;
+    // BestHitResult.PrimitiveID = 0u;
+    // BestHitResult.HitDistance = 0.0;
+    BestHitResult.IsValidHit = false;
 
     for (var InstanceID: u32 = 0u; InstanceID < UniformBuffer.InstanceCount; InstanceID++)
     {
@@ -458,14 +471,18 @@ fn TraceRay(InRay: Ray) -> vec3<u32>
                 // if (bAlphaTestResult_IgnorePrimitive) { continue; }
                 
                 // 최종 살아남은 Primitive를 선택
-                RayValidRange.y         = PrimitiveHitDistance;
-                BestHit_InstanceID      = InstanceID;
-                BestHit_PrimitiveID     = PrimitiveID;
+                RayValidRange.y = PrimitiveHitDistance;
+
+                BestHitResult.IsValidHit    = true;
+                BestHitResult.InstanceID    = InstanceID;
+                BestHitResult.PrimitiveID   = PrimitiveID;
             }
         }
     }
 
-    return vec3<u32>(BestHit_InstanceID, BestHit_PrimitiveID, bitcast<u32>(RayValidRange.y));
+    BestHitResult.HitDistance = RayValidRange.y;
+
+    return BestHitResult;
 }
 
 //==========================================================================
@@ -528,7 +545,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     let CurrentRay: Ray = GenerateRayFromThreadID(ThreadID.xy);
 
     // Current Ray가 씬에서 처음 만나는 Primitive의 정보 계산
-    let HitPrimitiveData: vec3<u32> = TraceRay(CurrentRay);
+    let HitPrimitiveData: HitResult = TraceRay(CurrentRay);
 
 
 
@@ -537,12 +554,12 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 
 
     // WORKING : Lighting
-    var ResultColor = vec3<f32>(0,0,0);
-    if (bitcast<f32>(HitPrimitiveData.z) < 1e10)
+    var ResultColor = vec3<f32>(0.1,0,0.4);
+    if (HitPrimitiveData.IsValidHit)
     {
-        let HitInstanceID       : u32               = HitPrimitiveData.x;
-        let HitPrimitiveID      : u32               = HitPrimitiveData.y;
-        let HitDistance         : f32               = bitcast<f32>(HitPrimitiveData.z);
+        let HitInstanceID       : u32               = HitPrimitiveData.InstanceID;
+        let HitPrimitiveID      : u32               = HitPrimitiveData.PrimitiveID;
+        let HitDistance         : f32               = HitPrimitiveData.HitDistance;
 
         let HitInstance         : Instance          = GetInstance(HitInstanceID);
         let HitMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(HitInstance.MeshID);
@@ -554,9 +571,26 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
  
         let PrimitiveMaterial   : Material          = GetMaterial(HitPrimitive.MaterialID);
 
-        
 
-        ResultColor.r = 0.7;
+        // Test SunLight (나중에 Storage Buffer에 넣고 관리하기)
+        let LightIntensity  : f32       = 1.0;
+        let LightColor      : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+        let LightDirection  : vec3<f32> = normalize(vec3<f32>(0.9, 1.0, 0.6));
+
+        let ShadowRay           : Ray = Ray(HitPoint + 1e-6 * HitNormal, -LightDirection);
+        let ShadowRayHitResult  : HitResult = TraceRay(ShadowRay);
+
+        let Albedo : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+
+        // Did Not Hit Any Instances -> Light Hit
+        if (ShadowRayHitResult.IsValidHit)
+        {
+            ResultColor = Albedo * LightColor * LightIntensity * dot(LightDirection,HitNormal);
+        }
+        else
+        {
+            ResultColor = vec3<f32>(0,0,0);
+        }
     }
 
 
@@ -568,11 +602,14 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         let x1 = SceneBuffer[0];
         let x2 = GeometryBuffer[0];
         let x3 = AccelBuffer[0];
-        let x4 = textureLoad(SceneTexture, vec2<u32>(0u,0u), 0);
-
-        //ResultColor = vec3<f32>(f32(ThreadID.x) / f32(UniformBuffer.Resolution.x), f32(ThreadID.y) / f32(UniformBuffer.Resolution.y), 0.0);
-        textureStore(AccumTexture, vec2<i32>(i32(ThreadID.x), i32(ThreadID.y)), vec4<f32>(ResultColor, 1.0));
+        let x4 = textureLoad(SceneTexture, vec2<i32>(i32(ThreadID.x), i32(ThreadID.y)), 0);
     }
+
+
+    // Write Pixel Color To AccumTexture
+    let ColorUsed = textureLoad(SceneTexture, ThreadID.xy, 0);
+    ResultColor = (ColorUsed.rgb * f32(UniformBuffer.FrameIndex) + ResultColor)/f32(UniformBuffer.FrameIndex+1);
+    textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ResultColor, 1.0));
 
     return;
 }
