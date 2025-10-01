@@ -588,6 +588,9 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         {
             ResultColor = vec3<f32>(0,0,0);
         }
+
+
+        let SpecularColor : vec3<f32> = vec3<f32>(0.04, 0.04, 0.04);
     }
 
 
