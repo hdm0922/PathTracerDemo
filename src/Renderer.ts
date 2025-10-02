@@ -582,7 +582,6 @@ export class Renderer
             Uint32View[31] = this.World.Lights.length;
         }
 
-
         this.Device.queue.writeBuffer(this.UniformBuffer, 0, UniformData);
 
         return;
