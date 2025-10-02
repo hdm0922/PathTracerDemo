@@ -3,6 +3,30 @@ import { vec2, vec3, vec4, mat4 } from "gl-matrix";
 
 
 
+// export interface Uniform
+// {
+//     Resolution                          : vec2,
+//     MAX_BOUNCE                          : number,
+//     SAMPLE_PER_PIXEL                    : number,
+
+//     ViewProjectionMatrix_Inverse        : mat4,
+
+//     CameraWorldPosition                 : vec3,
+//     FrameIndex                          : number,
+
+//     Offset_MeshDescriptorBuffer         : number,
+//     Offset_MaterialBuffer               : number,
+//     Offset_LightBuffer                  : number,
+//     Offset_IndexBuffer                  : number,
+
+//     Offset_PrimitiveToMaterialBuffer    : number,
+//     Offset_BlasBuffer                   : number,
+//     InstanceCount                       : number,
+//     LightSourceCount                    : number,
+// }
+
+
+
 export interface Instance
 {
     MeshID      : string;

@@ -102,6 +102,7 @@ export class Renderer
     // Data Offsets
     public Offset_MeshDescriptorBuffer      : number;
     public Offset_MaterialBuffer            : number;
+    public Offset_LightBuffer               : number;
     public Offset_IndexBuffer               : number;
     public Offset_PrimitiveToMaterialBuffer : number;
     public Offset_BlasBuffer                : number;
@@ -164,6 +165,7 @@ export class Renderer
 
         this.Offset_BlasBuffer = 0;
         this.Offset_MaterialBuffer = 0;
+        this.Offset_LightBuffer = 0;
         this.Offset_MeshDescriptorBuffer = 0;
         this.Offset_IndexBuffer = 0;
         this.Offset_PrimitiveToMaterialBuffer = 0;
@@ -208,7 +210,7 @@ export class Renderer
 
 
 
-        // World로부터 Instance, Mesh 정보들 모두 가져오기
+        // World로부터 모든 정보 가져오기
         let InstanceArray           : Instance[];
         let MeshArray               : Mesh[];
         let MeshIDToIndexMap        : Map<string, number>;
@@ -311,6 +313,7 @@ export class Renderer
 
         // Instance 정보들과 MeshDescriptor정보들을 RawData로 변환
         const InstanceRawData: Float32Array = Wrapper.WrapInstances(InstanceArray, MeshIDToIndexMap);
+        const LightRawData : Float32Array = Wrapper.WrapLights(this.World.Lights);
         const MeshDescriptorRawData: Float32Array = new Float32Array(8 * MeshDescriptorArray.length);
         for (let iter=0; iter<MeshDescriptorArray.length; iter++)
         {
@@ -330,8 +333,9 @@ export class Renderer
         // SceneBuffer에 쓸 데이터 준비하기 (Instance, MeshDescriptor, Material)
         this.Offset_MeshDescriptorBuffer = InstanceRawData.length;
         this.Offset_MaterialBuffer = this.Offset_MeshDescriptorBuffer + MeshDescriptorRawData.length;
+        this.Offset_LightBuffer = this.Offset_MaterialBuffer + MergedMeshRawData.MaterialArray.length;
         
-        const SceneBufferLength = this.Offset_MaterialBuffer + MergedMeshRawData.MaterialArray.length;
+        const SceneBufferLength = this.Offset_LightBuffer + LightRawData.length;
         const SceneBufferData: ArrayBuffer = new ArrayBuffer(SceneBufferLength * 4);
         {
             const Float32View: Float32Array = new Float32Array(SceneBufferData);
@@ -339,6 +343,7 @@ export class Renderer
             Float32View.set(InstanceRawData, 0);
             Float32View.set(MeshDescriptorRawData, this.Offset_MeshDescriptorBuffer);
             Float32View.set(MergedMeshRawData.MaterialArray, this.Offset_MaterialBuffer);
+            Float32View.set(LightRawData, this.Offset_LightBuffer);
         }
 
         // GeometryBuffer에 쓸 데이터 준비하기 (Vertex, Primitive)
@@ -564,18 +569,17 @@ export class Renderer
             Float32View[20] = camPos[0];
             Float32View[21] = camPos[1];
             Float32View[22] = camPos[2];
-
-            Uint32View[23] = this.FrameCount;
+            Uint32View [23] = this.FrameCount;
 
             Uint32View[24] = this.Offset_MeshDescriptorBuffer;
             Uint32View[25] = this.Offset_MaterialBuffer;
-            Uint32View[26] = this.Offset_IndexBuffer;
-            Uint32View[27] = this.Offset_PrimitiveToMaterialBuffer;
-            Uint32View[28] = this.Offset_BlasBuffer;
+            Uint32View[26] = this.Offset_LightBuffer;
+            Uint32View[27] = this.Offset_IndexBuffer;
 
-            Uint32View[29] = this.World.InstancesPool.size; // Instance Count : TEMP
-            Uint32View[30] = 1; // LightSource Count : TEMP
-            Uint32View[31] = 3; // Material Count : TEMP
+            Uint32View[28] = this.Offset_PrimitiveToMaterialBuffer;
+            Uint32View[29] = this.Offset_BlasBuffer;
+            Uint32View[30] = this.World.InstancesPool.size;
+            Uint32View[31] = this.World.Lights.length;
         }
 
 

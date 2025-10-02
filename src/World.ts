@@ -14,14 +14,14 @@ export class World
     // Resource Pools
     public InstancesPool    : Map<string, Instance>;
     public MeshesPool       : Map<string, Mesh>;
-    public LightsPool       : Map<string, Light>;
+    public Lights           : Array<Light>;
 
     
     constructor()
     {
         this.InstancesPool  = new Map();
         this.MeshesPool     = new Map();
-        this.LightsPool     = new Map();
+        this.Lights         = [];
     }
 
 
@@ -102,8 +102,42 @@ export class World
         };
        
 
+        const DirectionalLight_0 : Light =
+        {
+            Position    : vec3.create(),
+            LightType   : 0,
+
+            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(4, -10, 0)),
+            Intensity   : 20,
+
+            Color       : vec3.fromValues(1,1,1),
+            Area        : 0,
+
+            U           : vec3.create(),
+            V           : vec3.create(),
+        }
+
+        const DirectionalLight_1 : Light =
+        {
+            Position    : vec3.create(),
+            LightType   : 0,
+
+            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, -4, 5)),
+            Intensity   : 10,
+
+            Color       : vec3.fromValues(1,1,1),
+            Area        : 0,
+
+            U           : vec3.create(),
+            V           : vec3.create(),
+        }
+
         this.InstancesPool.set("Lamp_0", Instance_0);
         this.InstancesPool.set("Lamp_1", Instance_1);
+
+        this.Lights.push(DirectionalLight_0);
+        this.Lights.push(DirectionalLight_1);
+
 
         return;
     }

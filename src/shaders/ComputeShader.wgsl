@@ -15,13 +15,13 @@ struct Uniform
 
     Offset_MeshDescriptorBuffer         : u32,
     Offset_MaterialBuffer               : u32,
+    Offset_LightBuffer                  : u32,
     Offset_IndexBuffer                  : u32,
-    Offset_PrimitiveToMaterialBuffer    : u32,
 
+    Offset_PrimitiveToMaterialBuffer    : u32,
     Offset_BlasBuffer                   : u32,
     InstanceCount                       : u32,
     LightSourceCount                    : u32,
-    MaterialCount                       : u32,
 };
 
 
@@ -71,6 +71,26 @@ struct Material
     EmissiveTextureID       : u32,
     NormalTextureID         : u32,
 };
+
+
+
+struct Light
+{
+    Position    : vec3<f32>,
+    LightType   : u32,
+
+    Direction   : vec3<f32>,
+    Intensity   : f32,
+
+    Color       : vec3<f32>,
+    Area        : f32,
+
+    U           : vec3<f32>,
+    Padding_0   : u32,
+
+    V           : vec3<f32>,
+    Padding_1   : u32,
+}
 
 
 
@@ -234,6 +254,27 @@ fn GetMaterial(MaterialID : u32) -> Material
     OutMaterial.NormalTextureID     = SceneBuffer[Offset + 19u];
 
     return OutMaterial;
+}
+
+fn GetLight(LightID : u32) -> Light
+{
+    let Offset : u32 = UniformBuffer.Offset_LightBuffer + (20u * LightID);
+
+    var OutLight : Light = Light();
+
+    OutLight.Position = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 0u], SceneBuffer[Offset + 1u], SceneBuffer[Offset + 2u]));
+    OutLight.LightType = SceneBuffer[Offset + 3u];
+
+    OutLight.Direction = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 4u], SceneBuffer[Offset + 5u], SceneBuffer[Offset + 6u]));
+    OutLight.Intensity = bitcast<f32>(SceneBuffer[Offset + 7u]);
+
+    OutLight.Color = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 8u], SceneBuffer[Offset + 9u], SceneBuffer[Offset + 10u]));
+    OutLight.Area = bitcast<f32>(SceneBuffer[Offset + 11u]);
+
+    OutLight.U = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 12u], SceneBuffer[Offset + 13u], SceneBuffer[Offset + 14u]));
+    OutLight.V = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 16u], SceneBuffer[Offset + 17u], SceneBuffer[Offset + 18u]));
+
+    return OutLight;
 }
 
 fn GetBVHNode(InMeshDescriptor : MeshDescriptor, BlasID : u32) -> BVHNode
@@ -783,21 +824,18 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         // Direct Light 계산 : NEE(Next Event Estimation) 기법
         for (var LightID : u32 = 0u; LightID < UniformBuffer.LightSourceCount; LightID++)
         {
-            // (현재는 태양빛 하나만 만들어 사용, 추후 Storage Buffer에 붙여 GPU에 제공)
-            let LightIntensity      : f32       = 100.0;
-            let LightColor          : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
-            let LightDirection      : vec3<f32> = normalize(vec3<f32>(4, -10.0, 0.0));
 
-            let ShadowRay           : Ray       = Ray(HitPoint + 1e-6 * HitNormal, -LightDirection);
+            let Light               : Light     = GetLight(LightID);
+            let ShadowRay           : Ray       = Ray(HitPoint + 1e-6 * HitNormal, -Light.Direction);
             let ShadowRayHitResult  : HitResult = TraceRay(ShadowRay);
 
             // Shadow Ray (HitPoint -> Light Source) 가 중간에 막혔으면 필요없음
             if (ShadowRayHitResult.IsValidHit) { continue; }
 
-            let BRDFValue           : vec3<f32> = ComputeBRDF(-LightDirection, -CurrentRay.Direction, HitNormal, HitMaterial);
-            let LightWeight         : vec3<f32> = Weight * BRDFValue * max(dot(-LightDirection,HitNormal), 0.0);
+            let BRDFValue           : vec3<f32> = ComputeBRDF(-Light.Direction, -CurrentRay.Direction, HitNormal, HitMaterial);
+            let LightWeight         : vec3<f32> = Weight * BRDFValue * max(dot(-Light.Direction,HitNormal), 0.0);
 
-            ResultColor += LightWeight * LightColor * LightIntensity;
+            ResultColor += LightWeight * Light.Color * Light.Intensity;
         }
 
         // Indirect Light 계산

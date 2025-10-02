@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 
-import type { Instance, Mesh, Material } from './Structs.ts';
+import type { Instance, Mesh, Material, Light } from './Structs.ts';
 
 
 
@@ -28,6 +28,31 @@ export class Wrapper
         }
 
         return InstanceRawData;
+    }
+
+    static WrapLights(LightsArray: Light[]) : Float32Array
+    {
+        const ELEMENT_PER_LIGHT = 20;
+        const LightRawData : Float32Array = new Float32Array(ELEMENT_PER_LIGHT * LightsArray.length);
+
+        for (let iter=0; iter<LightsArray.length; iter++)
+        {
+            const LightOffset = ELEMENT_PER_LIGHT * iter;
+
+            LightRawData.set(LightsArray[iter].Position, LightOffset +  0);
+            LightRawData[LightOffset +  3] = LightsArray[iter].LightType;
+
+            LightRawData.set(LightsArray[iter].Direction, LightOffset +  4);
+            LightRawData[LightOffset +  7] = LightsArray[iter].Intensity;
+
+            LightRawData.set(LightsArray[iter].Color, LightOffset +  8);
+            LightRawData[LightOffset +  11] = LightsArray[iter].Area;
+
+            LightRawData.set(LightsArray[iter].U, LightOffset + 12);
+            LightRawData.set(LightsArray[iter].V, LightOffset + 16);
+        }
+
+        return LightRawData;
     }
 
     static WrapBlasArray(InMesh: Mesh): Float32Array
