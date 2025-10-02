@@ -127,6 +127,15 @@ struct HitResult
     HitDistance : f32,
     IsValidHit  : bool,
 };
+
+
+
+struct PathSample
+{
+    Weight      : vec3<f32>,
+    Direction   : vec3<f32>,
+}
+
 //==========================================================================
 //GPU Bindings =============================================================
 //==========================================================================
@@ -274,6 +283,19 @@ fn GetTriangle(InMeshDescriptor : MeshDescriptor, PrimitiveID : u32) -> Triangle
     OutTriangle.MaterialID = GeometryBuffer[PrimitiveToMaterialIndex];
 
     return OutTriangle;
+}
+
+fn GetHashValue(Seed : u32) -> u32
+{
+    let state = Seed * 747796405u + 2891336453u;
+    let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+fn Random(pSeed : ptr<function, u32>) -> f32
+{
+    let Hash = GetHashValue(*pSeed); *pSeed++;
+    return f32(Hash) / 4294967295.0;
 }
 
 //==========================================================================
@@ -431,7 +453,7 @@ fn GetGeometrySchlickGGX(NdotV: f32, Roughness: f32) -> f32
     return num / den;
 }
 
-fn GetGeometrySmith(N: vec3f, V: vec3f, L: vec3f, Roughness: f32) -> f32
+fn GetGeometrySmith(N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, Roughness: f32) -> f32
 {
     let NdotV: f32 = max(dot(N, V), 0.0);
     let NdotL: f32 = max(dot(N, L), 0.0);
@@ -440,9 +462,50 @@ fn GetGeometrySmith(N: vec3f, V: vec3f, L: vec3f, Roughness: f32) -> f32
     return ggx1 * ggx2;
 }
 
-fn GetFresnelSchlick(Cosine: f32, F0: vec3f) -> vec3<f32>
+fn GetFresnelSchlick(Cosine: f32, F0: vec3<f32>) -> vec3<f32>
 {
     return F0 + (vec3f(1.0) - F0) * pow(clamp(1.0 - Cosine, 0.0, 1.0), 5.0);
+}
+
+
+fn CreateONB(N : vec3<f32>) -> mat3x3<f32>
+{
+    let sign_val = select(-1.0, 1.0, N.z >= 0.0);
+    let a = -1.0 / (sign_val + N.z);
+    let b = N.x * N.y * a;
+    let tangent = vec3f(1.0 + sign_val * N.x * N.x * a, sign_val * b, -sign_val * N.x);
+    let bitangent = vec3f(b, sign_val + N.y * N.y * a, -N.y);
+    return mat3x3f(tangent, bitangent, N);
+}
+
+fn SampleGGX(pRandomSeed : ptr<function, u32>, Roughness: f32) -> vec3<f32>
+{
+    let Random_1 : f32 = Random(pRandomSeed);
+    let Random_2 : f32 = Random(pRandomSeed);
+
+    let a = Roughness * Roughness;
+    let phi = 2.0 * 3.141592 * Random_1;
+    let cos_theta = sqrt((1.0 - Random_2) / (1.0 + (a * a - 1.0) * Random_2));
+    let sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+
+    let h_x = sin_theta * cos(phi);
+    let h_y = sin_theta * sin(phi);
+    let h_z = cos_theta;
+
+    return normalize(vec3f(h_x, h_y, h_z));
+}
+
+fn SampleCosineHemisphere(pRandomSeed : ptr<function, u32>) -> vec3<f32>
+{
+    let Random_1 : f32 = Random(pRandomSeed);
+    let Random_2 : f32 = Random(pRandomSeed);
+
+    let r = sqrt(Random_1);
+    let phi = 2.0 * 3.141592 * Random_2;
+    let x = r * cos(phi);
+    let y = r * sin(phi);
+    let z = sqrt(max(0.0, 1.0 - Random_1));
+    return vec3f(x, y, z);
 }
 
 //==========================================================================
@@ -562,10 +625,10 @@ fn TraceRay(InRay: Ray) -> HitResult
     return BestHitResult;
 }
 
-fn ComputeBRDF(HitPointToLight: vec3f, View: vec3f, HitNormal: vec3f, HitMaterial: Material) -> vec3<f32>
+fn ComputeBRDF(HitPointToLight: vec3<f32>, HitPointToRayStart: vec3<f32>, HitNormal: vec3<f32>, HitMaterial: Material) -> vec3<f32>
 {
     let L : vec3<f32> = HitPointToLight;
-    let V : vec3<f32> = View;
+    let V : vec3<f32> = HitPointToRayStart;
     let N : vec3<f32> = HitNormal;
 
     // 1. 재질 속성 준비
@@ -603,231 +666,66 @@ fn ComputeBRDF(HitPointToLight: vec3f, View: vec3f, HitNormal: vec3f, HitMateria
     return kD * diffuse / 3.141592 + specular_brdf;
 }
 
+fn SampleNextPath(HitPointToRayStart: vec3<f32>, HitNormal: vec3<f32>, HitMaterial: Material, pRandomSeed : ptr<function, u32>) -> PathSample
+{
+
+    let V               : vec3<f32>     = HitPointToRayStart;
+    let N               : vec3<f32>     = HitNormal;
+
+    var OutPathSample   : PathSample    = PathSample();
+    var PDF             : f32           = 0.0;
+
+
+    let baseColor           = HitMaterial.BaseColor.rgb;
+    let metallic            = HitMaterial.Metalness;
+    let F0                  = mix(vec3f(0.04), baseColor, metallic);
+
+    let specularColor       = mix(F0, baseColor, metallic);
+    let diffuseColor        = baseColor * (1.0 - metallic);
+
+    let specularWeight      = max(specularColor.r, max(specularColor.g, specularColor.b));
+    let diffuseWeight       = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
+    let specularProbability = specularWeight / max(specularWeight + diffuseWeight, 0.0001);
+
+
+    // 2. 경로에 따라 방향 샘플링
+    let onb = CreateONB(N);
+
+    if (Random(pRandomSeed) < specularProbability) // 정반사
+    {
+        let H_tangent = SampleGGX(pRandomSeed, HitMaterial.Roughness);
+        let H = onb * H_tangent;
+
+        OutPathSample.Direction = reflect(-V, H);
+        
+        let D = GetGGXDistributionFactor(N, H, HitMaterial.Roughness);
+        PDF = (D * max(0.0, dot(N, H))) / max(4.0 * dot(V, H), 0.0001);
+    } else // 난반사
+    {
+        let dir_tangent = SampleCosineHemisphere(pRandomSeed);
+
+        OutPathSample.Direction = onb * dir_tangent;
+        
+        PDF = max(0.0, dot(N, OutPathSample.Direction)) / 3.141592;
+    }
+
+    // 3. 최종 가중치 계산 및 반환
+    let Cosine = max(0.0, dot(N, OutPathSample.Direction));
+    
+    // 샘플링이 유효하지 않은 경우 (예: 방향이 표면 아래로 향함) 가중치를 0으로 처리
+    if (PDF <= 0.0 || Cosine <= 0.0) { return PathSample(vec3f(0.0), vec3f(0.0)); }
+
+    OutPathSample.Weight = ComputeBRDF(OutPathSample.Direction, V, N, HitMaterial) * Cosine / PDF;
+
+    return OutPathSample;
+}
+
 //==========================================================================
 // TEST Functions ==========================================================
 //==========================================================================
 
-fn TEST_DistributionGGX(N: vec3f, H: vec3f, roughness: f32)-> f32 
-{
-    let a: f32 = roughness * roughness;
-    let a2: f32 = a * a;
-    let NdotH: f32 = max(dot(N, H), 0.0);
-    let NdotH2: f32 = NdotH * NdotH;
-
-    let num: f32 = a2;
-    var den: f32 = (NdotH2 * (a2 - 1.0) + 1.0);
-    den = 3.141592 * den * den;
-
-    // 분모가 0에 가까워지는 것을 방지
-    return num / max(den, 0.000001);
-}
-
-// G: 기하학 함수 (Smith's method with Schlick-GGX)
-// 미세면의 자체 그림자 및 가려짐을 시뮬레이션합니다.
-fn TEST_GeometrySchlickGGX(NdotV: f32, roughness: f32) -> f32 
-{
-    let r: f32 = (roughness + 1.0);
-    let k: f32 = (r * r) / 8.0;
-    let num: f32 = NdotV;
-    let den: f32 = NdotV * (1.0 - k) + k;
-    return num / den;
-}
-
-fn TEST_GeometrySmith(N: vec3f, V: vec3f, L: vec3f, roughness: f32) -> f32 
-{
-
-    let NdotV: f32 = max(dot(N, V), 0.0);
-    let NdotL: f32 = max(dot(N, L), 0.0);
-    let ggx2: f32 = TEST_GeometrySchlickGGX(NdotV, roughness);
-    let ggx1: f32 = TEST_GeometrySchlickGGX(NdotL, roughness);
-    return ggx1 * ggx2;
-}
-
-// F: 프레넬 함수 (Schlick's approximation)
-// 시야각에 따른 반사율을 계산합니다.
-fn TEST_FresnelSchlick(cosTheta: f32, F0: vec3f) -> vec3f 
-{
-    return F0 + (vec3f(1.0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}
-
-fn TEST_CalculatePBR_BRDF(L: vec3f, V: vec3f, N: vec3f, material: Material) -> vec3f 
-{
-    // 1. 재질 속성 준비
-    let baseColor: vec3f = vec3f(1.0);
-    let metallic: f32 = material.Metalness;
-    let roughness: f32 = material.Roughness;
-
-    // 2. 핵심 벡터 및 값 계산
-    let H: vec3f = normalize(V + L);
-    let NdotV: f32 = max(dot(N, V), 0.0);
-    let NdotL: f32 = max(dot(N, L), 0.0);
-    let VdotH: f32 = max(dot(V, H), 0.0);
-    
-    // 3. 반사율(F0) 및 난반사/정반사 색상 결정 (메탈릭 워크플로우)
-    let F0: vec3f = mix(vec3f(0.04), baseColor, metallic);
-    let diffuse_color: vec3f = baseColor * (1.0 - metallic);
-
-    // 4. Cook-Torrance BRDF의 D, G, F 항 계산
-    let D: f32 = TEST_DistributionGGX(N, H, roughness);
-    let G: f32 = TEST_GeometrySmith(N, V, L, roughness);
-    let F: vec3f = TEST_FresnelSchlick(VdotH, F0);
-
-    // 5. 정반사(specular) BRDF 항 조합
-    let numerator: vec3f = D * G * F;
-    let denominator: f32 = 4.0 * NdotV * NdotL + 0.001; // 0으로 나누는 것 방지
-    let specular_brdf: vec3f = numerator / denominator;
-
-    // 6. 에너지 보존을 고려하여 최종 BRDF 계산
-    let kS: vec3f = F; // 프레넬 항이 정반사광의 비율
-    var kD: vec3f = vec3f(1.0) - kS;
-    kD *= (1.0 - metallic); // 금속은 난반사가 없도록 처리
-
-    // 최종 BRDF = (난반사 기여도) + (정반사 기여도)
-    // 난반사 BRDF는 Lambertian 모델(diffuse_color / PI)을 따름
-    return kD * diffuse_color / 3.141592 + specular_brdf;
-}
 
 
-
-
-// 주어진 법선을 기반으로 월드 공간 기준 좌표계(tangent, bitangent, normal)를 생성
-fn create_onb(normal: vec3f) -> mat3x3f 
-{
-    let sign_val = select(-1.0, 1.0, normal.z >= 0.0);
-    let a = -1.0 / (sign_val + normal.z);
-    let b = normal.x * normal.y * a;
-    let tangent = vec3f(1.0 + sign_val * normal.x * normal.x * a, sign_val * b, -sign_val * normal.x);
-    let bitangent = vec3f(b, sign_val + normal.y * normal.y * a, -normal.y);
-    return mat3x3f(tangent, bitangent, normal);
-}
-
-// 로컬 탄젠트 공간의 방향을 월드 공간으로 변환
-fn tangent_to_world(dir: vec3f, onb: mat3x3f) -> vec3f 
-{
-    return onb * dir;
-}
-
-// 코사인 가중 반구 샘플링 (난반사 경로용)
-fn sample_cosine_hemisphere(rand1: f32, rand2: f32) -> vec3f 
-{
-    let r = sqrt(rand1);
-    let phi = 2.0 * 3.141592 * rand2;
-    let x = r * cos(phi);
-    let y = r * sin(phi);
-    let z = sqrt(max(0.0, 1.0 - rand1));
-    return vec3f(x, y, z);
-}
-
-// GGX 중요도 샘플링 (정반사 경로용 - 미세면 법선 H를 샘플링)
-fn sample_ggx(rand1: f32, rand2: f32, roughness: f32) -> vec3f 
-{
-    let a = roughness * roughness;
-    let phi = 2.0 * 3.141592 * rand1;
-    let cos_theta = sqrt((1.0 - rand2) / (1.0 + (a * a - 1.0) * rand2));
-    let sin_theta = sqrt(1.0 - cos_theta * cos_theta);
-
-    let h_x = sin_theta * cos(phi);
-    let h_y = sin_theta * sin(phi);
-    let h_z = cos_theta;
-
-
-    return normalize(vec3f(h_x, h_y, h_z));
-}
-
-struct IndirectPathSample {
-    weight: vec3f, // brdf_color * cos_theta / pdf
-    direction: vec3f,
-};
-
-/**
- * NEE 이후, 간접광 경로를 샘플링하고 경로 처리량(pathThroughput)을 갱신하는데
- * 필요한 가중치와 새로운 방향을 계산합니다.
- * @param V - 표면에서 시점(이전 충돌 지점)으로 향하는 벡터
- * @param N - 표면의 법선 벡터
- * @param material - 표면의 재질 정보
- * @param rand1 - 0.0과 1.0 사이의 난수
- * @param rand2 - 0.0과 1.0 사이의 난수
- * @returns IndirectPathSample 구조체 (가중치와 새로운 방향 포함)
- */
-fn sample_indirect_path(V: vec3f, N: vec3f, material: Material, rand1: f32, rand2: f32) -> IndirectPathSample
-{
-    var newDirection: vec3f;
-    var pdf: f32;
-
-    // 1. 난반사/정반사 경로 선택
-    let baseColor = material.BaseColor.rgb;
-    let metallic = material.Metalness;
-    let F0 = mix(vec3f(0.04), baseColor, metallic);
-
-    let specularColor = mix(F0, baseColor, metallic);
-    let diffuseColor = baseColor * (1.0 - metallic);
-
-    let specularWeight = max(specularColor.r, max(specularColor.g, specularColor.b));
-    let diffuseWeight = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
-    let specularProbability = specularWeight / max(specularWeight + diffuseWeight, 0.0001);
-
-    // 2. 경로에 따라 방향 샘플링
-    let onb = create_onb(N);
-
-    if (rand1 < specularProbability) {
-        // -- 정반사 경로 --
-        let H_tangent = sample_ggx(rand2, rand1, material.Roughness);
-        let H = tangent_to_world(H_tangent, onb);
-        newDirection = reflect(-V, H);
-        
-        let D = TEST_DistributionGGX(N, H, material.Roughness);
-        pdf = (D * max(0.0, dot(N, H))) / max(4.0 * dot(V, H), 0.0001);
-
-    } else {
-        // -- 난반사 경로 --
-        let dir_tangent = sample_cosine_hemisphere(rand2, rand1);
-        newDirection = tangent_to_world(dir_tangent, onb);
-        
-        pdf = max(0.0, dot(N, newDirection)) / 3.141592;
-    }
-
-    // 3. 최종 가중치 계산 및 반환
-    let cos_theta = max(0.0, dot(N, newDirection));
-    
-    // 샘플링이 유효하지 않은 경우 (예: 방향이 표면 아래로 향함) 가중치를 0으로 처리
-    if (pdf <= 0.0 || cos_theta <= 0.0) {
-        return IndirectPathSample(vec3f(0.0), vec3f(0.0));
-    }
-
-    let brdf_color = TEST_CalculatePBR_BRDF(newDirection, V, N, material);
-    let weight = brdf_color * cos_theta / pdf;
-
-    return IndirectPathSample(weight, newDirection);
-}
-
-
-// 난수 상태를 관리하기 위한 구조체
-struct RandState {
-    seed: u32,
-};
-
-// 32비트 정수 값을 해싱하여 유사 난수 비트 패턴을 생성합니다.
-fn pcg_hash(input: u32) -> u32 {
-    var state = input * 747796405u + 2891336453u;
-    let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-    return (word >> 22u) ^ word;
-}
-
-/**
- * 주어진 난수 상태(RandState)를 기반으로 0.0과 1.0 사이의 f32 난수를 반환합니다.
- * 이 함수는 호출될 때마다 내부적으로 상태의 시드를 변경합니다.
- * @param state - 'inout' 파라미터로, 함수 내에서 값이 변경됩니다.
- */
-fn random(state: ptr<function, RandState>) -> f32 {
-    // 현재 시드를 해싱하여 난수 생성
-    let hash = pcg_hash((*state).seed);
-    
-    // 다음 호출을 위해 시드 상태를 변경 (간단히 1 증가)
-    (*state).seed = (*state).seed + 1u;
-
-    // u32 결과를 f32 (0.0 ~ 1.0) 범위로 변환
-    return f32(hash) / 4294967295.0; // 2^32 - 1
-}
 //==========================================================================
 //Shader Main ==============================================================
 //==========================================================================
@@ -845,16 +743,9 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     }
 
 
-
-
-    // --- 1. 셰이더 시작 시 난수 상태 초기화 ---
-    // 픽셀 좌표와 프레임 번호를 조합하여 이 스레드만의 고유한 초기 시드를 생성합니다.
-    var rand_state: RandState;
-    let initial_seed = ThreadID.x * 1973u + ThreadID.y * 9277u + UniformBuffer.FrameIndex * 26699u;
-    rand_state.seed = pcg_hash(initial_seed);
-
-
-
+    // Sampling에 사용할 난수 시드 생성
+    let InitialSeed     : u32 = ThreadID.x * 1973u + ThreadID.y * 9277u + UniformBuffer.FrameIndex * 26699u;
+    var RandomSeed      : u32 = GetHashValue(InitialSeed);
 
 
     // 현재 Pixel의 Ray 생성
@@ -864,7 +755,8 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     let EnvironmentColor    : vec3<f32> = vec3<f32>(0.2, 0.1, 0.1);
     var Weight              : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
 
-    for (var bounce : u32 = 0u; bounce < UniformBuffer.MAX_BOUNCE; bounce++)
+    // BounceDepth 만큼 Ray Trace
+    for (var BounceDepth : u32 = 0u; BounceDepth < UniformBuffer.MAX_BOUNCE; BounceDepth++)
     {
         // Current Ray가 씬에서 처음 만나는 Primitive의 정보 계산
         let HitPrimitiveData : HitResult = TraceRay(CurrentRay);
@@ -882,34 +774,42 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         let HitNormal           : vec3<f32>         = GetHitNormal(HitPoint, HitPrimitive);
         let HitMaterial         : Material          = GetMaterial(HitPrimitive.MaterialID);
 
+        let bHitPointIsLight    : bool              = false;
+
+        // Ray가 광원에 직접 닿았을 경우
+        if (bHitPointIsLight)
+        {
+            if (BounceDepth == 0) { ResultColor = HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor; }
+            
+            break;
+        }
+
         // Direct Light 계산 : NEE(Next Event Estimation) 기법
         for (var LightID : u32 = 0u; LightID < UniformBuffer.LightSourceCount; LightID++)
         {
             // (현재는 태양빛 하나만 만들어 사용, 추후 Storage Buffer에 붙여 GPU에 제공)
-            let LightIntensity      : f32               = 100.0;
-            let LightColor          : vec3<f32>         = vec3<f32>(1.0, 1.0, 1.0);
-            let LightDirection      : vec3<f32>         = normalize(vec3<f32>(4, -10.0, 0.0));
+            let LightIntensity      : f32       = 100.0;
+            let LightColor          : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+            let LightDirection      : vec3<f32> = normalize(vec3<f32>(4, -10.0, 0.0));
 
-            let ShadowRay           : Ray               = Ray(HitPoint + 1e-6 * HitNormal, -LightDirection);
-            let ShadowRayHitResult  : HitResult         = TraceRay(ShadowRay);
+            let ShadowRay           : Ray       = Ray(HitPoint + 1e-6 * HitNormal, -LightDirection);
+            let ShadowRayHitResult  : HitResult = TraceRay(ShadowRay);
 
             // Shadow Ray (HitPoint -> Light Source) 가 중간에 막혔으면 필요없음
             if (ShadowRayHitResult.IsValidHit) { continue; }
 
-            let BRDFValue : vec3<f32> = ComputeBRDF(-LightDirection, -CurrentRay.Direction, HitNormal, HitMaterial);
-            let LightWeight : vec3<f32> = Weight * BRDFValue * max(dot(-LightDirection,HitNormal), 0.0);
+            let BRDFValue           : vec3<f32> = ComputeBRDF(-LightDirection, -CurrentRay.Direction, HitNormal, HitMaterial);
+            let LightWeight         : vec3<f32> = Weight * BRDFValue * max(dot(-LightDirection,HitNormal), 0.0);
 
             ResultColor += LightWeight * LightColor * LightIntensity;
         }
 
         // Indirect Light 계산
+        let NextPathSample : PathSample = SampleNextPath(-CurrentRay.Direction, HitNormal, HitMaterial, &RandomSeed);
 
-        let random_1 : f32 = random(&rand_state);
-        let random_2 : f32 = random(&rand_state);
-        let indirectSample = sample_indirect_path(-CurrentRay.Direction, HitNormal, HitMaterial, random_1, random_2);
-        Weight *= indirectSample.weight;
+        Weight *= NextPathSample.Weight;
 
-        CurrentRay = Ray(HitPoint, indirectSample.direction);
+        CurrentRay = Ray(HitPoint, NextPathSample.Direction);
     }
 
 
