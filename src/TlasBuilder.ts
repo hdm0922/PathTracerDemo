@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { type Mesh } from "./Mesh";
+import { type Mesh } from "./Structs";
 import { type Instance } from "./World";
 
 

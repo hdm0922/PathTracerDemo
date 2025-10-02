@@ -535,6 +535,7 @@ fn TraceRay(InRay: Ray) -> HitResult
 
     for (var InstanceID: u32 = 0u; InstanceID < UniformBuffer.InstanceCount; InstanceID++)
     {
+
         // 현재 Instance 기준으로 정보 가져오기
         let CurrentInstance         : Instance          = GetInstance(InstanceID);
         let CurrentMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(CurrentInstance.MeshID);
@@ -743,14 +744,9 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     }
 
 
-    // Sampling에 사용할 난수 시드 생성
-    let InitialSeed     : u32 = ThreadID.x * 1973u + ThreadID.y * 9277u + UniformBuffer.FrameIndex * 26699u;
-    var RandomSeed      : u32 = GetHashValue(InitialSeed);
-
-
-    // 현재 Pixel의 Ray 생성
-    var CurrentRay  : Ray       = GenerateRayFromThreadID(ThreadID.xy);
-    var ResultColor : vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
+    var RandomSeed          : u32       = GetHashValue(ThreadID.x * 1973u + ThreadID.y * 9277u + UniformBuffer.FrameIndex * 26699u);
+    var CurrentRay          : Ray       = GenerateRayFromThreadID(ThreadID.xy);
+    var ResultColor         : vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 
     let EnvironmentColor    : vec3<f32> = vec3<f32>(0.2, 0.1, 0.1);
     var Weight              : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
@@ -815,25 +811,9 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 
 
 
-
-
-
-
-    // TEMP 
-    {
-        let x0 = UniformBuffer.Resolution;
-        let x1 = SceneBuffer[0];
-        let x2 = GeometryBuffer[0];
-        let x3 = AccelBuffer[0];
-        let x4 = textureLoad(SceneTexture, vec2<i32>(i32(ThreadID.x), i32(ThreadID.y)), 0);
-    }
-
-
     // Write Pixel Color To AccumTexture
-    let ColorUsed = textureLoad(SceneTexture, ThreadID.xy, 0);
-    //ResultColor = (ColorUsed.rgb * f32(UniformBuffer.FrameIndex) + ResultColor)/f32(UniformBuffer.FrameIndex+1);
-
-    let ColorToWrite = mix(ColorUsed.rgb, ResultColor, 1.0 / f32(UniformBuffer.FrameIndex + 1));
+    let ColorUsed       : vec4<f32> = textureLoad(SceneTexture, ThreadID.xy, 0);
+    let ColorToWrite    : vec3<f32> = mix(ColorUsed.rgb, ResultColor, 1.0 / f32(UniformBuffer.FrameIndex + 1));
     textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ColorToWrite, 1.0));
 
     return;

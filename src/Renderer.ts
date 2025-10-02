@@ -4,8 +4,8 @@ import computeShaderCode from './shaders/ComputeShader.wgsl?raw';
 import vertexShaderCode from './shaders/testVertex.wgsl?raw';
 import fragmentShaderCode from './shaders/testFragment.wgsl?raw';
 
-import { type Mesh } from "./Mesh";
-import { type Instance, World } from "./World";
+import type { Instance, Mesh } from "./Structs";
+import { World } from "./World";
 import { Wrapper } from "./Wrapper";
 
 import { buildTLAS } from "./TlasBuilder";
@@ -341,8 +341,6 @@ export class Renderer
             Float32View.set(MergedMeshRawData.MaterialArray, this.Offset_MaterialBuffer);
         }
 
-
-
         // GeometryBuffer에 쓸 데이터 준비하기 (Vertex, Primitive)
         this.Offset_IndexBuffer = MergedMeshRawData.VertexArray.length;
         this.Offset_PrimitiveToMaterialBuffer = this.Offset_IndexBuffer + MergedMeshRawData.IndexArray.length;
@@ -544,10 +542,11 @@ export class Renderer
         this.FrameCount++;
 
         // Camera Property
-        const camPos = vec3.normalize(vec3.create(), vec3.fromValues(0,2,1));
+        const camDir = vec3.normalize(vec3.create(), vec3.fromValues(0,2,1));
+        const camDist = 1.3;
+        const camPos = vec3.scale(vec3.create(), camDir, camDist);
         const VP = makeViewProjection(camPos, this.Canvas.width / this.Canvas.height);
         const VPINV = mat4.invert(mat4.create(), VP);
-        //console.log(VPINV);
 
         const ELEMENT_COUNT = 32;
         const UniformData = new ArrayBuffer(4 * ELEMENT_COUNT);
@@ -574,7 +573,7 @@ export class Renderer
             Uint32View[27] = this.Offset_PrimitiveToMaterialBuffer;
             Uint32View[28] = this.Offset_BlasBuffer;
 
-            Uint32View[29] = 1; // Instance Count : TEMP
+            Uint32View[29] = this.World.InstancesPool.size; // Instance Count : TEMP
             Uint32View[30] = 1; // LightSource Count : TEMP
             Uint32View[31] = 3; // Material Count : TEMP
         }

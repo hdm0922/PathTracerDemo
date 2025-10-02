@@ -1,9 +1,7 @@
 import * as THREE from 'three';
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 
-import { type Mesh } from './Mesh.ts';
-import { type Material } from './Material.ts';
-import type { Instance } from './World.ts';
+import type { Instance, Mesh, Material } from './Structs.ts';
 
 
 
@@ -26,7 +24,7 @@ export class Wrapper
 
             InstanceRawData.set(ModelMatrix,        InstanceOffset +  0);
             InstanceRawData.set(ModelMatrixInverse, InstanceOffset + 16);
-            InstanceRawData[InstanceOffset + 32] = MeshID;
+            InstanceRawData[InstanceOffset + 35] = MeshID;
         }
 
         return InstanceRawData;
