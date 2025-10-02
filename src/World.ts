@@ -6,9 +6,6 @@ import { vec3, mat4 } from "gl-matrix";
 import type { Instance, Mesh, Light } from './Structs.ts';
 import { buildBVH } from './BlasBuilder.ts';
 
-
-// World ===================================
-
 export class World 
 {
     // Resource Pools
@@ -95,34 +92,13 @@ export class World
             ModelMatrix : mat4.identity(mat4.create()),
         };
 
-        const Instance_1: Instance =
-        {
-            MeshID      : "Lamp",
-            ModelMatrix :  mat4.fromTranslation(mat4.create(), vec3.fromValues(0,0,0.5)),
-        };
-       
 
         const DirectionalLight_0 : Light =
         {
             Position    : vec3.create(),
             LightType   : 0,
 
-            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(4, -10, 0)),
-            Intensity   : 20,
-
-            Color       : vec3.fromValues(1,1,1),
-            Area        : 0,
-
-            U           : vec3.create(),
-            V           : vec3.create(),
-        }
-
-        const DirectionalLight_1 : Light =
-        {
-            Position    : vec3.create(),
-            LightType   : 0,
-
-            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, -4, 5)),
+            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(1, 0, -1)),
             Intensity   : 10,
 
             Color       : vec3.fromValues(1,1,1),
@@ -132,11 +108,26 @@ export class World
             V           : vec3.create(),
         }
 
+        const PointLight_0 : Light =
+        {
+            Position    : vec3.fromValues(1,0,0),
+            LightType   : 1,
+
+            Direction   : vec3.create(),
+            Intensity   : 144,
+
+            Color       : vec3.fromValues(1,1,1),
+            Area        : 0,
+
+            U           : vec3.create(),
+            V           : vec3.create(),
+        }
+
+
         this.InstancesPool.set("Lamp_0", Instance_0);
-        this.InstancesPool.set("Lamp_1", Instance_1);
 
         this.Lights.push(DirectionalLight_0);
-        this.Lights.push(DirectionalLight_1);
+        this.Lights.push(PointLight_0);
 
 
         return;

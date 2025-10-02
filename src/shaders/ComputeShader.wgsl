@@ -1,5 +1,5 @@
 //==========================================================================
-//Data Structures ==========================================================
+//Data Structures From CPU =================================================
 //==========================================================================
 
 struct Uniform
@@ -467,6 +467,44 @@ fn GetHitNormal(Point: vec3<f32>, InTriangle: Triangle) -> vec3<f32>
 }
 
 //==========================================================================
+// Light Helpers ===========================================================
+//==========================================================================
+
+fn GetDirectionalLightContribution(InLight : Light, View : vec3<f32>, HitPoint : vec3<f32>, HitNormal : vec3<f32>, HitMaterial : Material) -> vec4<f32>
+{
+    let PointToLightDirection   : vec3<f32> = -InLight.Direction;
+
+    let ShadowRay               : Ray       = Ray(HitPoint, PointToLightDirection);
+    let ShadowRayHitResult      : HitResult = TraceRay(ShadowRay);
+
+    if (ShadowRayHitResult.IsValidHit) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+
+    let BRDFValue               : vec3<f32> = ComputeBRDF(PointToLightDirection, View, HitNormal, HitMaterial);
+    let LightContribution       : vec3<f32> = BRDFValue * max(dot(PointToLightDirection,HitNormal), 0.0);
+
+    return vec4<f32>(LightContribution, 1.0);
+}
+
+fn GetPointLightContribution(InLight : Light, View : vec3<f32>, HitPoint : vec3<f32>, HitNormal : vec3<f32>, HitMaterial : Material) -> vec4<f32>
+{
+    let PointToLight            : vec3<f32> = InLight.Position - HitPoint;
+
+    let PointToLightDistance    : f32       = length(PointToLight);
+    let PointToLightDirection   : vec3<f32> = PointToLight / PointToLightDistance;
+
+    let ShadowRay               : Ray       = Ray(HitPoint, PointToLightDirection);
+    let ShadowRayHitResult      : HitResult = TraceRay(ShadowRay);
+
+    //if (ShadowRayHitResult.IsValidHit && (ShadowRayHitResult.HitDistance < PointToLightDistance)) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+
+    let Attenuation             : f32       = 1.0 / (PointToLightDistance * PointToLightDistance);
+    let BRDFValue               : vec3<f32> = ComputeBRDF(PointToLightDirection, View, HitNormal, HitMaterial);
+    let LightContribution       : vec3<f32> = BRDFValue * max(dot(PointToLightDirection,HitNormal), 0.0) * Attenuation;
+
+    return vec4<f32>(InLight.Position, 1.0);
+}
+
+//==========================================================================
 // PBR Helpers =============================================================
 //==========================================================================
 
@@ -511,6 +549,12 @@ fn GetFresnelSchlick(Cosine: f32, F0: vec3<f32>) -> vec3<f32>
 
 fn CreateONB(N : vec3<f32>) -> mat3x3<f32>
 {
+    // let normal = N;
+    // var up = vec3f(0.0, 1.0, 0.0);
+    // if (abs(dot(normal, up)) > 0.999) { up = vec3f(1.0, 0.0, 0.0); }
+    // let tangent = normalize(cross(up, normal));
+    // let bitangent = cross(normal, tangent);
+    // return mat3x3f(tangent, bitangent, normal);
     let sign_val = select(-1.0, 1.0, N.z >= 0.0);
     let a = -1.0 / (sign_val + N.z);
     let b = N.x * N.y * a;
@@ -730,6 +774,7 @@ fn SampleNextPath(HitPointToRayStart: vec3<f32>, HitNormal: vec3<f32>, HitMateri
     let specularProbability = specularWeight / max(specularWeight + diffuseWeight, 0.0001);
 
 
+
     // 2. 경로에 따라 방향 샘플링
     let onb = CreateONB(N);
 
@@ -824,25 +869,28 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         // Direct Light 계산 : NEE(Next Event Estimation) 기법
         for (var LightID : u32 = 0u; LightID < UniformBuffer.LightSourceCount; LightID++)
         {
+            let CurrentLight        : Light     = GetLight(LightID);
+            var LightContribution   : vec4<f32> = vec4<f32>();
 
-            let Light               : Light     = GetLight(LightID);
-            let ShadowRay           : Ray       = Ray(HitPoint + 1e-6 * HitNormal, -Light.Direction);
-            let ShadowRayHitResult  : HitResult = TraceRay(ShadowRay);
+            switch (CurrentLight.LightType)
+            {
+                case 0u : { LightContribution = GetDirectionalLightContribution(CurrentLight, -CurrentRay.Direction, HitPoint, HitNormal, HitMaterial); break; }
+                case 1u : { LightContribution = GetPointLightContribution(CurrentLight, -CurrentRay.Direction, HitPoint, HitNormal, HitMaterial); break; }
+                default : { break; }
+            }
 
-            // Shadow Ray (HitPoint -> Light Source) 가 중간에 막혔으면 필요없음
-            if (ShadowRayHitResult.IsValidHit) { continue; }
+            if (LightContribution.w == 0.0) { continue; }
 
-            let BRDFValue           : vec3<f32> = ComputeBRDF(-Light.Direction, -CurrentRay.Direction, HitNormal, HitMaterial);
-            let LightWeight         : vec3<f32> = Weight * BRDFValue * max(dot(-Light.Direction,HitNormal), 0.0);
-
-            ResultColor += LightWeight * Light.Color * Light.Intensity;
+            //ResultColor += Weight * LightContribution.rgb * CurrentLight.Color * CurrentLight.Intensity;
         }
+
 
         // Indirect Light 계산
         let NextPathSample : PathSample = SampleNextPath(-CurrentRay.Direction, HitNormal, HitMaterial, &RandomSeed);
 
-        Weight *= NextPathSample.Weight;
+        ResultColor = (NextPathSample.Direction + 1.0) / 2.0;
 
+        Weight *= NextPathSample.Weight;
         CurrentRay = Ray(HitPoint, NextPathSample.Direction);
     }
 

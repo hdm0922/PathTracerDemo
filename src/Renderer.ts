@@ -547,7 +547,7 @@ export class Renderer
         this.FrameCount++;
 
         // Camera Property
-        const camDir = vec3.normalize(vec3.create(), vec3.fromValues(0,2,1));
+        const camDir = vec3.normalize(vec3.create(), vec3.fromValues(0,0,1));
         const camDist = 1.3;
         const camPos = vec3.scale(vec3.create(), camDir, camDist);
         const VP = makeViewProjection(camPos, this.Canvas.width / this.Canvas.height);
