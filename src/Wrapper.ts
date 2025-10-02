@@ -12,8 +12,9 @@ export class Wrapper
     static WrapInstances(InstanceArray: Instance[], MeshIDToIndex: Map<string, number>): Float32Array
     {
         const ELEMENT_PER_INSTANCE = 36;
-        const InstanceRawData: Float32Array = new Float32Array(ELEMENT_PER_INSTANCE * InstanceArray.length);
+        const InstanceRawData: ArrayBuffer = new ArrayBuffer(ELEMENT_PER_INSTANCE * InstanceArray.length * 4);
 
+        const Float32View : Float32Array = new Float32Array(InstanceRawData);
         for (let iter=0; iter<InstanceArray.length; iter++)
         {
             const InstanceOffset = ELEMENT_PER_INSTANCE * iter;
@@ -22,12 +23,12 @@ export class Wrapper
             const ModelMatrixInverse    : mat4      = mat4.invert(mat4.create(), ModelMatrix)!;
             const MeshID                : number    = MeshIDToIndex.get(InstanceArray[iter].MeshID)!;
 
-            InstanceRawData.set(ModelMatrix,        InstanceOffset +  0);
-            InstanceRawData.set(ModelMatrixInverse, InstanceOffset + 16);
-            InstanceRawData[InstanceOffset + 35] = MeshID;
+            Float32View.set(ModelMatrix,        InstanceOffset +  0);
+            Float32View.set(ModelMatrixInverse, InstanceOffset + 16);
+            Float32View[InstanceOffset + 35] = MeshID;
         }
 
-        return InstanceRawData;
+        return Float32View;
     }
 
     static WrapLights(LightsArray: Light[]) : Float32Array
@@ -71,10 +72,10 @@ export class Wrapper
         const VertexUVData          = InMesh.Data.geometry.attributes["uv"];
 
         const ELEMENTS_PER_VERTEX = 12;
-        const PADDING = 0;
         const VertexCount = VertexPositionData.count;
 
-        const VerticesArray = new Float32Array(ELEMENTS_PER_VERTEX * VertexCount);
+        const VerticesRawData : ArrayBuffer = new ArrayBuffer(ELEMENTS_PER_VERTEX * VertexCount * 4);
+        const Float32View : Float32Array = new Float32Array(VerticesRawData);
 
         for (let VertexID: number = 0; VertexID < VertexCount; VertexID++)
         {
@@ -89,23 +90,19 @@ export class Wrapper
             const U = VertexUVData.array[2 * VertexID + 0];
             const V = VertexUVData.array[2 * VertexID + 1];
 
-            VerticesArray[ELEMENTS_PER_VERTEX * VertexID +  0] = Position_X;
-            VerticesArray[ELEMENTS_PER_VERTEX * VertexID +  1] = Position_Y;
-            VerticesArray[ELEMENTS_PER_VERTEX * VertexID +  2] = Position_Z;
-            VerticesArray[ELEMENTS_PER_VERTEX * VertexID +  3] = PADDING;
+            Float32View[ELEMENTS_PER_VERTEX * VertexID +  0] = Position_X;
+            Float32View[ELEMENTS_PER_VERTEX * VertexID +  1] = Position_Y;
+            Float32View[ELEMENTS_PER_VERTEX * VertexID +  2] = Position_Z;
 
-            VerticesArray[ELEMENTS_PER_VERTEX * VertexID +  4] = Normal_X;
-            VerticesArray[ELEMENTS_PER_VERTEX * VertexID +  5] = Normal_Y;
-            VerticesArray[ELEMENTS_PER_VERTEX * VertexID +  6] = Normal_Z;
-            VerticesArray[ELEMENTS_PER_VERTEX * VertexID +  7] = PADDING;
+            Float32View[ELEMENTS_PER_VERTEX * VertexID +  4] = Normal_X;
+            Float32View[ELEMENTS_PER_VERTEX * VertexID +  5] = Normal_Y;
+            Float32View[ELEMENTS_PER_VERTEX * VertexID +  6] = Normal_Z;
 
-            VerticesArray[ELEMENTS_PER_VERTEX * VertexID +  8] = U;
-            VerticesArray[ELEMENTS_PER_VERTEX * VertexID +  9] = V;
-            VerticesArray[ELEMENTS_PER_VERTEX * VertexID + 10] = PADDING;
-            VerticesArray[ELEMENTS_PER_VERTEX * VertexID + 11] = PADDING;
+            Float32View[ELEMENTS_PER_VERTEX * VertexID +  8] = U;
+            Float32View[ELEMENTS_PER_VERTEX * VertexID +  9] = V;
         }
 
-        return VerticesArray;
+        return Float32View;
     }
 
     static WrapIndexArray(InMesh: Mesh): Uint32Array
@@ -118,7 +115,8 @@ export class Wrapper
         const VERTICES_PER_PRIMITIVE = 3; // Triangle
         const PrimitiveCount = InMesh.Data.geometry.index?.array!.length! / VERTICES_PER_PRIMITIVE;
 
-        const PrimitiveToMaterialArray: Uint32Array = new Uint32Array(PrimitiveCount);
+        const PrimitiveToMaterialRawData : ArrayBuffer = new ArrayBuffer(PrimitiveCount * 4);
+        const Uint32View : Uint32Array = new Uint32Array(PrimitiveToMaterialRawData);
 
         // Mapping PrimitiveID -> Material
         for (const SubMeshGroup of InMesh.Data.geometry.groups)
@@ -126,45 +124,11 @@ export class Wrapper
             for (let idx=0; idx<SubMeshGroup.count; idx += VERTICES_PER_PRIMITIVE)
             {
                 const PrimitiveID = (SubMeshGroup.start + idx) / VERTICES_PER_PRIMITIVE;
-                PrimitiveToMaterialArray[PrimitiveID] = SubMeshGroup.materialIndex!;
+                Uint32View[PrimitiveID] = SubMeshGroup.materialIndex!;
             }
         }
 
-        return PrimitiveToMaterialArray;
-    }
-
-    static WrapPrimitiveArray(InMesh: Mesh): Uint32Array
-    {
-        const VERTICES_PER_PRIMITIVE = 3; // Triangle
-
-        const IndexArray: Uint32Array = new Uint32Array(InMesh.Data.geometry.index?.array!);
-        const PrimitiveToMaterialArray: Uint32Array = new Uint32Array(IndexArray.length / VERTICES_PER_PRIMITIVE);
-
-        const PrimitiveCount = PrimitiveToMaterialArray.length;
-
-        // Mapping PrimitiveID -> Material
-        for (const SubMeshGroup of InMesh.Data.geometry.groups)
-        {
-            for (let idx=0; idx<SubMeshGroup.count; idx += VERTICES_PER_PRIMITIVE)
-            {
-                const PrimitiveID = (SubMeshGroup.start + idx) / VERTICES_PER_PRIMITIVE;
-                PrimitiveToMaterialArray[PrimitiveID] = SubMeshGroup.materialIndex!;
-            }
-        }
-
-        const IndicesWithMaterialArray = new Uint32Array((VERTICES_PER_PRIMITIVE + 1) * PrimitiveCount);
-        for (let iter=0; iter<PrimitiveCount; iter++)
-        {
-            const IndexID = (VERTICES_PER_PRIMITIVE + 1) * iter;
-            let offset = 0;
-
-            IndicesWithMaterialArray[IndexID + offset] = IndexArray[iter + offset]; offset++;
-            IndicesWithMaterialArray[IndexID + offset] = IndexArray[iter + offset]; offset++;
-            IndicesWithMaterialArray[IndexID + offset] = IndexArray[iter + offset]; offset++;
-            IndicesWithMaterialArray[IndexID + offset] = PrimitiveToMaterialArray[iter];
-        }
-
-        return IndicesWithMaterialArray;
+        return Uint32View;
     }
 
     static WrapMaterialsAndTexturesArray(InMesh: Mesh): [Float32Array, Array<ImageBitmap>]
@@ -262,30 +226,34 @@ export class Wrapper
 
         // Fill Materials Array
         const ELEMENTS_IN_MATERIAL = 20;
-        const PADDING = 0;
-        const MaterialsArray: Float32Array = new Float32Array(ELEMENTS_IN_MATERIAL * MaterialCount);
+
+        const MaterialRawData : ArrayBuffer = new ArrayBuffer(ELEMENTS_IN_MATERIAL * MaterialCount * 4);
+
+        const Float32View : Float32Array = new Float32Array(MaterialRawData);
+        const Int32View : Int32Array = new Int32Array(MaterialRawData);
         for (let MaterialIndex=0; MaterialIndex < MaterialCount; MaterialIndex++)
         {
             const MaterialParsed = ParsedMaterialsArray[MaterialIndex];
+            const offset = ELEMENTS_IN_MATERIAL * MaterialIndex;
 
-            let offset = 0;
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.BaseColor[0];
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.BaseColor[1];
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.BaseColor[2];
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.BaseColor[3];
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.EmissiveColor[0];
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.EmissiveColor[1];
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.EmissiveColor[2];
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.EmissiveIntensity;
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.Metalness;
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.Roughness;
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.BlendMode;
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.OpacityMask! || 0;
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.NormalScale[0];
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.NormalScale[1];
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = MaterialParsed.IOR;
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = PADDING;
+            Float32View[offset +  0] = MaterialParsed.BaseColor[0];
+            Float32View[offset +  1] = MaterialParsed.BaseColor[1];
+            Float32View[offset +  2] = MaterialParsed.BaseColor[2];
+            Float32View[offset +  3] = MaterialParsed.BaseColor[3];
 
+            Float32View[offset +  4] = MaterialParsed.EmissiveColor[0];
+            Float32View[offset +  5] = MaterialParsed.EmissiveColor[1];
+            Float32View[offset +  6] = MaterialParsed.EmissiveColor[2];
+            Float32View[offset +  7] = MaterialParsed.EmissiveIntensity;
+
+            Float32View[offset +  8] = MaterialParsed.Metalness;
+            Float32View[offset +  9] = MaterialParsed.Roughness;
+            Float32View[offset + 10] = MaterialParsed.BlendMode;
+            Float32View[offset + 11] = MaterialParsed.OpacityMask! || 0;
+
+            Float32View[offset + 12] = MaterialParsed.NormalScale[0];
+            Float32View[offset + 13] = MaterialParsed.NormalScale[1];
+            Float32View[offset + 14] = MaterialParsed.IOR;
 
             const BaseColorTextureUUID  : string = MaterialParsed.BaseColorTexture?.uuid!;
             const ORMTextureUUID        : string = MaterialParsed.ORMTexture?.uuid!;
@@ -297,14 +265,13 @@ export class Wrapper
             const EmissiveTextureIndex  : number = MapTextureUUIDToIndex.has(EmissiveTextureUUID) ? MapTextureUUIDToIndex.get(EmissiveTextureUUID)! : -1;
             const NormalTextureIndex    : number = MapTextureUUIDToIndex.has(NormalTextureUUID) ? MapTextureUUIDToIndex.get(NormalTextureUUID)! : -1;
 
-
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = BaseColorTextureIndex;
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = ORMTextureIndex;
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = EmissiveTextureIndex;
-            MaterialsArray[ELEMENTS_IN_MATERIAL * MaterialIndex + offset++] = NormalTextureIndex;
+            Int32View[offset + 16] = BaseColorTextureIndex;
+            Int32View[offset + 17] = ORMTextureIndex;
+            Int32View[offset + 18] = EmissiveTextureIndex;
+            Int32View[offset + 19] = NormalTextureIndex;
         }
 
-        return [MaterialsArray, TexturesArray];
+        return [Float32View, TexturesArray];
     }
 
 }

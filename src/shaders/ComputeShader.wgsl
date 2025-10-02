@@ -488,7 +488,6 @@ fn GetDirectionalLightContribution(InLight : Light, View : vec3<f32>, HitPoint :
 fn GetPointLightContribution(InLight : Light, View : vec3<f32>, HitPoint : vec3<f32>, HitNormal : vec3<f32>, HitMaterial : Material) -> vec4<f32>
 {
     let PointToLight            : vec3<f32> = InLight.Position - HitPoint;
-
     let PointToLightDistance    : f32       = length(PointToLight);
     let PointToLightDirection   : vec3<f32> = PointToLight / PointToLightDistance;
 
@@ -499,8 +498,33 @@ fn GetPointLightContribution(InLight : Light, View : vec3<f32>, HitPoint : vec3<
 
     let Attenuation             : f32       = 1.0 / (PointToLightDistance * PointToLightDistance);
     let BRDFValue               : vec3<f32> = ComputeBRDF(PointToLightDirection, View, HitNormal, HitMaterial);
-    let LightContribution       : vec3<f32> = BRDFValue * max(dot(PointToLightDirection,HitNormal), 0.0) * Attenuation;
+    let LightContribution       : vec3<f32> = BRDFValue * max(dot(PointToLightDirection, HitNormal), 0.0) * Attenuation;
 
+    return vec4<f32>(LightContribution, 1.0);
+}
+
+fn GetRectLightContribution(InLight : Light, View : vec3<f32>, HitPoint : vec3<f32>, HitNormal : vec3<f32>, HitMaterial : Material, pRandomSeed : ptr<function, u32>) -> vec4<f32>
+{
+    let Random_U : f32 = (Random(pRandomSeed) * 2.0) - 1.0;
+    let Random_V : f32 = (Random(pRandomSeed) * 2.0) - 1.0;
+
+    let SamplePoint : vec3<f32> = InLight.Position + (Random_U * InLight.U) + (Random_V * InLight.V);
+
+    let PointToLight            : vec3<f32> = SamplePoint - HitPoint;
+    let PointToLightDistance    : f32       = length(PointToLight);
+    let PointToLightDirection   : vec3<f32> = PointToLight / PointToLightDistance;
+
+    let ShadowRay               : Ray       = Ray(HitPoint, PointToLightDirection);
+    let ShadowRayHitResult      : HitResult = TraceRay(ShadowRay);
+
+    if (ShadowRayHitResult.IsValidHit && (ShadowRayHitResult.HitDistance < PointToLightDistance)) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+
+    let Attenuation             : f32       = 1.0 / (PointToLightDistance * PointToLightDistance);
+    let LightCosine             : f32       = max(dot(-PointToLightDirection, InLight.Direction), 0.0);
+    let BRDFValue               : vec3<f32> = ComputeBRDF(PointToLightDirection, View, HitNormal, HitMaterial);
+    let InvPDF                  : f32       = InLight.Area;
+
+    let LightContribution       : vec3<f32> = BRDFValue * max(dot(PointToLightDirection, HitNormal), 0.0) * Attenuation * LightCosine * InvPDF;
     return vec4<f32>(LightContribution, 1.0);
 }
 
@@ -863,7 +887,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         let HitNormal           : vec3<f32>         = GetHitNormal(HitPoint, HitPrimitive);
         let HitMaterial         : Material          = GetMaterial(HitPrimitive.MaterialID);
 
-        let bHitPointIsLight    : bool              = false;
+        let bHitPointIsLight    : bool              = length(HitMaterial.EmissiveColor) * HitMaterial.EmissiveIntensity > 0.0;
 
         // Ray가 광원에 직접 닿았을 경우
         if (bHitPointIsLight)
@@ -884,6 +908,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
             {
                 case 0u : { LightContribution = GetDirectionalLightContribution(CurrentLight, -CurrentRay.Direction, HitPoint, HitNormal, HitMaterial); break; }
                 case 1u : { LightContribution = GetPointLightContribution(CurrentLight, -CurrentRay.Direction, HitPoint, HitNormal, HitMaterial); break; }
+                case 2u : { LightContribution = GetRectLightContribution(CurrentLight, -CurrentRay.Direction, HitPoint, HitNormal, HitMaterial, &RandomSeed); break; }     
                 default : { break; }
             }
 
