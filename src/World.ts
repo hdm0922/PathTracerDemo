@@ -99,7 +99,7 @@ export class World
             LightType   : 0,
 
             Direction   : vec3.normalize(vec3.create(), vec3.fromValues(1, 0, 0)),
-            Intensity   : 10,
+            Intensity   : 0,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0,
@@ -110,11 +110,11 @@ export class World
 
         const PointLight_0 : Light =
         {
-            Position    : vec3.fromValues(1,0,0),
+            Position    : vec3.fromValues(0, 0, 0.4),
             LightType   : 1,
 
-            Direction   : vec3.fromValues(1,0,0),
-            Intensity   : 144,
+            Direction   : vec3.create(),
+            Intensity   : 3,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0,

@@ -495,13 +495,13 @@ fn GetPointLightContribution(InLight : Light, View : vec3<f32>, HitPoint : vec3<
     let ShadowRay               : Ray       = Ray(HitPoint, PointToLightDirection);
     let ShadowRayHitResult      : HitResult = TraceRay(ShadowRay);
 
-    //if (ShadowRayHitResult.IsValidHit && (ShadowRayHitResult.HitDistance < PointToLightDistance)) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+    if (ShadowRayHitResult.IsValidHit && (ShadowRayHitResult.HitDistance < PointToLightDistance)) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
 
     let Attenuation             : f32       = 1.0 / (PointToLightDistance * PointToLightDistance);
     let BRDFValue               : vec3<f32> = ComputeBRDF(PointToLightDirection, View, HitNormal, HitMaterial);
     let LightContribution       : vec3<f32> = BRDFValue * max(dot(PointToLightDirection,HitNormal), 0.0) * Attenuation;
 
-    return vec4<f32>(InLight.Position, 1.0);
+    return vec4<f32>(LightContribution, 1.0);
 }
 
 //==========================================================================
@@ -549,12 +549,6 @@ fn GetFresnelSchlick(Cosine: f32, F0: vec3<f32>) -> vec3<f32>
 
 fn CreateONB(N : vec3<f32>) -> mat3x3<f32>
 {
-    // let normal = N;
-    // var up = vec3f(0.0, 1.0, 0.0);
-    // if (abs(dot(normal, up)) > 0.999) { up = vec3f(1.0, 0.0, 0.0); }
-    // let tangent = normalize(cross(up, normal));
-    // let bitangent = cross(normal, tangent);
-    // return mat3x3f(tangent, bitangent, normal);
     let sign_val = select(-1.0, 1.0, N.z >= 0.0);
     let a = -1.0 / (sign_val + N.z);
     let b = N.x * N.y * a;
@@ -841,6 +835,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         if (!bPixelInBoundary_X || !bPixelInBoundary_Y) { return; }
     }
 
+    var DEBUG_VALUE         : u32 = 999u;
 
     var RandomSeed          : u32       = GetHashValue(ThreadID.x * 1973u + ThreadID.y * 9277u + UniformBuffer.FrameIndex * 26699u);
     var CurrentRay          : Ray       = GenerateRayFromThreadID(ThreadID.xy);
@@ -881,8 +876,9 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         // Direct Light 계산 : NEE(Next Event Estimation) 기법
         for (var LightID : u32 = 0u; LightID < UniformBuffer.LightSourceCount; LightID++)
         {
+
             let CurrentLight        : Light     = GetLight(LightID);
-            var LightContribution   : vec4<f32> = vec4<f32>();
+            var LightContribution   : vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 0.0);
 
             switch (CurrentLight.LightType)
             {
@@ -901,8 +897,6 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         Weight *= NextPathSample.Weight;
         CurrentRay = Ray(HitPoint, NextPathSample.Direction);
     }
-
-
 
 
     // Write Pixel Color To AccumTexture

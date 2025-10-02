@@ -33,26 +33,30 @@ export class Wrapper
     static WrapLights(LightsArray: Light[]) : Float32Array
     {
         const ELEMENT_PER_LIGHT = 20;
-        const LightRawData : Float32Array = new Float32Array(ELEMENT_PER_LIGHT * LightsArray.length);
+
+        const LightRawData : ArrayBuffer = new ArrayBuffer(ELEMENT_PER_LIGHT * LightsArray.length * 4);
+
+        const Float32View : Float32Array = new Float32Array(LightRawData);
+        const Uint32View : Uint32Array = new Uint32Array(LightRawData);
 
         for (let iter=0; iter<LightsArray.length; iter++)
         {
             const LightOffset = ELEMENT_PER_LIGHT * iter;
 
-            LightRawData.set(LightsArray[iter].Position, LightOffset +  0);
-            LightRawData[LightOffset +  3] = LightsArray[iter].LightType;
+            Float32View.set(LightsArray[iter].Position, LightOffset +  0);
+            Uint32View[LightOffset +  3] = LightsArray[iter].LightType;
 
-            LightRawData.set(LightsArray[iter].Direction, LightOffset +  4);
-            LightRawData[LightOffset +  7] = LightsArray[iter].Intensity;
+            Float32View.set(LightsArray[iter].Direction, LightOffset +  4);
+            Float32View[LightOffset +  7] = LightsArray[iter].Intensity;
+            
+            Float32View.set(LightsArray[iter].Color, LightOffset +  8);
+            Float32View[LightOffset +  11] = LightsArray[iter].Area;
 
-            LightRawData.set(LightsArray[iter].Color, LightOffset +  8);
-            LightRawData[LightOffset +  11] = LightsArray[iter].Area;
-
-            LightRawData.set(LightsArray[iter].U, LightOffset + 12);
-            LightRawData.set(LightsArray[iter].V, LightOffset + 16);
+            Float32View.set(LightsArray[iter].U, LightOffset + 12);
+            Float32View.set(LightsArray[iter].V, LightOffset + 16);
         }
 
-        return LightRawData;
+        return Float32View;
     }
 
     static WrapBlasArray(InMesh: Mesh): Float32Array
