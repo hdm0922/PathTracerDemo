@@ -1,14 +1,12 @@
 import { vec3, mat4 } from "gl-matrix";
 
 import computeShaderCode from './shaders/ComputeShader.wgsl?raw';
-import vertexShaderCode from './shaders/testVertex.wgsl?raw';
-import fragmentShaderCode from './shaders/testFragment.wgsl?raw';
+import vertexShaderCode from './shaders/VertexShader.wgsl?raw';
+import fragmentShaderCode from './shaders/FragmentShader.wgsl?raw';
 
 import type { Instance, Mesh } from "./Structs";
 import { World } from "./World";
 import { Wrapper } from "./Wrapper";
-
-import { buildTLAS } from "./TlasBuilder";
 
 function makeViewProjection(
   cameraPos: vec3,
@@ -308,7 +306,7 @@ export class Renderer
 
 
         // Tlas 빌드하기
-        const TlasArray : Float32Array = buildTLAS(InstanceArray, MeshArray, MeshIDToIndexMap);
+        const TlasArray : Float32Array = new Float32Array();
 
 
         // Instance 정보들과 MeshDescriptor정보들을 RawData로 변환
