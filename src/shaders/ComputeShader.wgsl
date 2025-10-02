@@ -755,56 +755,68 @@ fn ComputeBRDF(HitPointToLight: vec3<f32>, HitPointToRayStart: vec3<f32>, HitNor
 fn SampleNextPath(HitPointToRayStart: vec3<f32>, HitNormal: vec3<f32>, HitMaterial: Material, pRandomSeed : ptr<function, u32>) -> PathSample
 {
 
-    let V               : vec3<f32>     = HitPointToRayStart;
-    let N               : vec3<f32>     = HitNormal;
+    let V = HitPointToRayStart;
+    let N = HitNormal;
 
-    var OutPathSample   : PathSample    = PathSample();
-    var PDF             : f32           = 0.0;
+    var outSample = PathSample();
 
+    let baseColor = vec3f(1.0);//HitMaterial.BaseColor.rgb;
+    let metallic = HitMaterial.Metalness;
+    let roughness = HitMaterial.Roughness;
 
-    let baseColor           = HitMaterial.BaseColor.rgb;
-    let metallic            = HitMaterial.Metalness;
-    let F0                  = mix(vec3f(0.04), baseColor, metallic);
-
-    let specularColor       = mix(F0, baseColor, metallic);
-    let diffuseColor        = baseColor * (1.0 - metallic);
-
-    let specularWeight      = max(specularColor.r, max(specularColor.g, specularColor.b));
-    let diffuseWeight       = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
+    // 경로 선택 확률 계산 (이전과 동일)
+    let F0 = mix(vec3f(0.04), baseColor, metallic);
+    let specularColor = mix(F0, baseColor, metallic);
+    let diffuseColor = baseColor * (1.0 - metallic);
+    let specularWeight = max(specularColor.r, max(specularColor.g, specularColor.b));
+    let diffuseWeight = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
     let specularProbability = specularWeight / max(specularWeight + diffuseWeight, 0.0001);
 
-
-
-    // 2. 경로에 따라 방향 샘플링
     let onb = CreateONB(N);
 
-    if (Random(pRandomSeed) < specularProbability) // 정반사
-    {
-        let H_tangent = SampleGGX(pRandomSeed, HitMaterial.Roughness);
+    if (Random(pRandomSeed) < specularProbability) { // 정반사 경로
+        let H_tangent = SampleGGX(pRandomSeed, roughness);
         let H = onb * H_tangent;
+        outSample.Direction = reflect(-V, H);
 
-        OutPathSample.Direction = reflect(-V, H);
-        
-        let D = GetGGXDistributionFactor(N, H, HitMaterial.Roughness);
-        PDF = (D * max(0.0, dot(N, H))) / max(4.0 * dot(V, H), 0.0001);
-    } else // 난반사
-    {
+        // --- 가중치 계산 수정 ---
+        // 정반사 경로의 가중치는 프레넬(F) 항과 기하(G) 항의 영향을 받습니다.
+        // PDF와의 상쇄를 고려하면 최종 가중치는 아래와 같이 더 간단해집니다.
+        let VdotH = max(dot(V, H), 0.0);
+        let NdotL = max(dot(N, outSample.Direction), 0.0);
+        let NdotV = max(dot(N, V), 0.0);
+        let NdotH = max(dot(N, H), 0.0);
+
+        if (NdotL <= 0.0) { // 유효하지 않은 반사
+             outSample.Weight = vec3f(0.0);
+        } else {
+             let F = GetFresnelSchlick(VdotH, F0);
+             let G = GetGeometrySmith(N, V, outSample.Direction, roughness);
+             // (D * G * F / denom) * NdotL / (D * NdotH / (4 * VdotH)) -> (F*G*NdotL*4*VdotH)/(4*NdotV*NdotL*NdotH)
+             //  -> (F * G * VdotH) / (NdotV * NdotH)
+             let weight_num = F * G * VdotH;
+             let weight_den = NdotV * NdotH;
+             outSample.Weight = weight_num / max(weight_den, 0.0001);
+        }
+
+    } else { // 난반사 경로
         let dir_tangent = SampleCosineHemisphere(pRandomSeed);
+        outSample.Direction = onb * dir_tangent;
 
-        OutPathSample.Direction = onb * dir_tangent;
+        // --- 가중치 계산 수정 ---
+        // 난반사 경로의 가중치는 (BRDF * cos) / PDF가 약분되어 diffuseColor가 됩니다.
+        // 에너지 보존을 위해 프레넬 항도 고려해줘야 합니다.
+        let VdotH = max(dot(V, normalize(V + outSample.Direction)), 0.0);
+        let F = GetFresnelSchlick(VdotH, F0);
+        let kS = F;
+        var kD = vec3f(1.0) - kS;
+        kD *= (1.0 - metallic);
         
-        PDF = max(0.0, dot(N, OutPathSample.Direction)) / 3.141592;
+        // 최종 난반사 가중치. (PDF와 상쇄 후)
+        outSample.Weight = kD * diffuseColor;
     }
 
-    // 3. 최종 가중치 계산 및 반환
-    let Cosine = max(0.0, dot(N, OutPathSample.Direction));
-    
-    // 샘플링이 유효하지 않은 경우 (예: 방향이 표면 아래로 향함) 가중치를 0으로 처리
-    if (PDF <= 0.0 || Cosine <= 0.0) { return PathSample(vec3f(0.0), vec3f(0.0)); }
-
-    OutPathSample.Weight = ComputeBRDF(OutPathSample.Direction, V, N, HitMaterial) * Cosine / PDF;
-
-    return OutPathSample;
+    return outSample;
 }
 
 //==========================================================================
@@ -881,15 +893,11 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 
             if (LightContribution.w == 0.0) { continue; }
 
-            //ResultColor += Weight * LightContribution.rgb * CurrentLight.Color * CurrentLight.Intensity;
+            ResultColor += Weight * LightContribution.rgb * CurrentLight.Color * CurrentLight.Intensity;
         }
-
 
         // Indirect Light 계산
         let NextPathSample : PathSample = SampleNextPath(-CurrentRay.Direction, HitNormal, HitMaterial, &RandomSeed);
-
-        ResultColor = (NextPathSample.Direction + 1.0) / 2.0;
-
         Weight *= NextPathSample.Weight;
         CurrentRay = Ray(HitPoint, NextPathSample.Direction);
     }

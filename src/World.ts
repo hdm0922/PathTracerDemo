@@ -98,7 +98,7 @@ export class World
             Position    : vec3.create(),
             LightType   : 0,
 
-            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(1, 0, -1)),
+            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(1, 0, 0)),
             Intensity   : 10,
 
             Color       : vec3.fromValues(1,1,1),
@@ -113,7 +113,7 @@ export class World
             Position    : vec3.fromValues(1,0,0),
             LightType   : 1,
 
-            Direction   : vec3.create(),
+            Direction   : vec3.fromValues(1,0,0),
             Intensity   : 144,
 
             Color       : vec3.fromValues(1,1,1),
