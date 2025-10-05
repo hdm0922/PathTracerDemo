@@ -99,7 +99,7 @@ export class World
             LightType   : 0,
 
             Direction   : vec3.normalize(vec3.create(), vec3.fromValues(1, 0, 0)),
-            Intensity   : 1,
+            Intensity   : 10,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0,
@@ -129,7 +129,7 @@ export class World
             LightType   : 2,
 
             Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, -1, 0)),
-            Intensity   : 20,
+            Intensity   : 10,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0.4,
