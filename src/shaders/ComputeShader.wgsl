@@ -31,7 +31,6 @@ struct Instance
     ModelMatrix         : mat4x4<f32>,
     ModelMatrix_Inverse : mat4x4<f32>,
 
-    Padding_0           : vec3<u32>,
     MeshID              : u32,
 };
 
@@ -46,7 +45,6 @@ struct MeshDescriptor
 
     MaterialOffset              : u32,
     TextureOffset               : u32,
-    Padding_0                   : vec2<u32>,
 };
 
 
@@ -64,7 +62,6 @@ struct Material
 
     NormalScale         : vec2<f32>,
     IOR                 : f32,
-    Padding_0           : u32,
 
     BaseColorTextureID      : u32,
     ORMTextureID            : u32,
@@ -86,10 +83,7 @@ struct Light
     Area        : f32,
 
     U           : vec3<f32>,
-    Padding_0   : u32,
-
     V           : vec3<f32>,
-    Padding_1   : u32,
 }
 
 
@@ -97,13 +91,8 @@ struct Light
 struct Vertex
 {
     Position: vec3<f32>,
-    Padding_0: u32,
-
     Normal: vec3<f32>,
-    Padding_1: u32,
-
     UV: vec2<f32>,
-    Padding_2: vec2<u32>
 };
 
 
@@ -162,6 +151,13 @@ struct PathSample
 
 const PI : f32 = 3.141592;
 
+const STRIDE_INSTANCE : u32 = 33u;
+const STRIDE_DESCRIPTOR : u32 = 6u;
+const STRIDE_VERTEX : u32 = 8u;
+const STRIDE_MATERIAL : u32 = 19u;
+const STRIDE_LIGHT : u32 = 18u;
+const STRIDE_BLAS : u32 = 8u;
+
 //==========================================================================
 // GPU Bindings ============================================================
 //==========================================================================
@@ -181,7 +177,7 @@ const PI : f32 = 3.141592;
 
 fn GetInstance(InstanceID : u32) -> Instance
 {
-    let Offset : u32 = InstanceID * 36u;
+    let Offset : u32 = STRIDE_INSTANCE * InstanceID;
 
     var OutInstance : Instance = Instance();
 
@@ -206,7 +202,7 @@ fn GetInstance(InstanceID : u32) -> Instance
     }
 
     // Mesh ID
-    OutInstance.MeshID = SceneBuffer[Offset + 35u];
+    OutInstance.MeshID = SceneBuffer[Offset + 32u];
 
     return OutInstance;
 }
@@ -214,7 +210,7 @@ fn GetInstance(InstanceID : u32) -> Instance
 fn GetMeshDescriptor(MeshID : u32) -> MeshDescriptor
 {
 
-    let Offset : u32 = UniformBuffer.Offset_MeshDescriptorBuffer + (8u * MeshID);
+    let Offset : u32 = UniformBuffer.Offset_MeshDescriptorBuffer + (STRIDE_DESCRIPTOR * MeshID);
 
     var OutMeshDescriptor : MeshDescriptor = MeshDescriptor();
 
@@ -231,7 +227,7 @@ fn GetMeshDescriptor(MeshID : u32) -> MeshDescriptor
 fn GetMaterial(MaterialID : u32) -> Material
 {
 
-    let Offset : u32 = UniformBuffer.Offset_MeshDescriptorBuffer + (20u * MaterialID);
+    let Offset : u32 = UniformBuffer.Offset_MeshDescriptorBuffer + (STRIDE_MATERIAL * MaterialID);
 
     var OutMaterial : Material = Material();
 
@@ -254,17 +250,17 @@ fn GetMaterial(MaterialID : u32) -> Material
     OutMaterial.NormalScale.y       = bitcast<f32>(SceneBuffer[Offset + 13u]);
     OutMaterial.IOR                 = bitcast<f32>(SceneBuffer[Offset + 14u]);
 
-    OutMaterial.BaseColorTextureID  = SceneBuffer[Offset + 16u];
-    OutMaterial.ORMTextureID        = SceneBuffer[Offset + 17u];
-    OutMaterial.EmissiveTextureID   = SceneBuffer[Offset + 18u];
-    OutMaterial.NormalTextureID     = SceneBuffer[Offset + 19u];
+    OutMaterial.BaseColorTextureID  = SceneBuffer[Offset + 15u];
+    OutMaterial.ORMTextureID        = SceneBuffer[Offset + 16u];
+    OutMaterial.EmissiveTextureID   = SceneBuffer[Offset + 17u];
+    OutMaterial.NormalTextureID     = SceneBuffer[Offset + 18u];
 
     return OutMaterial;
 }
 
 fn GetLight(LightID : u32) -> Light
 {
-    let Offset : u32 = UniformBuffer.Offset_LightBuffer + (20u * LightID);
+    let Offset : u32 = UniformBuffer.Offset_LightBuffer + (STRIDE_LIGHT * LightID);
 
     var OutLight : Light = Light();
 
@@ -278,7 +274,7 @@ fn GetLight(LightID : u32) -> Light
     OutLight.Area = bitcast<f32>(SceneBuffer[Offset + 11u]);
 
     OutLight.U = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 12u], SceneBuffer[Offset + 13u], SceneBuffer[Offset + 14u]));
-    OutLight.V = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 16u], SceneBuffer[Offset + 17u], SceneBuffer[Offset + 18u]));
+    OutLight.V = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 15u], SceneBuffer[Offset + 16u], SceneBuffer[Offset + 17u]));
 
     return OutLight;
 }
@@ -286,7 +282,7 @@ fn GetLight(LightID : u32) -> Light
 fn GetBVHNode(InMeshDescriptor : MeshDescriptor, BlasID : u32) -> BVHNode
 {
 
-    let Offset: u32 = UniformBuffer.Offset_BlasBuffer + InMeshDescriptor.BlasOffset + (8u * BlasID);
+    let Offset: u32 = UniformBuffer.Offset_BlasBuffer + InMeshDescriptor.BlasOffset + (STRIDE_BLAS * BlasID);
 
     var OutBVHNode: BVHNode = BVHNode();
 
@@ -301,13 +297,13 @@ fn GetBVHNode(InMeshDescriptor : MeshDescriptor, BlasID : u32) -> BVHNode
 
 fn GetVertex(InMeshDescriptor : MeshDescriptor, VertexID : u32) -> Vertex
 {
-    let Offset : u32 = InMeshDescriptor.VertexOffset + (12u * VertexID);
+    let Offset : u32 = InMeshDescriptor.VertexOffset + (STRIDE_VERTEX * VertexID);
 
     var OutVertex: Vertex = Vertex();
 
     OutVertex.Position  = bitcast<vec3<f32>>(vec3<u32>(GeometryBuffer[Offset + 0u], GeometryBuffer[Offset + 1u], GeometryBuffer[Offset + 2u]));
-    OutVertex.Normal    = bitcast<vec3<f32>>(vec3<u32>(GeometryBuffer[Offset + 4u], GeometryBuffer[Offset + 5u], GeometryBuffer[Offset + 6u]));
-    OutVertex.UV        = bitcast<vec2<f32>>(vec2<u32>(GeometryBuffer[Offset + 8u], GeometryBuffer[Offset + 9u]));
+    OutVertex.Normal    = bitcast<vec3<f32>>(vec3<u32>(GeometryBuffer[Offset + 3u], GeometryBuffer[Offset + 4u], GeometryBuffer[Offset + 5u]));
+    OutVertex.UV        = bitcast<vec2<f32>>(vec2<u32>(GeometryBuffer[Offset + 6u], GeometryBuffer[Offset + 7u]));
 
     return OutVertex;
 }
@@ -809,20 +805,13 @@ fn SampleNextPath(HitPointToRayStart: vec3<f32>, HitNormal: vec3<f32>, HitMateri
         }
 
     } else { // 난반사 경로
+  // --- 난반사 경로 (수정된 부분) ---
         let dir_tangent = SampleCosineHemisphere(pRandomSeed);
         outSample.Direction = onb * dir_tangent;
 
-        // --- 가중치 계산 수정 ---
-        // 난반사 경로의 가중치는 (BRDF * cos) / PDF가 약분되어 diffuseColor가 됩니다.
-        // 에너지 보존을 위해 프레넬 항도 고려해줘야 합니다.
-        let VdotH = max(dot(V, normalize(V + outSample.Direction)), 0.0);
-        let F = Frensel(VdotH, F0);
-        let kS = F;
-        var kD = vec3f(1.0) - kS;
-        kD *= (1.0 - metallic);
-        
-        // 최종 난반사 가중치. (PDF와 상쇄 후)
-        outSample.Weight = kD * diffuseColor;
+        // 최종 난반사 가중치는 diffuseColor 입니다.
+        // (BRDF * cos) / PDF 가 완벽하게 상쇄된 결과입니다.
+        outSample.Weight = diffuseColor;    
     }
 
     return outSample;
@@ -856,19 +845,15 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     var CurrentRay          : Ray       = GenerateRayFromThreadID(ThreadID.xy);
     var ResultColor         : vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 
-    let EnvironmentColor    : vec3<f32> = vec3<f32>(0.2, 0.1, 0.1);
+    let EnvironmentColor    : vec3<f32> = vec3<f32>(0.1, 0.4, 0.7);
     var Throughput          : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
 
 
-
-
-
+    
     // let TestHit : HitResult = TraceRay(CurrentRay);
     // if (TestHit.IsValidHit)
     // {
     //     let meshID = GetInstance(TestHit.InstanceID).MeshID;
-    //     if (TestHit.InstanceID == 0u) { ResultColor.b = 1.0; }
-
     //     textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ResultColor, 1.0));
     //     return;
     // }
@@ -892,18 +877,6 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         let HitPoint            : vec3<f32>         = CurrentRay.Start + (HitPrimitiveData.HitDistance * CurrentRay.Direction);
         let HitNormal           : vec3<f32>         = GetHitNormal(HitPoint, HitPrimitive);
         let HitMaterial         : Material          = GetMaterial(HitPrimitive.MaterialID);
-
-        let bHitPointIsLight    : bool              = length(HitMaterial.EmissiveColor) * HitMaterial.EmissiveIntensity > 0.0;
-
-        // Ray가 광원에 직접 닿았을 경우
-        if (bHitPointIsLight)
-        {
-            // Camera로 바로 들어오는 빛이라면 계산
-            if (BounceDepth == 0) { ResultColor = HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor; }
-            
-            // 이전 BounceDepth의 NEE로 처리된 양이므로 별도의 연산 없이 break
-            break;
-        }
 
         // Direct Light 계산 : NEE(Next Event Estimation) 기법
         for (var LightID : u32 = 0u; LightID < UniformBuffer.LightSourceCount; LightID++)
@@ -929,6 +902,9 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         Throughput *= NextPathSample.Weight;
         CurrentRay = Ray(HitPoint, NextPathSample.Direction);
     }
+
+
+
 
     // Write Pixel Color To AccumTexture
     let ColorUsed       : vec4<f32> = textureLoad(SceneTexture, ThreadID.xy, 0);

@@ -5,6 +5,7 @@ import { vec3, mat4 } from "gl-matrix";
 
 import type { Instance, Mesh, Light } from './Structs.ts';
 import { buildBVH } from './BlasBuilder.ts';
+import { ResourceManager } from './ResourceManager.ts';
 
 export class World 
 {
@@ -93,8 +94,10 @@ export class World
             MeshID      : "Lamp",
             ModelMatrix : mat4.identity(mat4.create()),
         };
-        const LampTranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(0, -1, 0));
-        LampInstance.ModelMatrix = LampTranslationMatrix;
+
+        const LampScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(2,2, 2));
+        const LampTranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(0, -0.5, -2));
+        LampInstance.ModelMatrix = mat4.mul(mat4.create(), LampTranslationMatrix, LampScaleMatrix);
 
 
         // Add Bench Instance
@@ -153,8 +156,8 @@ export class World
             V           : vec3.fromValues(0,0,0.2),
         }
 
-        //this.InstancesPool.set("Lamp_0", LampInstance);
         this.InstancesPool.set("Bench_0", BenchInstance);
+        //this.InstancesPool.set("Lamp_0", LampInstance);
 
         this.Lights.push(DirectionalLight_0);
         this.Lights.push(PointLight_0);
@@ -163,5 +166,31 @@ export class World
         return;
     }
 
+    public PackWorldData() : [Array<Instance>, Array<Mesh>, Map<string, number>]
+    {
+        function convertMapToArray<T>(InMap: Map<string, T>): [T[], Map<string, number>]
+        {
+            const ArrayData: T[] = [...InMap.values()];
+
+            const IDToIndexMap: Map<string, number> = new Map<string, number>();
+            {
+                const IDData: string[] = [...InMap.keys()];
+
+                for (let iter=0; iter<IDData.length; iter++)
+                    IDToIndexMap.set(IDData[iter], iter);
+            }
+
+            return [ArrayData, IDToIndexMap];
+        }
+        
+        const InstanceArray = convertMapToArray<Instance>(this.InstancesPool)[0];
+
+        const UsedMeshes: Map<string, Mesh> = new Map<string, Mesh>();
+        for (const instance of InstanceArray) UsedMeshes.set(instance.MeshID, ResourceManager.MeshPool.get(instance.MeshID)!);
+
+        const [MeshArray, MeshIDToIndexMap] = convertMapToArray(UsedMeshes);
+        
+        return [InstanceArray, MeshArray, MeshIDToIndexMap];
+    }
 
 }

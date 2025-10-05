@@ -1,5 +1,7 @@
+import { ResourceManager } from "./ResourceManager";
 import { Renderer } from "./Renderer";
 import { World } from "./World";
+
 
 async function main()
 {
@@ -21,12 +23,15 @@ async function main()
 
   // Load
   await TestWorld.Load();
+  await ResourceManager.LoadResources();
 
-  
 
   // Initialize
   TestWorld.Initialize();
   TestRenderer.Initialize(TestWorld);
+
+
+  //TestRenderer.TEST_Pack();
 
 
   // Loop

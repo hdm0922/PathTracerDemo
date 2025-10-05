@@ -4,9 +4,10 @@ import computeShaderCode from './shaders/ComputeShader.wgsl?raw';
 import vertexShaderCode from './shaders/VertexShader.wgsl?raw';
 import fragmentShaderCode from './shaders/FragmentShader.wgsl?raw';
 
-import type { Instance, Mesh } from "./Structs";
+import type { Instance, Mesh, MeshDescriptor, SerializedMesh } from "./Structs";
 import { World } from "./World";
 import { Wrapper } from "./Wrapper";
+import { ResourceManager } from "./ResourceManager";
 
 function makeViewProjection(
   cameraPos: vec3,
@@ -167,6 +168,155 @@ export class Renderer
         this.Offset_MeshDescriptorBuffer = 0;
         this.Offset_IndexBuffer = 0;
         this.Offset_PrimitiveToMaterialBuffer = 0;
+    }
+
+    TEST_Pack() : [ArrayBuffer, ArrayBuffer, ArrayBuffer, ImageBitmap[]]
+    {
+
+        // World의 모든 정보 취합
+        const [InstanceArray, MeshArray, MeshIDToIndexMap] = this.World.PackWorldData();
+
+        // World의 정보들로부터 GPU에 올릴 데이터들 Serialize
+        let TlasData : Uint32Array; // TODO
+        let InstanceRawData : Uint32Array;
+        let LightRawData : Uint32Array;
+        let MeshDescriptorRawData : Uint32Array;
+        let SerializedMeshData : SerializedMesh;
+        {
+            TlasData = new Uint32Array();
+            InstanceRawData = ResourceManager.SerializeInstanceArray(InstanceArray, MeshIDToIndexMap);
+            LightRawData = ResourceManager.SerializeLightArray(this.World.Lights);
+
+            const MeshCount = MeshArray.length;
+            const ParsedMeshArray : Array<SerializedMesh> = new Array<SerializedMesh>(MeshCount);
+            for (let iter = 0; iter < MeshArray.length; iter++) ParsedMeshArray[iter] = ResourceManager.SerializeMesh(MeshArray[iter]);
+
+            // Merge Blas
+            let MergedBlasArray     : Uint32Array;
+            let BlasArrayDescriptor : Uint32Array;
+            {
+                const BlasArrays : Array<Uint32Array> = new Array<Uint32Array>();
+                for (let iter = 0; iter < MeshCount; iter++) BlasArrays.push(ParsedMeshArray[iter].BlasArray);
+
+                [MergedBlasArray, BlasArrayDescriptor] = ResourceManager.MergeArrays(BlasArrays);
+            }
+
+            // Merge Vertex
+            let MergedVertexArray     : Uint32Array;
+            let VertexArrayDescriptor : Uint32Array;
+            {
+                const VertexArrays : Array<Uint32Array> = new Array<Uint32Array>();
+                for (let iter = 0; iter < MeshCount; iter++) VertexArrays.push(ParsedMeshArray[iter].VertexArray);
+
+                [MergedVertexArray, VertexArrayDescriptor] = ResourceManager.MergeArrays(VertexArrays);
+            }
+
+            // Merge Index
+            let MergedIndexArray     : Uint32Array;
+            let IndexArrayDescriptor : Uint32Array;
+            {
+                const IndexArrays : Array<Uint32Array> = new Array<Uint32Array>();
+                for (let iter = 0; iter < MeshCount; iter++) IndexArrays.push(ParsedMeshArray[iter].IndexArray);
+
+                [MergedIndexArray, IndexArrayDescriptor] = ResourceManager.MergeArrays(IndexArrays);
+            }
+
+            // Merge PrimitiveToMaterial
+            let MergedPrimitiveToMaterialArray     : Uint32Array;
+            let PrimitiveToMaterialArrayDescriptor : Uint32Array;
+            {
+                const PrimitiveToMaterialArrays : Array<Uint32Array> = new Array<Uint32Array>();
+                for (let iter = 0; iter < MeshCount; iter++) PrimitiveToMaterialArrays.push(ParsedMeshArray[iter].PrimitiveToMaterialArray);
+
+                [MergedPrimitiveToMaterialArray, PrimitiveToMaterialArrayDescriptor] = ResourceManager.MergeArrays(PrimitiveToMaterialArrays);
+            }
+
+            // Merge Material
+            let MergedMaterialArray     : Uint32Array;
+            let MaterialArrayDescriptor : Uint32Array;
+            {
+                const MaterialArrays : Array<Uint32Array> = new Array<Uint32Array>();
+                for (let iter = 0; iter < MeshCount; iter++) MaterialArrays.push(ParsedMeshArray[iter].MaterialArray);
+
+                [MergedMaterialArray, MaterialArrayDescriptor] = ResourceManager.MergeArrays(MaterialArrays);
+            }
+
+            // Merge Texture TODO
+            // ...
+
+            SerializedMeshData =
+            {
+                BlasArray : MergedBlasArray,
+                VertexArray : MergedVertexArray,
+                IndexArray : MergedIndexArray,
+                PrimitiveToMaterialArray : MergedPrimitiveToMaterialArray,
+                MaterialArray : MergedMaterialArray,
+                TextureArray : [] // TODO
+            }
+
+            // Make MeshDescriptorArray
+            const MeshDescriptorArray = new Array<MeshDescriptor>(MeshCount);
+            for (let iter = 0; iter < MeshCount; iter++)
+            {
+                MeshDescriptorArray[iter] =
+                {
+                    BlasOffset : BlasArrayDescriptor[iter],
+                    VertexOffset : VertexArrayDescriptor[iter],
+                    IndexOffset : IndexArrayDescriptor[iter],
+                    PrimitiveToMaterialOffset : PrimitiveToMaterialArrayDescriptor[iter],
+                    MaterialOffset : MaterialArrayDescriptor[iter],
+                    TextureOffset : -1 // TODO
+                }
+            }
+
+            MeshDescriptorRawData = ResourceManager.SerializeMeshDescriptorArray(MeshDescriptorArray);
+        }
+
+        // Scene Buffer에 들어갈 데이터 채우기 | Instance + Light + MeshDescriptor + Material
+        const ArraysInSceneBuffer  = [InstanceRawData, LightRawData, MeshDescriptorRawData, SerializedMeshData.MaterialArray];
+        const [SceneBufferData, SceneBufferOffsets] = ResourceManager.MergeArrays(ArraysInSceneBuffer);
+        {
+            this.Offset_LightBuffer = SceneBufferOffsets[1];
+            this.Offset_MeshDescriptorBuffer = SceneBufferOffsets[2];
+            this.Offset_MaterialBuffer = SceneBufferOffsets[3];
+        }
+
+        // Geometry Buffer에 들어갈 데이터 채우기 | Vertex + Index + PrimitiveToMaterial
+        const ArraysInGeometryBuffer = [SerializedMeshData.VertexArray, SerializedMeshData.IndexArray, SerializedMeshData.PrimitiveToMaterialArray];
+        const [GeometryBufferData, GeometryBufferOffsets] = ResourceManager.MergeArrays(ArraysInGeometryBuffer);
+        {
+            this.Offset_IndexBuffer = GeometryBufferOffsets[1];
+            this.Offset_PrimitiveToMaterialBuffer = GeometryBufferOffsets[2];
+        }
+
+        // Accel Buffer에 들어갈 데이터 채우기 | Tlas + Blas
+        const ArraysInAccelBuffer = [TlasData, SerializedMeshData.BlasArray];
+        const [AccelBufferData, AccelBufferOffsets] = ResourceManager.MergeArrays(ArraysInAccelBuffer);
+        {
+            this.Offset_BlasBuffer = AccelBufferOffsets[1];
+        }
+
+
+
+        const SceneBufferRawData : ArrayBuffer = new ArrayBuffer(4 * SceneBufferData.length);
+        {
+            const Uint32View : Uint32Array = new Uint32Array(SceneBufferRawData);
+            Uint32View.set(SceneBufferData);
+        }
+
+        const GeometryBufferRawData : ArrayBuffer = new ArrayBuffer(4 * GeometryBufferData.length);
+        {
+            const Uint32View : Uint32Array = new Uint32Array(GeometryBufferRawData);
+            Uint32View.set(GeometryBufferData);
+        }
+
+        const AccelBufferRawData : ArrayBuffer = new ArrayBuffer(4 * AccelBufferData.length);
+        {
+            const Uint32View : Uint32Array = new Uint32Array(AccelBufferRawData);
+            Uint32View.set(AccelBufferData);
+        }
+
+        return [SceneBufferRawData, GeometryBufferRawData, AccelBufferRawData, SerializedMeshData.TextureArray];
     }
 
     PackWorldDataToArrayBuffers(World: World): [ArrayBuffer, ArrayBuffer, ArrayBuffer, ImageBitmap[]]
@@ -343,6 +493,7 @@ export class Renderer
         this.Offset_IndexBuffer = MergedMeshRawData.VertexArray.length;
         this.Offset_PrimitiveToMaterialBuffer = this.Offset_IndexBuffer + MergedMeshRawData.IndexArray.length;
 
+
         const GeometryBufferLength = this.Offset_PrimitiveToMaterialBuffer + MergedMeshRawData.PrimitiveToMaterialArray.length;
         const GeometryBufferData: ArrayBuffer = new ArrayBuffer(GeometryBufferLength * 4);
         {
@@ -381,8 +532,8 @@ export class Renderer
         this.FrameCount = 0;
 
         // Build Scene
-        const [SceneBufferData, GeometryBufferData, AccelBufferData, ImageBitmaps] = this.PackWorldDataToArrayBuffers(World);
-
+        const [SceneBufferData, GeometryBufferData, AccelBufferData, ImageBitmaps] = this.TEST_Pack();
+        //const [SceneBufferData, GeometryBufferData, AccelBufferData, ImageBitmaps] = this.PackWorldDataToArrayBuffers(World);
 
         // Create Uniform Buffer
         {
@@ -540,9 +691,9 @@ export class Renderer
         this.FrameCount++;
 
         // Camera Property
-        const camDir = vec3.normalize(vec3.create(), vec3.fromValues(0,0,-1));
+        const originTocamPosDir = vec3.normalize(vec3.create(), vec3.fromValues(0,0,-1));
         const camDist = 4;
-        const camPos = vec3.scale(vec3.create(), camDir, camDist);
+        const camPos = vec3.scale(vec3.create(), originTocamPosDir, camDist);
         const VP = makeViewProjection(camPos, this.Canvas.width / this.Canvas.height);
         const VPINV = mat4.invert(mat4.create(), VP);
 
