@@ -27,10 +27,12 @@ export class World
 
         // Loading Models ...
         const LampMesh = await this.LoadModel("../assets/Lamp.glb");
+        const BenchMesh = await this.LoadModel("../assets/Bench.glb");
         //const SofaMesh = await this.LoadModel("../assets/Sofa.glb");
 
         // Registering Models ...
         this.MeshesPool.set("Lamp", LampMesh);
+        this.MeshesPool.set("Bench", BenchMesh);
         //this.MeshesPool.set("Sofa", SofaMesh);
 
         return;
@@ -86,12 +88,25 @@ export class World
     {
 
         // Add Lamp Instance
-        const Instance_0: Instance =
+        const LampInstance: Instance =
         {
             MeshID      : "Lamp",
             ModelMatrix : mat4.identity(mat4.create()),
         };
+        const LampTranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(0, -1, 0));
+        LampInstance.ModelMatrix = LampTranslationMatrix;
 
+
+        // Add Bench Instance
+        const BenchInstance : Instance =
+        {
+            MeshID      : "Bench",
+            ModelMatrix : mat4.identity(mat4.create()),
+        };
+
+        const BenchScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(0.01, 0.01, 0.01));
+        const BenchTranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(-1.5, 0, 0));
+        BenchInstance.ModelMatrix =  mat4.mul(mat4.create(), BenchTranslationMatrix, BenchScaleMatrix);
 
         const DirectionalLight_0 : Light =
         {
@@ -138,7 +153,8 @@ export class World
             V           : vec3.fromValues(0,0,0.2),
         }
 
-        this.InstancesPool.set("Lamp_0", Instance_0);
+        //this.InstancesPool.set("Lamp_0", LampInstance);
+        this.InstancesPool.set("Bench_0", BenchInstance);
 
         this.Lights.push(DirectionalLight_0);
         this.Lights.push(PointLight_0);

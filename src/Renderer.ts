@@ -221,8 +221,6 @@ export class Renderer
             [MeshArray, MeshIDToIndexMap] = convertMapToArray(UsedMeshes);
         }
 
-
-
         // 모든 메시를 하나의 RawData로 병합하기
         let MergedMeshRawData: MeshRawData;
         const MeshDescriptorArray : Array<MeshDescriptor> = new Array<MeshDescriptor>(MeshArray.length);
@@ -304,7 +302,6 @@ export class Renderer
 
         }
 
-
         // Tlas 빌드하기
         const TlasArray : Float32Array = new Float32Array();
 
@@ -326,8 +323,6 @@ export class Renderer
             MeshDescriptorRawData[Offset + 5] = MeshDescriptorArray[iter].TextureOffset;
         }
     
-
-
         // SceneBuffer에 쓸 데이터 준비하기 (Instance, MeshDescriptor, Material)
         this.Offset_MeshDescriptorBuffer = InstanceRawData.length;
         this.Offset_MaterialBuffer = this.Offset_MeshDescriptorBuffer + MeshDescriptorRawData.length;
@@ -545,8 +540,8 @@ export class Renderer
         this.FrameCount++;
 
         // Camera Property
-        const camDir = vec3.normalize(vec3.create(), vec3.fromValues(0,1,1));
-        const camDist = 1.3;
+        const camDir = vec3.normalize(vec3.create(), vec3.fromValues(0,0,-1));
+        const camDist = 4;
         const camPos = vec3.scale(vec3.create(), camDir, camDist);
         const VP = makeViewProjection(camPos, this.Canvas.width / this.Canvas.height);
         const VPINV = mat4.invert(mat4.create(), VP);

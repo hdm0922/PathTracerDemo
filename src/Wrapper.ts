@@ -15,6 +15,7 @@ export class Wrapper
         const InstanceRawData: ArrayBuffer = new ArrayBuffer(ELEMENT_PER_INSTANCE * InstanceArray.length * 4);
 
         const Float32View : Float32Array = new Float32Array(InstanceRawData);
+        const Uint32View : Uint32Array = new Uint32Array(InstanceRawData);
         for (let iter=0; iter<InstanceArray.length; iter++)
         {
             const InstanceOffset = ELEMENT_PER_INSTANCE * iter;
@@ -25,7 +26,7 @@ export class Wrapper
 
             Float32View.set(ModelMatrix,        InstanceOffset +  0);
             Float32View.set(ModelMatrixInverse, InstanceOffset + 16);
-            Float32View[InstanceOffset + 35] = MeshID;
+            Uint32View[InstanceOffset + 35] = MeshID;
         }
 
         return Float32View;

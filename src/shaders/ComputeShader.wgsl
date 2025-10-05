@@ -181,9 +181,9 @@ const PI : f32 = 3.141592;
 
 fn GetInstance(InstanceID : u32) -> Instance
 {
-    let Offset: u32 = InstanceID * 36u;
+    let Offset : u32 = InstanceID * 36u;
 
-    var OutInstance: Instance = Instance();
+    var OutInstance : Instance = Instance();
 
     // Model Matrix
     {
@@ -858,6 +858,22 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 
     let EnvironmentColor    : vec3<f32> = vec3<f32>(0.2, 0.1, 0.1);
     var Throughput          : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+
+
+
+
+
+    // let TestHit : HitResult = TraceRay(CurrentRay);
+    // if (TestHit.IsValidHit)
+    // {
+    //     let meshID = GetInstance(TestHit.InstanceID).MeshID;
+    //     if (TestHit.InstanceID == 0u) { ResultColor.b = 1.0; }
+
+    //     textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ResultColor, 1.0));
+    //     return;
+    // }
+    // if (true) { textureStore(AccumTexture, ThreadID.xy, vec4<f32>(EnvironmentColor, 1.0)); return; }
+
 
     // BounceDepth 만큼 Ray Trace
     for (var BounceDepth : u32 = 0u; BounceDepth < UniformBuffer.MAX_BOUNCE; BounceDepth++)
