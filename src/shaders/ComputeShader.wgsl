@@ -31,7 +31,6 @@ struct Instance
     ModelMatrix         : mat4x4<f32>,
     ModelMatrix_Inverse : mat4x4<f32>,
 
-    Padding_0           : vec3<u32>,
     MeshID              : u32,
 };
 
@@ -46,25 +45,23 @@ struct MeshDescriptor
 
     MaterialOffset              : u32,
     TextureOffset               : u32,
-    Padding_0                   : vec2<u32>,
 };
 
 
 
 struct Material
 {
-    BaseColor           : vec4<f32>,
-    EmissiveColor       : vec3<f32>,
-    EmissiveIntensity   : f32,
+    BaseColor               : vec4<f32>,
+    EmissiveColor           : vec3<f32>,
+    EmissiveIntensity       : f32,
 
-    Metalness           : f32,
-    Roughness           : f32,
-    BlendMode           : u32,   // OPAQUE: 0, MASK: 1, BLEND: 2
-    OpacityMask         : f32,   // AlphaCutOff Value For MASK Mode
+    Metalness               : f32,
+    Roughness               : f32,
+    BlendMode               : u32,   // OPAQUE: 0, MASK: 1, BLEND: 2
+    OpacityMask             : f32,   // AlphaCutOff Value For MASK Mode
 
-    NormalScale         : vec2<f32>,
-    IOR                 : f32,
-    Padding_0           : u32,
+    NormalScale             : vec2<f32>,
+    IOR                     : f32,
 
     BaseColorTextureID      : u32,
     ORMTextureID            : u32,
@@ -86,24 +83,16 @@ struct Light
     Area        : f32,
 
     U           : vec3<f32>,
-    Padding_0   : u32,
-
     V           : vec3<f32>,
-    Padding_1   : u32,
 }
 
 
 
 struct Vertex
 {
-    Position: vec3<f32>,
-    Padding_0: u32,
-
-    Normal: vec3<f32>,
-    Padding_1: u32,
-
-    UV: vec2<f32>,
-    Padding_2: vec2<u32>
+    Position    : vec3<f32>,
+    Normal      : vec3<f32>,
+    UV          : vec2<f32>,
 };
 
 
@@ -142,23 +131,34 @@ struct Triangle
 
 struct HitResult
 {
-    InstanceID  : u32,
-    PrimitiveID : u32,
-    HitDistance : f32,
-    IsValidHit  : bool,
+    IsValidHit      : bool,
+    InstanceID      : u32,
+    PrimitiveID     : u32,
+    HitDistance     : f32,
+
+    HitPoint        : vec3<f32>,
+    HitNormal       : vec3<f32>,
+    HitMaterialID   : u32,
 };
 
 
 
 struct PathSample
 {
-    Weight      : vec3<f32>,
+    Attenuation : vec3<f32>,
     Direction   : vec3<f32>,
 }
 
 //==========================================================================
 // Constants ===============================================================
 //==========================================================================
+
+const STRIDE_INSTANCE   : u32 = 33u;
+const STRIDE_LIGHT      : u32 = 18u;
+const STRIDE_DESCRIPTOR : u32 =  6u;
+const STRIDE_MATERIAL   : u32 = 19u;
+const STRIDE_VERTEX     : u32 =  8u;
+const STRIDE_BLAS       : u32 =  8u;
 
 const PI : f32 = 3.141592;
 
@@ -181,7 +181,7 @@ const PI : f32 = 3.141592;
 
 fn GetInstance(InstanceID : u32) -> Instance
 {
-    let Offset : u32 = InstanceID * 36u;
+    let Offset : u32 = STRIDE_INSTANCE * InstanceID;
 
     var OutInstance : Instance = Instance();
 
@@ -206,15 +206,36 @@ fn GetInstance(InstanceID : u32) -> Instance
     }
 
     // Mesh ID
-    OutInstance.MeshID = SceneBuffer[Offset + 35u];
+    OutInstance.MeshID = SceneBuffer[Offset + 32u];
 
     return OutInstance;
+}
+
+fn GetLight(LightID : u32) -> Light
+{
+    let Offset : u32 = UniformBuffer.Offset_LightBuffer + (STRIDE_LIGHT * LightID);
+
+    var OutLight : Light = Light();
+
+    OutLight.Position = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 0u], SceneBuffer[Offset + 1u], SceneBuffer[Offset + 2u]));
+    OutLight.LightType = SceneBuffer[Offset + 3u];
+
+    OutLight.Direction = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 4u], SceneBuffer[Offset + 5u], SceneBuffer[Offset + 6u]));
+    OutLight.Intensity = bitcast<f32>(SceneBuffer[Offset + 7u]);
+
+    OutLight.Color = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 8u], SceneBuffer[Offset + 9u], SceneBuffer[Offset + 10u]));
+    OutLight.Area = bitcast<f32>(SceneBuffer[Offset + 11u]);
+
+    OutLight.U = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 12u], SceneBuffer[Offset + 13u], SceneBuffer[Offset + 14u]));
+    OutLight.V = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 15u], SceneBuffer[Offset + 16u], SceneBuffer[Offset + 17u]));
+
+    return OutLight;
 }
 
 fn GetMeshDescriptor(MeshID : u32) -> MeshDescriptor
 {
 
-    let Offset : u32 = UniformBuffer.Offset_MeshDescriptorBuffer + (8u * MeshID);
+    let Offset : u32 = UniformBuffer.Offset_MeshDescriptorBuffer + (STRIDE_DESCRIPTOR * MeshID);
 
     var OutMeshDescriptor : MeshDescriptor = MeshDescriptor();
 
@@ -228,11 +249,9 @@ fn GetMeshDescriptor(MeshID : u32) -> MeshDescriptor
     return OutMeshDescriptor;
 }
 
-fn GetMaterial(MaterialID : u32) -> Material
+fn GetMaterial(InMeshDescriptor : MeshDescriptor, MaterialID : u32) -> Material
 {
-
-    let Offset : u32 = UniformBuffer.Offset_MeshDescriptorBuffer + (20u * MaterialID);
-
+    let Offset      : u32       = UniformBuffer.Offset_MaterialBuffer + InMeshDescriptor.MaterialOffset + (STRIDE_MATERIAL * MaterialID);
     var OutMaterial : Material = Material();
 
     OutMaterial.BaseColor.r         = bitcast<f32>(SceneBuffer[Offset + 0u]);
@@ -254,39 +273,18 @@ fn GetMaterial(MaterialID : u32) -> Material
     OutMaterial.NormalScale.y       = bitcast<f32>(SceneBuffer[Offset + 13u]);
     OutMaterial.IOR                 = bitcast<f32>(SceneBuffer[Offset + 14u]);
 
-    OutMaterial.BaseColorTextureID  = SceneBuffer[Offset + 16u];
-    OutMaterial.ORMTextureID        = SceneBuffer[Offset + 17u];
-    OutMaterial.EmissiveTextureID   = SceneBuffer[Offset + 18u];
-    OutMaterial.NormalTextureID     = SceneBuffer[Offset + 19u];
+    OutMaterial.BaseColorTextureID  = SceneBuffer[Offset + 15u];
+    OutMaterial.ORMTextureID        = SceneBuffer[Offset + 16u];
+    OutMaterial.EmissiveTextureID   = SceneBuffer[Offset + 17u];
+    OutMaterial.NormalTextureID     = SceneBuffer[Offset + 18u];
 
     return OutMaterial;
-}
-
-fn GetLight(LightID : u32) -> Light
-{
-    let Offset : u32 = UniformBuffer.Offset_LightBuffer + (20u * LightID);
-
-    var OutLight : Light = Light();
-
-    OutLight.Position = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 0u], SceneBuffer[Offset + 1u], SceneBuffer[Offset + 2u]));
-    OutLight.LightType = SceneBuffer[Offset + 3u];
-
-    OutLight.Direction = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 4u], SceneBuffer[Offset + 5u], SceneBuffer[Offset + 6u]));
-    OutLight.Intensity = bitcast<f32>(SceneBuffer[Offset + 7u]);
-
-    OutLight.Color = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 8u], SceneBuffer[Offset + 9u], SceneBuffer[Offset + 10u]));
-    OutLight.Area = bitcast<f32>(SceneBuffer[Offset + 11u]);
-
-    OutLight.U = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 12u], SceneBuffer[Offset + 13u], SceneBuffer[Offset + 14u]));
-    OutLight.V = bitcast<vec3<f32>>(vec3<u32>(SceneBuffer[Offset + 16u], SceneBuffer[Offset + 17u], SceneBuffer[Offset + 18u]));
-
-    return OutLight;
 }
 
 fn GetBVHNode(InMeshDescriptor : MeshDescriptor, BlasID : u32) -> BVHNode
 {
 
-    let Offset: u32 = UniformBuffer.Offset_BlasBuffer + InMeshDescriptor.BlasOffset + (8u * BlasID);
+    let Offset: u32 = UniformBuffer.Offset_BlasBuffer + InMeshDescriptor.BlasOffset + (STRIDE_BLAS * BlasID);
 
     var OutBVHNode: BVHNode = BVHNode();
 
@@ -301,13 +299,13 @@ fn GetBVHNode(InMeshDescriptor : MeshDescriptor, BlasID : u32) -> BVHNode
 
 fn GetVertex(InMeshDescriptor : MeshDescriptor, VertexID : u32) -> Vertex
 {
-    let Offset : u32 = InMeshDescriptor.VertexOffset + (12u * VertexID);
+    let Offset : u32 = InMeshDescriptor.VertexOffset + (STRIDE_VERTEX * VertexID);
 
     var OutVertex: Vertex = Vertex();
 
     OutVertex.Position  = bitcast<vec3<f32>>(vec3<u32>(GeometryBuffer[Offset + 0u], GeometryBuffer[Offset + 1u], GeometryBuffer[Offset + 2u]));
-    OutVertex.Normal    = bitcast<vec3<f32>>(vec3<u32>(GeometryBuffer[Offset + 4u], GeometryBuffer[Offset + 5u], GeometryBuffer[Offset + 6u]));
-    OutVertex.UV        = bitcast<vec2<f32>>(vec2<u32>(GeometryBuffer[Offset + 8u], GeometryBuffer[Offset + 9u]));
+    OutVertex.Normal    = bitcast<vec3<f32>>(vec3<u32>(GeometryBuffer[Offset + 3u], GeometryBuffer[Offset + 4u], GeometryBuffer[Offset + 5u]));
+    OutVertex.UV        = bitcast<vec2<f32>>(vec2<u32>(GeometryBuffer[Offset + 6u], GeometryBuffer[Offset + 7u]));
 
     return OutVertex;
 }
@@ -472,66 +470,81 @@ fn GetHitNormal(Point: vec3<f32>, InTriangle: Triangle) -> vec3<f32>
     return normalize(VertexAttribute_0 + VertexAttribute_1 + VertexAttribute_2);
 }
 
+fn TBNMatrix(N : vec3<f32>) -> mat3x3<f32>
+{
+    let WorldUp     : vec3<f32> = vec3<f32>(0.0, 1.0, 0.0);
+    let WorldRight  : vec3<f32> = vec3<f32>(1.0, 0.0, 0.0);
+
+    let IsNormalWorldUpSame : bool      = abs(dot(N, WorldUp)) > 0.9999;
+    let CrossVector         : vec3<f32> = select(WorldUp, WorldRight, IsNormalWorldUpSame);
+
+    let T     : vec3<f32> = normalize(cross(CrossVector, N));
+    let B     : vec3<f32> = cross(N, T);
+
+    return mat3x3<f32>(T, B, N);
+}
+
 //==========================================================================
 // Light Helpers ===========================================================
 //==========================================================================
 
-fn GetDirectionalLightContribution(InLight : Light, View : vec3<f32>, HitPoint : vec3<f32>, HitNormal : vec3<f32>, HitMaterial : Material) -> vec4<f32>
+fn DirectionalLightAttenuation(InLight : Light, HitInfo : HitResult, OutDirection : vec3<f32>) -> vec4<f32>
 {
-    let PointToLightDirection   : vec3<f32> = -InLight.Direction;
+    let L : vec3<f32> = -InLight.Direction;
+    let V : vec3<f32> = OutDirection;
+    let N : vec3<f32> = HitInfo.HitNormal;
 
-    let ShadowRay               : Ray       = Ray(HitPoint, PointToLightDirection);
-    let ShadowRayHitResult      : HitResult = TraceRay(ShadowRay);
+    let ShadowRay           : Ray       = Ray(HitInfo.HitPoint, L);
+    let ShadowRayHitResult  : HitResult = TraceRay(ShadowRay);
 
     if (ShadowRayHitResult.IsValidHit) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
 
-    let BRDFValue               : vec3<f32> = ComputeBRDF(PointToLightDirection, View, HitNormal, HitMaterial);
-    let LightContribution       : vec3<f32> = BRDFValue * max(dot(PointToLightDirection,HitNormal), 0.0);
+    // PDF -> Dirac-Delta Function
+    // Attenuation -> No Attenuation
+    let BRDF    : vec3<f32> = BRDF(HitInfo, L, V);
+    let Cosine  : f32       = max(dot(L, N), 0.0);
 
-    return vec4<f32>(LightContribution, 1.0);
+    return vec4<f32>(Cosine * BRDF, 1.0);
 }
 
-fn GetPointLightContribution(InLight : Light, View : vec3<f32>, HitPoint : vec3<f32>, HitNormal : vec3<f32>, HitMaterial : Material) -> vec4<f32>
+fn PointLightAttenuation(InLight : Light, HitInfo : HitResult, OutDirection : vec3<f32>) -> vec4<f32>
 {
-    let PointToLight            : vec3<f32> = InLight.Position - HitPoint;
-    let PointToLightDistance    : f32       = length(PointToLight);
-    let PointToLightDirection   : vec3<f32> = PointToLight / PointToLightDistance;
+    let PointToLight : vec3<f32> = InLight.Position - HitInfo.HitPoint;
 
-    let ShadowRay               : Ray       = Ray(HitPoint, PointToLightDirection);
-    let ShadowRayHitResult      : HitResult = TraceRay(ShadowRay);
+    let D : f32         = length(PointToLight);
+    let L : vec3<f32>   = PointToLight / D;
+    let V : vec3<f32>   = OutDirection;
+    let N : vec3<f32>   = HitInfo.HitNormal;
 
-    if (ShadowRayHitResult.IsValidHit && (ShadowRayHitResult.HitDistance < PointToLightDistance)) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+    let ShadowRay           : Ray       = Ray(HitInfo.HitPoint, L);
+    let ShadowRayHitResult  : HitResult = TraceRay(ShadowRay);
 
-    let Attenuation             : f32       = 1.0 / (PointToLightDistance * PointToLightDistance);
-    let BRDFValue               : vec3<f32> = ComputeBRDF(PointToLightDirection, View, HitNormal, HitMaterial);
-    let LightContribution       : vec3<f32> = BRDFValue * max(dot(PointToLightDirection, HitNormal), 0.0) * Attenuation;
+    if (ShadowRayHitResult.IsValidHit && (ShadowRayHitResult.HitDistance < D)) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
 
-    return vec4<f32>(LightContribution, 1.0);
+    // PDF -> Dirac-Delta Function
+    let Attenuation : f32       = 1.0 / (D * D);
+    let Cosine      : f32       = max(dot(L, N), 0.0);
+    let BRDF        : vec3<f32> = BRDF(HitInfo, L, V);
+
+    return vec4<f32>(Attenuation * Cosine * BRDF, 1.0);
 }
 
-fn GetRectLightContribution(InLight : Light, View : vec3<f32>, HitPoint : vec3<f32>, HitNormal : vec3<f32>, HitMaterial : Material, pRandomSeed : ptr<function, u32>) -> vec4<f32>
+fn RectLightAttenuation(InLight : Light, HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed : ptr<function, u32>) -> vec4<f32>
 {
     let Random_U : f32 = (Random(pRandomSeed) * 2.0) - 1.0;
     let Random_V : f32 = (Random(pRandomSeed) * 2.0) - 1.0;
 
     let SamplePoint : vec3<f32> = InLight.Position + (Random_U * InLight.U) + (Random_V * InLight.V);
+    var SampleLight : Light = InLight; SampleLight.Position = SamplePoint;
 
-    let PointToLight            : vec3<f32> = SamplePoint - HitPoint;
-    let PointToLightDistance    : f32       = length(PointToLight);
-    let PointToLightDirection   : vec3<f32> = PointToLight / PointToLightDistance;
+    let PointLightAttenuation : vec4<f32> = PointLightAttenuation(SampleLight, HitInfo, OutDirection);
+    if (!bool(PointLightAttenuation.w)) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
 
-    let ShadowRay               : Ray       = Ray(HitPoint, PointToLightDirection);
-    let ShadowRayHitResult      : HitResult = TraceRay(ShadowRay);
-
-    if (ShadowRayHitResult.IsValidHit && (ShadowRayHitResult.HitDistance < PointToLightDistance)) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
-
-    let Attenuation             : f32       = 1.0 / (PointToLightDistance * PointToLightDistance);
-    let LightCosine             : f32       = max(dot(-PointToLightDirection, InLight.Direction), 0.0);
-    let BRDFValue               : vec3<f32> = ComputeBRDF(PointToLightDirection, View, HitNormal, HitMaterial);
+    let L                       : vec3<f32> = normalize(SamplePoint - HitInfo.HitPoint);
+    let RectLightAttenuation    : f32       = max(dot(-L, InLight.Direction), 0.0);
     let InvPDF                  : f32       = InLight.Area;
 
-    let LightContribution       : vec3<f32> = BRDFValue * max(dot(PointToLightDirection, HitNormal), 0.0) * Attenuation * LightCosine * InvPDF;
-    return vec4<f32>(LightContribution, 1.0);
+    return vec4<f32>(PointLightAttenuation.rgb * RectLightAttenuation * InvPDF, 1.0);
 }
 
 //==========================================================================
@@ -572,14 +585,19 @@ fn Frensel(VdotH : f32, F0: vec3<f32>) -> vec3<f32>
     return F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
 }
 
-fn CreateONB(N : vec3<f32>) -> mat3x3<f32>
+fn SampleCosineHemisphere(pRandomSeed : ptr<function, u32>) -> vec3<f32>
 {
-    let sign_val = select(-1.0, 1.0, N.z >= 0.0);
-    let a = -1.0 / (sign_val + N.z);
-    let b = N.x * N.y * a;
-    let tangent = vec3f(1.0 + sign_val * N.x * N.x * a, sign_val * b, -sign_val * N.x);
-    let bitangent = vec3f(b, sign_val + N.y * N.y * a, -N.y);
-    return mat3x3f(tangent, bitangent, N);
+    let Random_1 : f32 = Random(pRandomSeed);
+    let Random_2 : f32 = Random(pRandomSeed);
+
+    let R       : f32 = sqrt(Random_1);
+    let Phi     : f32 = 2.0 * PI * Random_2;
+
+    let X   : f32 = R * cos(Phi);
+    let Y   : f32 = R * sin(Phi);
+    let Z   : f32 = sqrt(1.0 - Random_1);
+
+    return vec3<f32>(X, Y, Z);
 }
 
 fn SampleGGX(pRandomSeed : ptr<function, u32>, Roughness: f32) -> vec3<f32>
@@ -587,29 +605,17 @@ fn SampleGGX(pRandomSeed : ptr<function, u32>, Roughness: f32) -> vec3<f32>
     let Random_1 : f32 = Random(pRandomSeed);
     let Random_2 : f32 = Random(pRandomSeed);
 
-    let a = Roughness * Roughness;
-    let phi = 2.0 * PI * Random_1;
-    let cos_theta = sqrt((1.0 - Random_2) / (1.0 + (a * a - 1.0) * Random_2));
-    let sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+    let Alpha   : f32 = Roughness * Roughness;
+    let Phi     : f32 = 2.0 * PI * Random_1;
 
-    let h_x = sin_theta * cos(phi);
-    let h_y = sin_theta * sin(phi);
-    let h_z = cos_theta;
+    let CosTheta : f32 = sqrt((1.0 - Random_2) / (1.0 + (Alpha * Alpha - 1.0) * Random_2));
+    let SinTheta : f32 = sqrt(1.0 - CosTheta * CosTheta);
 
-    return normalize(vec3f(h_x, h_y, h_z));
-}
+    let H_X : f32 = SinTheta * cos(Phi);
+    let H_Y : f32 = SinTheta * sin(Phi);
+    let H_Z : f32 = CosTheta;
 
-fn SampleCosineHemisphere(pRandomSeed : ptr<function, u32>) -> vec3<f32>
-{
-    let Random_1 : f32 = Random(pRandomSeed);
-    let Random_2 : f32 = Random(pRandomSeed);
-
-    let r = sqrt(Random_1);
-    let phi = 2.0 * PI * Random_2;
-    let x = r * cos(phi);
-    let y = r * sin(phi);
-    let z = sqrt(max(0.0, 1.0 - Random_1));
-    return vec3f(x, y, z);
+    return normalize(vec3<f32>(H_X, H_Y, H_Z));
 }
 
 //==========================================================================
@@ -631,7 +637,6 @@ fn GenerateRayFromThreadID(ThreadID: vec2<u32>) -> Ray
 
 fn TraceRay(InRay: Ray) -> HitResult
 {
-
     var BestHitResult : HitResult = HitResult();
     var RayValidRange : vec2<f32> = vec2<f32>(1e-4, 1e10);
     
@@ -725,34 +730,51 @@ fn TraceRay(InRay: Ray) -> HitResult
         }
     }
 
-    BestHitResult.HitDistance = RayValidRange.y;
+    // 충돌했다면 충돌 지점의 정보 채워넣기
+    if (BestHitResult.IsValidHit)
+    {
+        BestHitResult.HitDistance                   = RayValidRange.y;
 
+        let HitInstance         : Instance          = GetInstance(BestHitResult.InstanceID);
+        let HitMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(HitInstance.MeshID);
+        let HitPrimitive        : Triangle          = GetTriangle(HitMeshDescriptor, BestHitResult.PrimitiveID);
+
+        BestHitResult.HitPoint                      = InRay.Start + (BestHitResult.HitDistance * InRay.Direction);
+        BestHitResult.HitNormal                     = GetHitNormal(BestHitResult.HitPoint, HitPrimitive);
+        BestHitResult.HitMaterialID                 = HitPrimitive.MaterialID;
+    }
+    
     return BestHitResult;
 }
 
-fn ComputeBRDF(HitPointToLightDirection : vec3<f32>, HitPointToRayStart : vec3<f32>, HitNormal : vec3<f32>, HitMaterial : Material) -> vec3<f32>
+fn BRDF(HitInfo : HitResult, InDirection : vec3<f32>, OutDirection : vec3<f32>) -> vec3<f32>
 {
-    let L : vec3<f32> = HitPointToLightDirection;
-    let V : vec3<f32> = HitPointToRayStart;
-    let N : vec3<f32> = HitNormal;
-    let H : vec3<f32> = normalize(V + L);
 
-    let BaseColor : vec3<f32> = vec3f(1.0); // TEMP : Use White As BaseColor
-    let Metalness : f32       = HitMaterial.Metalness;
-    let Roughness : f32       = HitMaterial.Roughness;
+    let L : vec3<f32> = InDirection;
+    let V : vec3<f32> = OutDirection;
+    let N : vec3<f32> = HitInfo.HitNormal;
+    let H : vec3<f32> = normalize(L + V);
 
     let NdotV : f32 = max(dot(N, V), 0.0);
     let NdotL : f32 = max(dot(N, L), 0.0);
     let NdotH : f32 = max(dot(N, H), 0.0);
     let VdotH : f32 = max(dot(V, H), 0.0);
 
+    let HitInstance : Instance = GetInstance(HitInfo.InstanceID);
+    let HitMeshDescriptor : MeshDescriptor = GetMeshDescriptor(HitInstance.MeshID);
+
+    let HitMaterial : Material  = GetMaterial(HitMeshDescriptor, HitInfo.HitMaterialID);
+    let BaseColor   : vec3<f32> = vec3f(1.0); // TEMP : Use White As BaseColor
+    let Metalness   : f32       = HitMaterial.Metalness;
+    let Roughness   : f32       = HitMaterial.Roughness;
+
     let F0  : vec3<f32> = mix(vec3f(0.04), BaseColor, Metalness);
     let D   : f32       = GGXDistribution(NdotH, Roughness);
     let G   : f32       = GeometryShadow(N, V, L, Roughness);
     let F   : vec3<f32> = Frensel(VdotH, F0);
 
-    let kS : vec3<f32> = F;
-    let kD : vec3<f32> = (1.0 - kS) * (1.0 - Metalness);
+    let kS  : vec3<f32> = F;
+    let kD  : vec3<f32> = (1.0 - kS) * (1.0 - Metalness);
 
     let BRDF_Diffuse    : vec3<f32> = (kD / PI) * BaseColor;
     let BRDF_Specular   : vec3<f32> = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
@@ -760,78 +782,58 @@ fn ComputeBRDF(HitPointToLightDirection : vec3<f32>, HitPointToRayStart : vec3<f
     return BRDF_Diffuse + BRDF_Specular;
 }
 
-fn SampleNextPath(HitPointToRayStart: vec3<f32>, HitNormal: vec3<f32>, HitMaterial: Material, pRandomSeed : ptr<function, u32>) -> PathSample
+fn SampleIndirectPath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed : ptr<function, u32>) -> PathSample
 {
-    // Gemini가 작성해 준 임시 로직 (추후 수정)
 
-    let V = HitPointToRayStart;
-    let N = HitNormal;
+    // HitInfo 해석
+    let HitInstance         : Instance          = GetInstance(HitInfo.InstanceID);
+    let HitMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(HitInstance.MeshID);
+    let HitMaterial         : Material          = GetMaterial(HitMeshDescriptor, HitInfo.HitMaterialID);
+    let BaseColor           : vec3<f32>         = HitMaterial.BaseColor.rgb;
+    let Metalness           : f32               = HitMaterial.Metalness;
+    let Roughness           : f32               = HitMaterial.Roughness;
 
-    var outSample = PathSample();
+    // 정반사 확률 P_specular 계산
+    let F0                  : vec3<f32> = mix(vec3f(0.04), BaseColor, Metalness);
+    let SpecularReflectance : f32       = dot(F0, vec3f(0.299, 0.587, 0.114));
+    let P_specular          : f32       = mix(SpecularReflectance, 1.0, Metalness);
 
-    let baseColor = vec3f(1.0);//HitMaterial.BaseColor.rgb;
-    let metallic = HitMaterial.Metalness;
-    let roughness = HitMaterial.Roughness;
-
-    // 경로 선택 확률 계산 (이전과 동일)
-    let F0 = mix(vec3f(0.04), baseColor, metallic);
-    let specularColor = mix(F0, baseColor, metallic);
-    let diffuseColor = baseColor * (1.0 - metallic);
-    let specularWeight = max(specularColor.r, max(specularColor.g, specularColor.b));
-    let diffuseWeight = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
-    let specularProbability = specularWeight / max(specularWeight + diffuseWeight, 0.0001);
-
-    let onb = CreateONB(N);
-
-    if (Random(pRandomSeed) < specularProbability) { // 정반사 경로
-        let H_tangent = SampleGGX(pRandomSeed, roughness);
-        let H = onb * H_tangent;
-        outSample.Direction = reflect(-V, H);
-
-        // --- 가중치 계산 수정 ---
-        // 정반사 경로의 가중치는 프레넬(F) 항과 기하(G) 항의 영향을 받습니다.
-        // PDF와의 상쇄를 고려하면 최종 가중치는 아래와 같이 더 간단해집니다.
-        let VdotH = max(dot(V, H), 0.0);
-        let NdotL = max(dot(N, outSample.Direction), 0.0);
-        let NdotV = max(dot(N, V), 0.0);
-        let NdotH = max(dot(N, H), 0.0);
-
-        if (NdotL <= 0.0) { // 유효하지 않은 반사
-             outSample.Weight = vec3f(0.0);
-        } else {
-             let F = Frensel(VdotH, F0);
-             let G = GeometryShadow(N, V, outSample.Direction, roughness);
-             // (D * G * F / denom) * NdotL / (D * NdotH / (4 * VdotH)) -> (F*G*NdotL*4*VdotH)/(4*NdotV*NdotL*NdotH)
-             //  -> (F * G * VdotH) / (NdotV * NdotH)
-             let weight_num = F * G * VdotH;
-             let weight_den = NdotV * NdotH;
-             outSample.Weight = weight_num / max(weight_den, 0.0001);
-        }
-
-    } else { // 난반사 경로
-        let dir_tangent = SampleCosineHemisphere(pRandomSeed);
-        outSample.Direction = onb * dir_tangent;
-
-        // --- 가중치 계산 수정 ---
-        // 난반사 경로의 가중치는 (BRDF * cos) / PDF가 약분되어 diffuseColor가 됩니다.
-        // 에너지 보존을 위해 프레넬 항도 고려해줘야 합니다.
-        let VdotH = max(dot(V, normalize(V + outSample.Direction)), 0.0);
-        let F = Frensel(VdotH, F0);
-        let kS = F;
-        var kD = vec3f(1.0) - kS;
-        kD *= (1.0 - metallic);
-        
-        // 최종 난반사 가중치. (PDF와 상쇄 후)
-        outSample.Weight = kD * diffuseColor;
+    // 새로운 방향 L 결정
+    let V   : vec3<f32>     = OutDirection;
+    let N   : vec3<f32>     = HitInfo.HitNormal;
+    let TBN : mat3x3<f32>   = TBNMatrix(N);
+    var L   : vec3<f32>;
+    if (Random(pRandomSeed) < P_specular) // 정반사 -> GGX Distribution
+    {
+        let H = TBN * SampleGGX(pRandomSeed, Roughness);
+        L = reflect(-V, H);
+    }
+    else // 난반사 -> Cosine-Weighted Distribution
+    {
+        L = TBN * SampleCosineHemisphere(pRandomSeed);
     }
 
-    return outSample;
+    let Cosine  : f32       = dot(L, N); 
+    if (Cosine < 0.0) { return PathSample(vec3f(0.0), L); }
+
+    let H       : vec3<f32> = normalize(L + V);
+    let NdotH   : f32       = max(dot(N, H), 0.0);
+    let VdotH   : f32       = max(dot(V, H), 0.0);
+
+    // 결정된 L에 대한 실제 PDF 계산 (Lerp)
+    let PDF_Specular    : f32       = GGXDistribution(NdotH, Roughness) / (4.0 * VdotH);
+    let PDF_Diffuse     : f32       = Cosine / PI;
+    let PDF             : f32       = mix(PDF_Diffuse, PDF_Specular, P_specular);
+    let BRDF            : vec3<f32> = BRDF(HitInfo, L, V);
+
+    let Attenuation     : vec3<f32> = BRDF * Cosine / PDF;
+
+    return PathSample(Attenuation, L);
 }
 
 //==========================================================================
 // TEST Functions ==========================================================
 //==========================================================================
-
 
 
 //==========================================================================
@@ -842,7 +844,6 @@ fn SampleNextPath(HitPointToRayStart: vec3<f32>, HitNormal: vec3<f32>, HitMateri
 fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 {
 
-    //유효하지 않은 Pixel은 건너뜀
     {
         let bPixelInBoundary_X: bool = (ThreadID.x < UniformBuffer.Resolution.x);
         let bPixelInBoundary_Y: bool = (ThreadID.y < UniformBuffer.Resolution.y);
@@ -850,84 +851,43 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         if (!bPixelInBoundary_X || !bPixelInBoundary_Y) { return; }
     }
 
-    var DEBUG_VALUE         : u32 = 999u;
-
     var RandomSeed          : u32       = GetHashValue(ThreadID.x * 1973u + ThreadID.y * 9277u + UniformBuffer.FrameIndex * 26699u);
     var CurrentRay          : Ray       = GenerateRayFromThreadID(ThreadID.xy);
     var ResultColor         : vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 
-    let EnvironmentColor    : vec3<f32> = vec3<f32>(0.2, 0.1, 0.1);
+    let EnvironmentColor    : vec3<f32> = vec3<f32>(0.2, 0.2, 0.2);
     var Throughput          : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
 
-
-
-
-
-    // let TestHit : HitResult = TraceRay(CurrentRay);
-    // if (TestHit.IsValidHit)
-    // {
-    //     let meshID = GetInstance(TestHit.InstanceID).MeshID;
-    //     if (TestHit.InstanceID == 0u) { ResultColor.b = 1.0; }
-
-    //     textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ResultColor, 1.0));
-    //     return;
-    // }
-    // if (true) { textureStore(AccumTexture, ThreadID.xy, vec4<f32>(EnvironmentColor, 1.0)); return; }
-
-
-    // BounceDepth 만큼 Ray Trace
     for (var BounceDepth : u32 = 0u; BounceDepth < UniformBuffer.MAX_BOUNCE; BounceDepth++)
     {
-        // Current Ray가 씬에서 처음 만나는 Primitive의 정보 계산
         let HitPrimitiveData : HitResult = TraceRay(CurrentRay);
-
-        // 부딪히지 않았다면 환경구에 부딪힌 것으로 간주, 저장된 가중치 정산하고 Bounce Loop 탈출
         if (!HitPrimitiveData.IsValidHit) { ResultColor = Throughput * EnvironmentColor; break; }
-
-        // HitPrimitiveData 를 해석
-        let HitInstance         : Instance          = GetInstance(HitPrimitiveData.InstanceID);
-        let HitMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(HitInstance.MeshID);
-        let HitPrimitive        : Triangle          = GetTriangle(HitMeshDescriptor, HitPrimitiveData.PrimitiveID);
-
-        let HitPoint            : vec3<f32>         = CurrentRay.Start + (HitPrimitiveData.HitDistance * CurrentRay.Direction);
-        let HitNormal           : vec3<f32>         = GetHitNormal(HitPoint, HitPrimitive);
-        let HitMaterial         : Material          = GetMaterial(HitPrimitive.MaterialID);
-
-        let bHitPointIsLight    : bool              = length(HitMaterial.EmissiveColor) * HitMaterial.EmissiveIntensity > 0.0;
-
-        // Ray가 광원에 직접 닿았을 경우
-        if (bHitPointIsLight)
-        {
-            // Camera로 바로 들어오는 빛이라면 계산
-            if (BounceDepth == 0) { ResultColor = HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor; }
-            
-            // 이전 BounceDepth의 NEE로 처리된 양이므로 별도의 연산 없이 break
-            break;
-        }
 
         // Direct Light 계산 : NEE(Next Event Estimation) 기법
         for (var LightID : u32 = 0u; LightID < UniformBuffer.LightSourceCount; LightID++)
         {
-
             let CurrentLight        : Light     = GetLight(LightID);
-            var LightContribution   : vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+            let OutDirection        : vec3<f32> = -CurrentRay.Direction;
+            var LightAttenuation    : vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 0.0);
 
             switch (CurrentLight.LightType)
             {
-                case 0u : { LightContribution = GetDirectionalLightContribution(CurrentLight, -CurrentRay.Direction, HitPoint, HitNormal, HitMaterial);         break; }
-                case 1u : { LightContribution = GetPointLightContribution(CurrentLight, -CurrentRay.Direction, HitPoint, HitNormal, HitMaterial);               break; }
-                case 2u : { LightContribution = GetRectLightContribution(CurrentLight, -CurrentRay.Direction, HitPoint, HitNormal, HitMaterial, &RandomSeed);   break; }     
+                case 0u : { LightAttenuation = DirectionalLightAttenuation(CurrentLight, HitPrimitiveData, OutDirection);         break; }
+                case 1u : { LightAttenuation = PointLightAttenuation(CurrentLight, HitPrimitiveData, OutDirection);               break; }
+                case 2u : { LightAttenuation = RectLightAttenuation(CurrentLight, HitPrimitiveData, OutDirection, &RandomSeed);   break; }     
                 default : { break; }
             }
-
-            let IsValidContribution : bool = (LightContribution.w == 1.0);
-            ResultColor += f32(IsValidContribution) * Throughput * LightContribution.rgb * CurrentLight.Color * CurrentLight.Intensity;
+            
+            let LightRadiance : vec3<f32> = CurrentLight.Intensity * CurrentLight.Color; // 원본 광원 색
+            let LightAttenuationRGB : vec3<f32> = LightAttenuation.w *  LightAttenuation.rgb; // 반사율, 감쇠 등 표면에서 상호작용하는 값
+            
+            ResultColor += Throughput * LightAttenuationRGB * LightRadiance;
         }
 
         // Indirect Light 계산
-        let NextPathSample : PathSample = SampleNextPath(-CurrentRay.Direction, HitNormal, HitMaterial, &RandomSeed);
-        Throughput *= NextPathSample.Weight;
-        CurrentRay = Ray(HitPoint, NextPathSample.Direction);
+        let NextPathSample : PathSample = SampleIndirectPath(HitPrimitiveData, -CurrentRay.Direction, &RandomSeed);
+        Throughput *= NextPathSample.Attenuation;
+        CurrentRay = Ray(HitPrimitiveData.HitPoint, NextPathSample.Direction);
     }
 
     // Write Pixel Color To AccumTexture

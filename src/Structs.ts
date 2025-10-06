@@ -43,6 +43,30 @@ export interface Mesh
 
 
 
+export interface SerializedMesh
+{
+    BlasArray                   : Uint32Array,
+    VertexArray                 : Uint32Array,
+    IndexArray                  : Uint32Array,
+    PrimitiveToMaterialArray    : Uint32Array,
+    MaterialArray               : Uint32Array,
+    TextureArray                : Array<ImageBitmap>,
+}
+
+
+
+export interface MeshDescriptor
+{
+    BlasOffset                  : number,
+    VertexOffset                : number,
+    IndexOffset                 : number,
+    PrimitiveToMaterialOffset   : number,
+    MaterialOffset              : number,
+    TextureOffset               : number,
+}
+
+
+
 export interface Material
 {
     BaseColor               : vec4,
@@ -56,13 +80,11 @@ export interface Material
 
     NormalScale             : vec2,
     IOR                     : number,
-    Padding_0?              : number,
 
     BaseColorTexture        : THREE.Texture | null,
     ORMTexture              : THREE.Texture | null,
     EmissiveTexture         : THREE.Texture | null,
     NormalTexture           : THREE.Texture | null,
-
 }
 
 
@@ -79,8 +101,5 @@ export interface Light
     Area        : number,
 
     U           : vec3,
-    Padding_0?  : number,
-
     V           : vec3,
-    Padding_1?  : number,
 }
