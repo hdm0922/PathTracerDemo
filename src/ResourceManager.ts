@@ -19,10 +19,12 @@ export class ResourceManager
         // Loading Models ...
         const LampMesh = await ResourceManager.loadMesh("Lamp");
         const BenchMesh = await ResourceManager.loadMesh("Bench");
+        const StarbucksCupMesh = await ResourceManager.loadMesh("StarbucksCup");
 
         // Registering Models ...
         ResourceManager.MeshPool.set("Lamp", LampMesh);
         ResourceManager.MeshPool.set("Bench", BenchMesh);
+        ResourceManager.MeshPool.set("StarbucksCup", StarbucksCupMesh);
 
         return;
     }

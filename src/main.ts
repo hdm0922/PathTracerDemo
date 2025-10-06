@@ -22,7 +22,6 @@ async function main()
   }
 
   // Load
-  await TestWorld.Load();
   await ResourceManager.LoadResources();
 
 
@@ -30,8 +29,6 @@ async function main()
   TestWorld.Initialize();
   TestRenderer.Initialize(TestWorld);
 
-
-  //TestRenderer.TEST_Pack();
 
 
   // Loop
