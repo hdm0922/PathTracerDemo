@@ -6,7 +6,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildBVH } from './BlasBuilder.ts';
 
-
+import { NodeIO } from '@gltf-transform/core';
+import { KHRMaterialsIOR, KHRMaterialsTransmission, KHRMaterialsVolume } from '@gltf-transform/extensions';
 
 export class ResourceManager
 {
@@ -17,19 +18,36 @@ export class ResourceManager
     public static async LoadResources() : Promise<void>
     {
         // Loading Models ...
-        const LampMesh = await ResourceManager.loadMesh("Lamp");
-        const BenchMesh = await ResourceManager.loadMesh("Bench");
-        const StarbucksCupMesh = await ResourceManager.loadMesh("StarbucksCup");
+        const [LampMesh, BenchMesh, StarbucksCupMesh, CeilingLampMesh, SceneMesh] = await Promise.all([
+            ResourceManager.loadMesh("Lamp"),
+            ResourceManager.loadMesh("Bench"),
+            ResourceManager.loadMesh("StarbucksCup"),
+            ResourceManager.loadMesh("CeilingLamp"),
+            ResourceManager.loadMesh("TestScene"),
+        ]);
+
 
         // Registering Models ...
         ResourceManager.MeshPool.set("Lamp", LampMesh);
         ResourceManager.MeshPool.set("Bench", BenchMesh);
         ResourceManager.MeshPool.set("StarbucksCup", StarbucksCupMesh);
+        ResourceManager.MeshPool.set("CeilingLamp", CeilingLampMesh);
+        ResourceManager.MeshPool.set("TestScene", SceneMesh);
 
         return;
     }
 
+    public static async TestLoad()
+    {
+        const Name = "Lamp";
+        const LoadPath = "../assets/" + Name + ".glb";
 
+        const ModelLoader = new GLTFLoader();
+        const Model         = await ModelLoader.loadAsync(LoadPath);      
+
+
+        return;
+    }
 
     public static SerializeInstanceArray(InstanceArray : Array<Instance>, MeshIDToIndex: Map<string, number>) : Uint32Array
     {
@@ -178,6 +196,7 @@ export class ResourceManager
         const Geometries    : THREE.BufferGeometry[]    = [];
         const Materials     : THREE.Material[]          = [];
 
+
         function traverseGLTF(object : THREE.Object3D) : void
         {
             if ((object as THREE.Mesh).isMesh) Meshes.push(object as THREE.Mesh);
@@ -244,8 +263,11 @@ export class ResourceManager
             Float32View[Offset + 4] = VertexNormalData.array[3 * VertexID + 1];
             Float32View[Offset + 5] = VertexNormalData.array[3 * VertexID + 2];
 
-            Float32View[Offset + 6] = VertexUVData.array[2 * VertexID + 0];
-            Float32View[Offset + 7] = VertexUVData.array[2 * VertexID + 1];
+            if (VertexUVData)
+            {
+                Float32View[Offset + 6] = VertexUVData.array[2 * VertexID + 0];
+                Float32View[Offset + 7] = VertexUVData.array[2 * VertexID + 1];
+            }
         }
 
         return new Uint32Array(VertexArray);
@@ -289,14 +311,16 @@ export class ResourceManager
                 MaterialBaseColor[3] = 1.0;
             }
 
-            const MaterialEmissiveColor = vec3.create();
+            const MaterialEmissiveColor = vec3.fromValues(0,0,0);
+            if (InMaterial.emissive)
             {
                 MaterialEmissiveColor[0] = InMaterial.emissive.r;
                 MaterialEmissiveColor[1] = InMaterial.emissive.g;
                 MaterialEmissiveColor[2] = InMaterial.emissive.b;
             }
 
-            const MaterialNormalScale = vec2.create();
+            const MaterialNormalScale = vec2.fromValues(1,1);
+            if (InMaterial.normalScale)
             {
                 MaterialNormalScale[0] = InMaterial.normalScale.x;
                 MaterialNormalScale[1] = InMaterial.normalScale.y;

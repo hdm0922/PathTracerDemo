@@ -138,7 +138,7 @@ struct HitResult
 
     HitPoint        : vec3<f32>,
     HitNormal       : vec3<f32>,
-    HitMaterialID   : u32,
+    MaterialID      : u32,
 };
 
 
@@ -717,6 +717,15 @@ fn TraceRay(InRay: Ray) -> HitResult
                 
                 if (RayValidRange.y < PrimitiveHitDistance) { continue; }
 
+                // // Temp : BackFace Culling 사용...
+                // if (false)
+                // {
+                //     let Point : vec3<f32> = LocalRay.Start + PrimitiveHitDistance * LocalRay.Direction;
+                //     let Normal : vec3<f32> = GetHitNormal(Point, CurrentTriangle);
+
+                //     if (dot(Normal, LocalRay.Direction) < 0.0) { continue; }
+                // }
+
                 // Material의 Alpha Test 여부 읽기...
                 // if (bAlphaTestResult_IgnorePrimitive) { continue; }
                 
@@ -741,7 +750,7 @@ fn TraceRay(InRay: Ray) -> HitResult
 
         BestHitResult.HitPoint                      = InRay.Start + (BestHitResult.HitDistance * InRay.Direction);
         BestHitResult.HitNormal                     = GetHitNormal(BestHitResult.HitPoint, HitPrimitive);
-        BestHitResult.HitMaterialID                 = HitPrimitive.MaterialID;
+        BestHitResult.MaterialID                    = HitPrimitive.MaterialID;
     }
     
     return BestHitResult;
@@ -763,8 +772,8 @@ fn BRDF(HitInfo : HitResult, InDirection : vec3<f32>, OutDirection : vec3<f32>) 
     let HitInstance : Instance = GetInstance(HitInfo.InstanceID);
     let HitMeshDescriptor : MeshDescriptor = GetMeshDescriptor(HitInstance.MeshID);
 
-    let HitMaterial : Material  = GetMaterial(HitMeshDescriptor, HitInfo.HitMaterialID);
-    let BaseColor   : vec3<f32> = vec3f(1.0); // TEMP : Use White As BaseColor
+    let HitMaterial : Material  = GetMaterial(HitMeshDescriptor, HitInfo.MaterialID);
+    let BaseColor   : vec3<f32> = HitMaterial.BaseColor.rgb; // TEMP : Use White As BaseColor
     let Metalness   : f32       = HitMaterial.Metalness;
     let Roughness   : f32       = HitMaterial.Roughness;
 
@@ -788,7 +797,7 @@ fn SampleIndirectPath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed
     // HitInfo 해석
     let HitInstance         : Instance          = GetInstance(HitInfo.InstanceID);
     let HitMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(HitInstance.MeshID);
-    let HitMaterial         : Material          = GetMaterial(HitMeshDescriptor, HitInfo.HitMaterialID);
+    let HitMaterial         : Material          = GetMaterial(HitMeshDescriptor, HitInfo.MaterialID);
     let BaseColor           : vec3<f32>         = HitMaterial.BaseColor.rgb;
     let Metalness           : f32               = HitMaterial.Metalness;
     let Roughness           : f32               = HitMaterial.Roughness;
@@ -835,6 +844,53 @@ fn SampleIndirectPath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed
 // TEST Functions ==========================================================
 //==========================================================================
 
+fn TEST_SampleTransmissionPath(HitData: HitResult, InRay: Ray, Mat: Material, RandomSeed: ptr<function, u32>) -> PathSample 
+{
+    var Result: PathSample;
+
+    // 1. 광선이 매질 안팎 중 어디로 향하는지 판별
+    let cos_theta_in = dot(InRay.Direction, HitData.HitNormal);
+    var normal: vec3<f32>;
+    var eta_ratio: f32; // 굴절률 비율
+
+    if (cos_theta_in < 0.0) { // 매질로 진입
+        normal = HitData.HitNormal;
+        eta_ratio = 1.0 / Mat.IOR;
+    } else { // 매질에서 탈출
+        normal = -HitData.HitNormal;
+        eta_ratio = Mat.IOR / 1.0;
+    }
+
+    // 2. 프레넬 방정식 및 전반사(TIR) 계산
+    let cos_theta = abs(dot(InRay.Direction, normal));
+    let sin_theta2_sq = eta_ratio * eta_ratio * (1.0 - cos_theta * cos_theta);
+
+    var reflectance: f32;
+    if (sin_theta2_sq > 1.0) { // 전반사 조건
+        reflectance = 1.0;
+    } else {
+        // 슐릭의 근사 (Schlick's Approximation)
+        var r0 = (1.0 - eta_ratio) / (1.0 + eta_ratio);
+        r0 = r0 * r0;
+        reflectance = r0 + (1.0 - r0) * pow(1.0 - cos_theta, 5.0);
+    }
+
+    // 3. 확률적으로 반사 또는 굴절 경로 선택
+    if (Random(RandomSeed) < reflectance) {
+        // 반사 경로 선택
+        Result.Direction = reflect(InRay.Direction, normal);
+        Result.Attenuation = vec3<f32>(1.0, 1.0, 1.0); // 유리는 반사 시 색상 변화 없음
+    } else {
+        // 굴절 경로 선택
+        let cos_theta2 = sqrt(1.0 - sin_theta2_sq);
+        let refract_dir_perp = eta_ratio * (InRay.Direction + cos_theta * normal);
+        let refract_dir_para = -cos_theta2 * normal;
+        Result.Direction = refract_dir_perp + refract_dir_para;
+        Result.Attenuation = Mat.BaseColor.rgb; // 유색 유리의 경우 색상 적용
+    }
+    
+    return Result;
+}
 
 //==========================================================================
 // Shader Main =============================================================
@@ -844,6 +900,7 @@ fn SampleIndirectPath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed
 fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 {
 
+    // 범위 밖의 스레드는 계산 X
     {
         let bPixelInBoundary_X: bool = (ThreadID.x < UniformBuffer.Resolution.x);
         let bPixelInBoundary_Y: bool = (ThreadID.y < UniformBuffer.Resolution.y);
@@ -851,17 +908,41 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         if (!bPixelInBoundary_X || !bPixelInBoundary_Y) { return; }
     }
 
+
+
+    // PathTrace 수행
     var RandomSeed          : u32       = GetHashValue(ThreadID.x * 1973u + ThreadID.y * 9277u + UniformBuffer.FrameIndex * 26699u);
     var CurrentRay          : Ray       = GenerateRayFromThreadID(ThreadID.xy);
     var ResultColor         : vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
-
-    let EnvironmentColor    : vec3<f32> = vec3<f32>(0.2, 0.2, 0.2);
     var Throughput          : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+    let EnvironmentColor    : vec3<f32> = vec3<f32>(0.3, 0.3, 0.3);
 
-    for (var BounceDepth : u32 = 0u; BounceDepth < UniformBuffer.MAX_BOUNCE; BounceDepth++)
+
+    // let TESTTrace = TraceRay(CurrentRay);
+    // if (TESTTrace.IsValidHit)
+    // {
+    //     //ResultColor.r = 1.0;
+    //     ResultColor = (TESTTrace.HitNormal);
+    // }
+    // else { ResultColor = EnvironmentColor; }
+    // if (true) { textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ResultColor, 1.0)); return; }
+
+
+
+
+    for (var BounceDepth : u32 = 0u; BounceDepth < 1u; BounceDepth++)
     {
         let HitPrimitiveData : HitResult = TraceRay(CurrentRay);
         if (!HitPrimitiveData.IsValidHit) { ResultColor = Throughput * EnvironmentColor; break; }
+
+        // TEMP : Emissive Triangle의 경우 자체 발광 빛도 색에 추가
+        {
+            let HitInstance         : Instance          = GetInstance(HitPrimitiveData.InstanceID);
+            let HitMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(HitInstance.MeshID);
+            let HitMaterial         : Material          = GetMaterial(HitMeshDescriptor, HitPrimitiveData.MaterialID);
+
+            ResultColor += Throughput * HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor;
+        }
 
         // Direct Light 계산 : NEE(Next Event Estimation) 기법
         for (var LightID : u32 = 0u; LightID < UniformBuffer.LightSourceCount; LightID++)
@@ -890,10 +971,14 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         CurrentRay = Ray(HitPrimitiveData.HitPoint, NextPathSample.Direction);
     }
 
-    // Write Pixel Color To AccumTexture
-    let ColorUsed       : vec4<f32> = textureLoad(SceneTexture, ThreadID.xy, 0);
-    let ColorToWrite    : vec3<f32> = mix(ColorUsed.rgb, ResultColor, 1.0 / f32(UniformBuffer.FrameIndex + 1));
-    textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ColorToWrite, 1.0));
+
+
+    // 최종 색을 AccumTexture에 작성
+    {
+        let ColorUsed       : vec4<f32> = textureLoad(SceneTexture, ThreadID.xy, 0);
+        let ColorToWrite    : vec3<f32> = mix(ColorUsed.rgb, ResultColor, 1.0 / f32(UniformBuffer.FrameIndex + 1));
+        textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ColorToWrite, 1.0));
+    }
 
     return;
 }
