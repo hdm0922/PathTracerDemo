@@ -26,7 +26,6 @@ export class ResourceManager
             ResourceManager.loadMesh("TestScene"),
         ]);
 
-        console.log(LampMesh);
 
         // Registering Models ...
         ResourceManager.MeshPool.set("Lamp", LampMesh);
@@ -46,7 +45,6 @@ export class ResourceManager
         const ModelLoader = new GLTFLoader();
         const Model         = await ModelLoader.loadAsync(LoadPath);      
 
-        console.log("Before Parse : ", Model);
 
         return;
     }
@@ -198,7 +196,6 @@ export class ResourceManager
         const Geometries    : THREE.BufferGeometry[]    = [];
         const Materials     : THREE.Material[]          = [];
 
-        //if (Name === "TestScene") { console.log(Model); }
 
         function traverseGLTF(object : THREE.Object3D) : void
         {

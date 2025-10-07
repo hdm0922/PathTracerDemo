@@ -86,7 +86,7 @@ export class World
             LightType   : 0,
 
             Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, 0, -1)),
-            Intensity   : 1,
+            Intensity   : 5,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0,
@@ -116,7 +116,7 @@ export class World
             LightType   : 2,
 
             Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, -1, 0)),
-            Intensity   : 10,
+            Intensity   : 5,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0.4,
@@ -133,9 +133,9 @@ export class World
         //this.InstancesPool.set("Lamp_1", AnotherLamp);
         //this.InstancesPool.set("CeilingLamp_0", CeilingLampInstance);
 
-        //this.Lights.push(DirectionalLight_0);
-        this.Lights.push(PointLight_0);
-        //this.Lights.push(RectLight_0);
+        this.Lights.push(DirectionalLight_0);
+        //this.Lights.push(PointLight_0);
+        this.Lights.push(RectLight_0);
 
         return;
     }
