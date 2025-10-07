@@ -111,9 +111,9 @@ export class World
         {
             const InstanceUsing = WindowInstance;
 
-            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(1.0/20, 1.0/20, 1.0/20));
-            const RotationMatrix = mat4.fromYRotation(mat4.create(), -3.14/2);
-            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(3, -2, 0));
+            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(1,1,1));
+            const RotationMatrix = mat4.fromYRotation(mat4.create(), 3.14/2);
+            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(1.5, -1.5, 0));
 
             mat4.mul(InstanceUsing.ModelMatrix, ScaleMatrix, InstanceUsing.ModelMatrix);
             mat4.mul(InstanceUsing.ModelMatrix, RotationMatrix, InstanceUsing.ModelMatrix);
