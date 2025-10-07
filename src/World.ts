@@ -162,8 +162,8 @@ export class World
         //this.InstancesPool.set("Lamp_1", AnotherLamp);
         this.InstancesPool.set("Mirror_0", MirrorInstance);
 
-        //this.Lights.push(DirectionalLight_0);
-        //this.Lights.push(PointLight_0);
+        this.Lights.push(DirectionalLight_0);
+        this.Lights.push(PointLight_0);
         this.Lights.push(RectLight_0);
 
         return;
