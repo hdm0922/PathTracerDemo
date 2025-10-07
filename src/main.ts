@@ -23,7 +23,6 @@ async function main()
 
   // Load
   await ResourceManager.LoadResources();
-  await ResourceManager.TestLoad();
 
   // Initialize
   TestWorld.Initialize();
