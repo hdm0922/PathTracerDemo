@@ -78,8 +78,8 @@ export interface Material
     BlendMode               : number,   // OPAQUE: 0, MASK: 1, BLEND: 2
     OpacityMask?            : number,   // AlphaCutOff Value For MASK Mode
 
-    NormalScale             : vec2,
     IOR                     : number,
+    Transmissive            : number,
 
     BaseColorTexture        : THREE.Texture | null,
     ORMTexture              : THREE.Texture | null,

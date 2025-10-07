@@ -60,8 +60,8 @@ struct Material
     BlendMode               : u32,   // OPAQUE: 0, MASK: 1, BLEND: 2
     OpacityMask             : f32,   // AlphaCutOff Value For MASK Mode
 
-    NormalScale             : vec2<f32>,
     IOR                     : f32,
+    Transmissive            : f32,
 
     BaseColorTextureID      : u32,
     ORMTextureID            : u32,
@@ -156,7 +156,7 @@ struct PathSample
 const STRIDE_INSTANCE   : u32 = 33u;
 const STRIDE_LIGHT      : u32 = 18u;
 const STRIDE_DESCRIPTOR : u32 =  6u;
-const STRIDE_MATERIAL   : u32 = 19u;
+const STRIDE_MATERIAL   : u32 = 18u;
 const STRIDE_VERTEX     : u32 =  8u;
 const STRIDE_BLAS       : u32 =  8u;
 
@@ -251,8 +251,8 @@ fn GetMeshDescriptor(MeshID : u32) -> MeshDescriptor
 
 fn GetMaterial(InMeshDescriptor : MeshDescriptor, MaterialID : u32) -> Material
 {
-    let Offset      : u32       = UniformBuffer.Offset_MaterialBuffer + InMeshDescriptor.MaterialOffset + (STRIDE_MATERIAL * MaterialID);
-    var OutMaterial : Material = Material();
+    let Offset      : u32           = UniformBuffer.Offset_MaterialBuffer + InMeshDescriptor.MaterialOffset + (STRIDE_MATERIAL * MaterialID);
+    var OutMaterial : Material      = Material();
 
     OutMaterial.BaseColor.r         = bitcast<f32>(SceneBuffer[Offset + 0u]);
     OutMaterial.BaseColor.g         = bitcast<f32>(SceneBuffer[Offset + 1u]);
@@ -269,14 +269,13 @@ fn GetMaterial(InMeshDescriptor : MeshDescriptor, MaterialID : u32) -> Material
     OutMaterial.BlendMode           = SceneBuffer[Offset + 10u];
     OutMaterial.OpacityMask         = bitcast<f32>(SceneBuffer[Offset + 11u]);
 
-    OutMaterial.NormalScale.x       = bitcast<f32>(SceneBuffer[Offset + 12u]);
-    OutMaterial.NormalScale.y       = bitcast<f32>(SceneBuffer[Offset + 13u]);
-    OutMaterial.IOR                 = bitcast<f32>(SceneBuffer[Offset + 14u]);
+    OutMaterial.IOR                 = bitcast<f32>(SceneBuffer[Offset + 12u]);
+    OutMaterial.Transmissive        = bitcast<f32>(SceneBuffer[Offset + 13u]);
 
-    OutMaterial.BaseColorTextureID  = SceneBuffer[Offset + 15u];
-    OutMaterial.ORMTextureID        = SceneBuffer[Offset + 16u];
-    OutMaterial.EmissiveTextureID   = SceneBuffer[Offset + 17u];
-    OutMaterial.NormalTextureID     = SceneBuffer[Offset + 18u];
+    OutMaterial.BaseColorTextureID  = SceneBuffer[Offset + 14u];
+    OutMaterial.ORMTextureID        = SceneBuffer[Offset + 15u];
+    OutMaterial.EmissiveTextureID   = SceneBuffer[Offset + 16u];
+    OutMaterial.NormalTextureID     = SceneBuffer[Offset + 17u];
 
     return OutMaterial;
 }

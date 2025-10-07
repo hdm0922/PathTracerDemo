@@ -331,7 +331,7 @@ export class ResourceManager
                 EmissiveIntensity   : InMaterial.emissiveIntensity,
                 EmissiveColor       : MaterialEmissiveColor,
 
-                NormalScale : MaterialNormalScale,
+                Transmissive : InMaterial.transparent ? 1.0 : 0.0,
                 IOR         : 1.5,
                 BlendMode   : 0,
 
@@ -384,7 +384,7 @@ export class ResourceManager
 
 
         // Fill Materials Array
-        const STRIDE_MATERIAL = 19;
+        const STRIDE_MATERIAL = 18;
 
         const MaterialRawData : ArrayBuffer = new ArrayBuffer(STRIDE_MATERIAL * MaterialCount * 4);
 
@@ -410,9 +410,8 @@ export class ResourceManager
             Float32View[offset + 10] = MaterialParsed.BlendMode;
             Float32View[offset + 11] = MaterialParsed.OpacityMask! || 0;
 
-            Float32View[offset + 12] = MaterialParsed.NormalScale[0];
-            Float32View[offset + 13] = MaterialParsed.NormalScale[1];
-            Float32View[offset + 14] = MaterialParsed.IOR;
+            Float32View[offset + 12] = MaterialParsed.IOR;
+            Float32View[offset + 13] = MaterialParsed.Transmissive;
 
             const BaseColorTextureUUID  : string = MaterialParsed.BaseColorTexture?.uuid!;
             const ORMTextureUUID        : string = MaterialParsed.ORMTexture?.uuid!;
@@ -424,10 +423,10 @@ export class ResourceManager
             const EmissiveTextureIndex  : number = MapTextureUUIDToIndex.has(EmissiveTextureUUID) ? MapTextureUUIDToIndex.get(EmissiveTextureUUID)! : -1;
             const NormalTextureIndex    : number = MapTextureUUIDToIndex.has(NormalTextureUUID) ? MapTextureUUIDToIndex.get(NormalTextureUUID)! : -1;
 
-            Int32View[offset + 15] = BaseColorTextureIndex;
-            Int32View[offset + 16] = ORMTextureIndex;
-            Int32View[offset + 17] = EmissiveTextureIndex;
-            Int32View[offset + 18] = NormalTextureIndex;
+            Int32View[offset + 14] = BaseColorTextureIndex;
+            Int32View[offset + 15] = ORMTextureIndex;
+            Int32View[offset + 16] = EmissiveTextureIndex;
+            Int32View[offset + 17] = NormalTextureIndex;
         }
 
         return [new Uint32Array(MaterialRawData), TexturesArray];
