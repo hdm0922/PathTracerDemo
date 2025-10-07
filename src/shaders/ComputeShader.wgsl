@@ -738,15 +738,6 @@ fn TraceRay(InRay: Ray) -> HitResult
                 
                 if (RayValidRange.y < PrimitiveHitDistance) { continue; }
 
-                // // Temp : BackFace Culling 사용...
-                // if (false)
-                // {
-                //     let Point : vec3<f32> = LocalRay.Start + PrimitiveHitDistance * LocalRay.Direction;
-                //     let Normal : vec3<f32> = GetHitNormal(Point, CurrentTriangle);
-
-                //     if (dot(Normal, LocalRay.Direction) < 0.0) { continue; }
-                // }
-
                 // Material의 Alpha Test 여부 읽기...
                 // if (bAlphaTestResult_IgnorePrimitive) { continue; }
                 
@@ -951,8 +942,15 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     // let TESTTrace = TraceRay(CurrentRay);
     // if (TESTTrace.IsValidHit)
     // {
-    //     //ResultColor.r = 1.0;
-    //     ResultColor = abs(TESTTrace.HitNormal);
+    //     let inst = GetInstance(TESTTrace.InstanceID);
+    //     let meshdesc = GetMeshDescriptor(inst.MeshID);
+    //     let HitMat = GetMaterial(meshdesc, TESTTrace.MaterialID);
+
+    //     //ResultColor = EnvironmentColor;
+    //     //if ((TESTTrace.PrimitiveID >= 72u) && (TESTTrace.PrimitiveID <= 87u)) { ResultColor.r = 1.0; }
+    //     ResultColor.r = f32(TESTTrace.MaterialID) / 3.0;
+    //     //ResultColor.r = HitMat.Transmissive;
+    //     //ResultColor = (TESTTrace.HitNormal);
     // }
     // else { ResultColor = EnvironmentColor; }
     // if (true) { textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ResultColor, 1.0)); return; }

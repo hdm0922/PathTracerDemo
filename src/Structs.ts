@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { vec2, vec3, vec4, mat4 } from "gl-matrix";
+import { vec3, vec4, mat4 } from "gl-matrix";
 
 
 
