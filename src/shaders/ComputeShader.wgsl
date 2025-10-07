@@ -979,7 +979,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 
 
 
-    for (var BounceDepth : u32 = 0u; BounceDepth < 3u; BounceDepth++)
+    for (var BounceDepth : u32 = 0u; BounceDepth < 10u; BounceDepth++)
     {
         let HitPrimitiveData : HitResult = TraceRay(CurrentRay);
         if (!HitPrimitiveData.IsValidHit) { ResultColor = Throughput * EnvironmentColor; break; }
@@ -1022,6 +1022,15 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     
         Throughput *= NextPathSample.Attenuation;
         CurrentRay = Ray(HitPrimitiveData.HitPoint, NextPathSample.Direction);
+
+        if (BounceDepth <= 3u) { continue; }
+
+        // Russian Roulette Optimization
+        let P_Survive : f32 = min(0.95, max(Throughput.r, max(Throughput.g, Throughput.b)));
+
+        if (Random(&RandomSeed) > P_Survive) { break; }
+
+        Throughput /= P_Survive;
     }
 
 

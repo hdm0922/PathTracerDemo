@@ -34,5 +34,8 @@ Tlas | BlasArray[0], ... , BlasArray[M]
 # PBR
 
 Normal Distribution -> GGX
+
 Geometry Shadow -> Smith's Approximation (+ Schlick-GGX)
+
 Frensel -> Frensel-Schlick
+

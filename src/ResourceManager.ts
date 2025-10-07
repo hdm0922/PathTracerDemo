@@ -26,8 +26,6 @@ export class ResourceManager
             ResourceManager.loadMesh("TestWindow"),
         ]);
 
-        console.log(WindowMesh);
-
         // Registering Models ...
         ResourceManager.MeshPool.set("Lamp", LampMesh);
         ResourceManager.MeshPool.set("Bench", BenchMesh);
