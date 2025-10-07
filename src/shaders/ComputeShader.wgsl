@@ -867,6 +867,14 @@ fn SampleIndirectPath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed
 // TEST Functions ==========================================================
 //==========================================================================
 
+fn SampleTransmissivePath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed : ptr<function, u32>) -> PathSample
+{
+
+    // 1. Transmissive 재질로 들어오는지, 나가는지 판별
+
+    return PathSample();
+}
+
 fn TEST_SampleTransmissionPath(HitData: HitResult, InRay: Ray, Mat: Material, RandomSeed: ptr<function, u32>) -> PathSample 
 {
     var Result: PathSample;
@@ -945,7 +953,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     // if (TESTTrace.IsValidHit)
     // {
     //     //ResultColor.r = 1.0;
-    //     ResultColor = (TESTTrace.HitNormal);
+    //     ResultColor = abs(TESTTrace.HitNormal);
     // }
     // else { ResultColor = EnvironmentColor; }
     // if (true) { textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ResultColor, 1.0)); return; }

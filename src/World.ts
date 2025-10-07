@@ -30,7 +30,7 @@ export class World
 
             const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(4, 4, 4));
             const RotationMatrix = mat4.fromYRotation(mat4.create(), 0);
-            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(-0.0, -1, 0));
+            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(-0.7, -1, 0));
             InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
             InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), RotationMatrix, InstanceUsing.ModelMatrix);
             InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
@@ -95,13 +95,31 @@ export class World
         {
             const InstanceUsing = MirrorInstance;
 
-            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(1.5,0.5,0.5));
+            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(2.9,0.5,0.5));
             const RotationMatrix = mat4.fromYRotation(mat4.create(), -1);
             const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(1.5, 0, 0));
             InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
             InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), RotationMatrix, InstanceUsing.ModelMatrix);
             InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
         }
+
+        const WindowInstance : Instance =
+        {
+            MeshID : "Window",
+            ModelMatrix : mat4.create(),
+        }
+        {
+            const InstanceUsing = WindowInstance;
+
+            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(1.0/20, 1.0/20, 1.0/20));
+            const RotationMatrix = mat4.fromYRotation(mat4.create(), -3.14/2);
+            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(3, -2, 0));
+
+            mat4.mul(InstanceUsing.ModelMatrix, ScaleMatrix, InstanceUsing.ModelMatrix);
+            mat4.mul(InstanceUsing.ModelMatrix, RotationMatrix, InstanceUsing.ModelMatrix);
+            mat4.mul(InstanceUsing.ModelMatrix, TranslationMatrix, InstanceUsing.ModelMatrix);
+        }
+
 
 
 
@@ -130,7 +148,7 @@ export class World
             LightType   : 1,
 
             Direction   : vec3.create(),
-            Intensity   : 40,
+            Intensity   : 10,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0,
@@ -141,10 +159,10 @@ export class World
 
         const RectLight_0 : Light =
         {
-            Position    : vec3.fromValues(0, 3.0, 0),
+            Position    : vec3.fromValues(0, -4.0, 0),
             LightType   : 2,
 
-            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, -1, 0)),
+            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, 1, 0)),
             Intensity   : 5,
 
             Color       : vec3.fromValues(1,1,1),
@@ -157,10 +175,11 @@ export class World
 
         //this.InstancesPool.set("StarbucksCup_0", StarbucksCupInstance);
         //this.InstancesPool.set("Bench_0", BenchInstance);
-        this.InstancesPool.set("Lamp_0", LampInstance);
+        //this.InstancesPool.set("Lamp_0", LampInstance);
         //this.InstancesPool.set("Scene_0", SceneInstance);
         //this.InstancesPool.set("Lamp_1", AnotherLamp);
-        this.InstancesPool.set("Mirror_0", MirrorInstance);
+        //this.InstancesPool.set("Mirror_0", MirrorInstance);
+        this.InstancesPool.set("Window_0", WindowInstance);
 
         this.Lights.push(DirectionalLight_0);
         this.Lights.push(PointLight_0);

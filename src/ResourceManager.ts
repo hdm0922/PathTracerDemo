@@ -15,7 +15,7 @@ export class ResourceManager
     public static async LoadResources() : Promise<void>
     {
         // Loading Models ...
-        const [LampMesh, BenchMesh, StarbucksCupMesh, CeilingLampMesh, SceneMesh, MirrorMesh] = 
+        const [LampMesh, BenchMesh, StarbucksCupMesh, CeilingLampMesh, SceneMesh, MirrorMesh, WindowMesh] = 
         await Promise.all([
             ResourceManager.loadMesh("Lamp"),
             ResourceManager.loadMesh("Bench"),
@@ -23,7 +23,10 @@ export class ResourceManager
             ResourceManager.loadMesh("CeilingLamp"),
             ResourceManager.loadMesh("TestScene"),
             ResourceManager.loadMesh("Mirror"),
+            ResourceManager.loadMesh("Window"),
         ]);
+
+        console.log(WindowMesh);
 
         // Registering Models ...
         ResourceManager.MeshPool.set("Lamp", LampMesh);
@@ -32,7 +35,8 @@ export class ResourceManager
         ResourceManager.MeshPool.set("CeilingLamp", CeilingLampMesh);
         ResourceManager.MeshPool.set("TestScene", SceneMesh);
         ResourceManager.MeshPool.set("Mirror", MirrorMesh);
-        
+        ResourceManager.MeshPool.set("Window", WindowMesh);
+
         return;
     }
 
@@ -209,8 +213,6 @@ export class ResourceManager
             else { Materials.push(Mesh.material); }
         }
         
-        if (Name === "Mirror") { console.log(Meshes); }
-
 
         // Merge Meshes
         const MergedMesh = new THREE.Mesh(mergeGeometries(Geometries, true), Materials);
