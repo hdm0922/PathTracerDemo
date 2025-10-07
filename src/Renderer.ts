@@ -90,12 +90,12 @@ export class Renderer
     public RenderPipeline  : GPURenderPipeline;
 
     // WebGPU BindGroups
-    public ComputeBindGroup: GPUBindGroup;
-    public RenderBindGroup: GPUBindGroup;
+    public ComputeBindGroup : GPUBindGroup;
+    public RenderBindGroup  : GPUBindGroup;
 
     // World Data
-    public World    : World;
-    public FrameCount : number;
+    public World        : World;
+    public FrameCount   : number;
 
     // Data Offsets
     public Offset_MeshDescriptorBuffer      : number;
@@ -168,6 +168,8 @@ export class Renderer
         this.Offset_IndexBuffer = 0;
         this.Offset_PrimitiveToMaterialBuffer = 0;
     }
+
+
 
     PrepareWorldData() : [ArrayBuffer, ArrayBuffer, ArrayBuffer, ImageBitmap[]]
     {
@@ -317,6 +319,8 @@ export class Renderer
 
         return [SceneBufferRawData, GeometryBufferRawData, AccelBufferRawData, SerializedMeshData.TextureArray];
     }
+
+
 
     async Initialize(World: World): Promise<void>
     {
@@ -478,14 +482,15 @@ export class Renderer
     }
 
 
+
     Update(): void
     {
         this.FrameCount++;
 
         // Camera Property
-        const originTocamPosDir = vec3.normalize(vec3.create(), vec3.fromValues(0,1,1));
-        const camDist = 2;
-        const camPos = vec3.scale(vec3.create(), originTocamPosDir, camDist);
+        const camDir = vec3.normalize(vec3.create(), vec3.fromValues(0,0,1));
+        const camDist = 5;
+        const camPos = vec3.scale(vec3.create(), camDir, camDist);
         const VP = makeViewProjection(camPos, this.Canvas.width / this.Canvas.height);
         const VPINV = mat4.invert(mat4.create(), VP);
 

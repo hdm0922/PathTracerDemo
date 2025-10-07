@@ -20,60 +20,73 @@ export class World
     public Initialize(): void
     {
 
-        // Add Lamp Instance
         const LampInstance: Instance =
         {
             MeshID      : "Lamp",
             ModelMatrix : mat4.identity(mat4.create()),
         };
-
-        //const LampScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(2,2, 2));
-        const LampTranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(0, 0, 0.6));
-        LampInstance.ModelMatrix = LampTranslationMatrix;
+        {
+            const LampTranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(0, 0, 0.0));
+            LampInstance.ModelMatrix = LampTranslationMatrix;
+        }
 
         const AnotherLamp : Instance =
         {
             MeshID      : "Lamp",
             ModelMatrix : mat4.identity(mat4.create()),
         };
-        const LampTranslationMatrix2 = mat4.fromTranslation(mat4.create(), vec3.fromValues(-0.8, 0, 0.4));
-        AnotherLamp.ModelMatrix = LampTranslationMatrix2;
+        {
+            const LampTranslationMatrix2 = mat4.fromTranslation(mat4.create(), vec3.fromValues(-0.8, 0, 0.4));
+            AnotherLamp.ModelMatrix = LampTranslationMatrix2;
+        }
 
-
-        // Add Bench Instance
         const BenchInstance : Instance =
         {
             MeshID      : "Bench",
             ModelMatrix : mat4.identity(mat4.create()),
         };
         {
-            const BenchScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(0.005, 0.005, 0.005));
-            const BenchRotationMatrix = mat4.fromYRotation(mat4.create(), 3.14);
-            const BenchTranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(1, 0, 0));
-            BenchInstance.ModelMatrix = mat4.mul(mat4.create(), BenchScaleMatrix, BenchInstance.ModelMatrix);
-            BenchInstance.ModelMatrix =  mat4.mul(mat4.create(), BenchRotationMatrix, BenchInstance.ModelMatrix);
-            BenchInstance.ModelMatrix =  mat4.mul(mat4.create(), BenchTranslationMatrix, BenchInstance.ModelMatrix);
+            const InstanceUsing = BenchInstance;
+
+            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(0.005, 0.005, 0.005));
+            const RotationMatrix = mat4.fromYRotation(mat4.create(), 3.14);
+            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(1, 0, 0));
+            InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
+            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), RotationMatrix, InstanceUsing.ModelMatrix);
+            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
         }
 
-
-
-        // Add SBCup
         const StarbucksCupInstance : Instance =
         {
             MeshID      : "StarbucksCup",
             ModelMatrix : mat4.fromScaling(mat4.create(), vec3.fromValues(1, 2, 2)), 
         }
 
+        const CeilingLampInstance : Instance =
+        {
+            MeshID      : "CeilingLamp",
+            ModelMatrix : mat4.create(),
+        }
+        {
+            const InstanceUsing = CeilingLampInstance;
 
+            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(0, -1.9, 0));
+            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
+        }
 
+        const SceneInstance : Instance =
+        {
+            MeshID      : "TestScene",
+            ModelMatrix : mat4.create(),
+        }
 
         const DirectionalLight_0 : Light =
         {
             Position    : vec3.create(),
             LightType   : 0,
 
-            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(1, 0, 0)),
-            Intensity   : 10,
+            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, 0, -1)),
+            Intensity   : 1,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0,
@@ -84,11 +97,11 @@ export class World
 
         const PointLight_0 : Light =
         {
-            Position    : vec3.fromValues(0, 0, 1.0),
+            Position    : vec3.fromValues(0, 1, 0),
             LightType   : 1,
 
             Direction   : vec3.create(),
-            Intensity   : 10,
+            Intensity   : 40,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0,
@@ -99,11 +112,11 @@ export class World
 
         const RectLight_0 : Light =
         {
-            Position    : vec3.fromValues(0, 5, 0),
+            Position    : vec3.fromValues(0, 3.0, 0),
             LightType   : 2,
 
             Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, -1, 0)),
-            Intensity   : 6,
+            Intensity   : 10,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0.4,
@@ -114,13 +127,15 @@ export class World
         RectLight_0.Area = 4 * RectLight_0.U.length * RectLight_0.V.length;
 
         //this.InstancesPool.set("StarbucksCup_0", StarbucksCupInstance);
-        this.InstancesPool.set("Bench_0", BenchInstance);
-        this.InstancesPool.set("Lamp_0", LampInstance);
-        this.InstancesPool.set("Lamp_1", AnotherLamp);
+        //this.InstancesPool.set("Bench_0", BenchInstance);
+        //this.InstancesPool.set("Lamp_0", LampInstance);
+        this.InstancesPool.set("Scene_0", SceneInstance);
+        //this.InstancesPool.set("Lamp_1", AnotherLamp);
+        //this.InstancesPool.set("CeilingLamp_0", CeilingLampInstance);
 
         //this.Lights.push(DirectionalLight_0);
-        //this.Lights.push(PointLight_0);
-        this.Lights.push(RectLight_0);
+        this.Lights.push(PointLight_0);
+        //this.Lights.push(RectLight_0);
 
         return;
     }
