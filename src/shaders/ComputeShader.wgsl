@@ -504,6 +504,14 @@ fn TBNMatrix(N : vec3<f32>) -> mat3x3<f32>
     return mat3x3<f32>(T, B, N);
 }
 
+fn GetRefractedDirection(V : vec3<f32>, N : vec3<f32>, R : f32) -> vec3<f32>
+{
+
+
+
+    return vec3f();
+}
+
 //==========================================================================
 // Light Helpers ===========================================================
 //==========================================================================
@@ -860,58 +868,71 @@ fn SampleIndirectPath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed
 fn SampleTransmissivePath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed : ptr<function, u32>) -> PathSample
 {
 
+    let HitInstance : Instance = GetInstance(HitInfo.InstanceID);
+    let HitMeshDescriptor : MeshDescriptor = GetMeshDescriptor(HitInstance.MeshID);
+    let HitMaterial : Material = GetMaterial(HitMeshDescriptor, HitInfo.MaterialID);
+
+    let V : vec3<f32> = OutDirection;
+    var N : vec3<f32> = HitInfo.HitNormal;
+    var IORRatio : f32 = 1.0 / HitMaterial.IOR;
+
     // 1. Transmissive 재질로 들어오는지, 나가는지 판별
+    if (dot(V, N) < 0.0) // 매질을 탈출하는 Ray
+    {
+        N = -HitInfo.HitNormal;
+        IORRatio = HitMaterial.IOR;
+    }
 
-    return PathSample();
+    // 2. Frensel's Equation 으로부터 Reflection 확률 계산 (Schlik's Approximation)
+    var P_reflection : f32;
+    {
+        let r : f32 = (1.0 - IORRatio) / (1.0 + IORRatio);
+        let r2 : f32 = r * r;
+
+        let cosTheta : f32 = abs(dot(V, N));
+        let R2 : f32 = IORRatio * IORRatio;
+       
+        P_reflection = r2 + (1.0 - r2) * pow(1.0 - cosTheta, 5.0);
+
+        // 전반사 고려
+        if ( cosTheta * cosTheta < (R2 - 1.0)/R2 ) { P_reflection = 1.0; }
+    }
+
+    // 3. 확률에 따라 새로운 방향 L 결정
+    var L : vec3<f32>;
+    var Attenuation : vec3<f32>;
+    if (Random(pRandomSeed) < P_reflection) // 반사
+    {
+        L = reflect(-V, N);
+
+        let F0 = mix(vec3f(0.04), HitMaterial.BaseColor.rgb, HitMaterial.Metalness);
+        Attenuation = F0 / P_reflection;
+    }
+    else // 굴절
+    {
+        // Snell's Law 를 이용해 V, N으로부터 L 계산
+        let CosineTheta : f32 = dot(V, N);
+        let SineTheta   : f32 = sqrt(1.0 - CosineTheta * CosineTheta);
+
+        let SineThetaPrime      : f32 = IORRatio * SineTheta;
+        let CosineThetaPrime    : f32 = sqrt(1.0 - SineThetaPrime * SineThetaPrime);
+
+        let V_Normal    : vec3<f32> = N * CosineTheta;
+        let V_Surface   : vec3<f32> = V - V_Normal;
+
+        let L_Normal    : vec3<f32> = (-CosineThetaPrime) * N;
+        let L_Surface   : vec3<f32> = (-IORRatio) * V_Surface;
+
+        L = L_Normal + L_Surface;
+        
+        // 테스트 샘플이 검은색 창이라 부득이하게 붉은색으로 임시 변경
+        Attenuation = vec3<f32>(1.0, 0.0, 0.0) / (1.0 - P_reflection); 
+        //Attenuation = HitMaterial.BaseColor.rgb / (1.0 - P_reflection);
+    }
+
+    return PathSample(Attenuation, L);
 }
 
-fn TEST_SampleTransmissionPath(HitData: HitResult, InRay: Ray, Mat: Material, RandomSeed: ptr<function, u32>) -> PathSample 
-{
-    var Result: PathSample;
-
-    // 1. 광선이 매질 안팎 중 어디로 향하는지 판별
-    let cos_theta_in = dot(InRay.Direction, HitData.HitNormal);
-    var normal: vec3<f32>;
-    var eta_ratio: f32; // 굴절률 비율
-
-    if (cos_theta_in < 0.0) { // 매질로 진입
-        normal = HitData.HitNormal;
-        eta_ratio = 1.0 / Mat.IOR;
-    } else { // 매질에서 탈출
-        normal = -HitData.HitNormal;
-        eta_ratio = Mat.IOR / 1.0;
-    }
-
-    // 2. 프레넬 방정식 및 전반사(TIR) 계산
-    let cos_theta = abs(dot(InRay.Direction, normal));
-    let sin_theta2_sq = eta_ratio * eta_ratio * (1.0 - cos_theta * cos_theta);
-
-    var reflectance: f32;
-    if (sin_theta2_sq > 1.0) { // 전반사 조건
-        reflectance = 1.0;
-    } else {
-        // 슐릭의 근사 (Schlick's Approximation)
-        var r0 = (1.0 - eta_ratio) / (1.0 + eta_ratio);
-        r0 = r0 * r0;
-        reflectance = r0 + (1.0 - r0) * pow(1.0 - cos_theta, 5.0);
-    }
-
-    // 3. 확률적으로 반사 또는 굴절 경로 선택
-    if (Random(RandomSeed) < reflectance) {
-        // 반사 경로 선택
-        Result.Direction = reflect(InRay.Direction, normal);
-        Result.Attenuation = vec3<f32>(1.0, 1.0, 1.0); // 유리는 반사 시 색상 변화 없음
-    } else {
-        // 굴절 경로 선택
-        let cos_theta2 = sqrt(1.0 - sin_theta2_sq);
-        let refract_dir_perp = eta_ratio * (InRay.Direction + cos_theta * normal);
-        let refract_dir_para = -cos_theta2 * normal;
-        Result.Direction = refract_dir_perp + refract_dir_para;
-        Result.Attenuation = Mat.BaseColor.rgb; // 유색 유리의 경우 색상 적용
-    }
-    
-    return Result;
-}
 
 //==========================================================================
 // Shader Main =============================================================
@@ -949,7 +970,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     //     //ResultColor = EnvironmentColor;
     //     //if ((TESTTrace.PrimitiveID >= 72u) && (TESTTrace.PrimitiveID <= 87u)) { ResultColor.r = 1.0; }
     //     ResultColor.r = f32(TESTTrace.MaterialID) / 3.0;
-    //     //ResultColor.r = HitMat.Transmissive;
+    //     ResultColor.r = HitMat.Transmissive;
     //     //ResultColor = (TESTTrace.HitNormal);
     // }
     // else { ResultColor = EnvironmentColor; }
@@ -958,16 +979,17 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 
 
 
-    for (var BounceDepth : u32 = 0u; BounceDepth < 1u; BounceDepth++)
+    for (var BounceDepth : u32 = 0u; BounceDepth < 3u; BounceDepth++)
     {
         let HitPrimitiveData : HitResult = TraceRay(CurrentRay);
         if (!HitPrimitiveData.IsValidHit) { ResultColor = Throughput * EnvironmentColor; break; }
 
         // TEMP : Emissive Triangle의 경우 자체 발광 빛도 색에 추가
+        let HitInstance         : Instance          = GetInstance(HitPrimitiveData.InstanceID);
+        let HitMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(HitInstance.MeshID);
+        let HitMaterial         : Material          = GetMaterial(HitMeshDescriptor, HitPrimitiveData.MaterialID);
+
         {
-            let HitInstance         : Instance          = GetInstance(HitPrimitiveData.InstanceID);
-            let HitMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(HitInstance.MeshID);
-            let HitMaterial         : Material          = GetMaterial(HitMeshDescriptor, HitPrimitiveData.MaterialID);
 
             ResultColor += Throughput * HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor;
         }
@@ -994,7 +1016,10 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         }
 
         // Indirect Light 계산
-        let NextPathSample : PathSample = SampleIndirectPath(HitPrimitiveData, -CurrentRay.Direction, &RandomSeed);
+        var NextPathSample : PathSample;
+        if (HitMaterial.Transmissive > 0.5) { NextPathSample = SampleTransmissivePath(HitPrimitiveData, -CurrentRay.Direction, &RandomSeed); }
+        else { NextPathSample = SampleIndirectPath(HitPrimitiveData, -CurrentRay.Direction, &RandomSeed); }
+    
         Throughput *= NextPathSample.Attenuation;
         CurrentRay = Ray(HitPrimitiveData.HitPoint, NextPathSample.Direction);
     }

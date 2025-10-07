@@ -23,7 +23,7 @@ export class ResourceManager
             ResourceManager.loadMesh("CeilingLamp"),
             ResourceManager.loadMesh("TestScene"),
             ResourceManager.loadMesh("Mirror"),
-            ResourceManager.loadMesh("untitledwindow2"),
+            ResourceManager.loadMesh("TestWindow"),
         ]);
 
         console.log(WindowMesh);

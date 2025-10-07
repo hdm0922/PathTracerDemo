@@ -30,7 +30,7 @@ export class World
 
             const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(4, 4, 4));
             const RotationMatrix = mat4.fromYRotation(mat4.create(), 0);
-            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(-0.7, -1, 0));
+            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(-0.7, -1.1, -1));
             InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
             InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), RotationMatrix, InstanceUsing.ModelMatrix);
             InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
@@ -175,7 +175,7 @@ export class World
 
         //this.InstancesPool.set("StarbucksCup_0", StarbucksCupInstance);
         //this.InstancesPool.set("Bench_0", BenchInstance);
-        //this.InstancesPool.set("Lamp_0", LampInstance);
+        this.InstancesPool.set("Lamp_0", LampInstance);
         //this.InstancesPool.set("Scene_0", SceneInstance);
         //this.InstancesPool.set("Lamp_1", AnotherLamp);
         //this.InstancesPool.set("Mirror_0", MirrorInstance);
