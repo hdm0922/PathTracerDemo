@@ -6,9 +6,6 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildBVH } from './BlasBuilder.ts';
 
-import { NodeIO } from '@gltf-transform/core';
-import { KHRMaterialsIOR, KHRMaterialsTransmission, KHRMaterialsVolume } from '@gltf-transform/extensions';
-
 export class ResourceManager
 {
     public static MeshPool : Map<string, Mesh> = new Map();
@@ -18,14 +15,15 @@ export class ResourceManager
     public static async LoadResources() : Promise<void>
     {
         // Loading Models ...
-        const [LampMesh, BenchMesh, StarbucksCupMesh, CeilingLampMesh, SceneMesh] = await Promise.all([
+        const [LampMesh, BenchMesh, StarbucksCupMesh, CeilingLampMesh, SceneMesh, MirrorMesh] = 
+        await Promise.all([
             ResourceManager.loadMesh("Lamp"),
             ResourceManager.loadMesh("Bench"),
             ResourceManager.loadMesh("StarbucksCup"),
             ResourceManager.loadMesh("CeilingLamp"),
             ResourceManager.loadMesh("TestScene"),
+            ResourceManager.loadMesh("Mirror"),
         ]);
-
 
         // Registering Models ...
         ResourceManager.MeshPool.set("Lamp", LampMesh);
@@ -33,19 +31,8 @@ export class ResourceManager
         ResourceManager.MeshPool.set("StarbucksCup", StarbucksCupMesh);
         ResourceManager.MeshPool.set("CeilingLamp", CeilingLampMesh);
         ResourceManager.MeshPool.set("TestScene", SceneMesh);
-
-        return;
-    }
-
-    public static async TestLoad()
-    {
-        const Name = "Lamp";
-        const LoadPath = "../assets/" + Name + ".glb";
-
-        const ModelLoader = new GLTFLoader();
-        const Model         = await ModelLoader.loadAsync(LoadPath);      
-
-
+        ResourceManager.MeshPool.set("Mirror", MirrorMesh);
+        
         return;
     }
 
@@ -197,6 +184,7 @@ export class ResourceManager
         const Materials     : THREE.Material[]          = [];
 
 
+
         function traverseGLTF(object : THREE.Object3D) : void
         {
             if ((object as THREE.Mesh).isMesh) Meshes.push(object as THREE.Mesh);
@@ -213,6 +201,7 @@ export class ResourceManager
         // For Each Model Found : Gather Information To Geometries, Materials
         for (const Mesh of Meshes)
         {            
+
             Mesh.geometry.applyMatrix4(Mesh.matrixWorld);
             Geometries.push(Mesh.geometry);
 
@@ -220,6 +209,9 @@ export class ResourceManager
             else { Materials.push(Mesh.material); }
         }
         
+        if (Name === "Mirror") { console.log(Meshes); }
+
+
         // Merge Meshes
         const MergedMesh = new THREE.Mesh(mergeGeometries(Geometries, true), Materials);
         const BlasBuffer: ArrayBuffer = buildBVH(MergedMesh.geometry, 10);

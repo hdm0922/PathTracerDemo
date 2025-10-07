@@ -330,6 +330,27 @@ fn GetTriangle(InMeshDescriptor : MeshDescriptor, PrimitiveID : u32) -> Triangle
     return OutTriangle;
 }
 
+fn GetTriangleWorldSpace(InInstance : Instance, InTriangle : Triangle) -> Triangle
+{
+    var OutTriangle : Triangle  = Triangle();
+
+    OutTriangle.Vertex_0.Position    = TransformVec3WithMat4x4(InTriangle.Vertex_0.Position, InInstance.ModelMatrix);
+    OutTriangle.Vertex_0.Normal      = TransformVec3WithMat4x4(InTriangle.Vertex_0.Normal, transpose(InInstance.ModelMatrix_Inverse));
+    OutTriangle.Vertex_0.UV          = InTriangle.Vertex_0.UV;
+
+    OutTriangle.Vertex_1.Position    = TransformVec3WithMat4x4(InTriangle.Vertex_1.Position, InInstance.ModelMatrix);
+    OutTriangle.Vertex_1.Normal      = TransformVec3WithMat4x4(InTriangle.Vertex_1.Normal, transpose(InInstance.ModelMatrix_Inverse));
+    OutTriangle.Vertex_1.UV          = InTriangle.Vertex_1.UV;
+
+    OutTriangle.Vertex_2.Position    = TransformVec3WithMat4x4(InTriangle.Vertex_2.Position, InInstance.ModelMatrix);
+    OutTriangle.Vertex_2.Normal      = TransformVec3WithMat4x4(InTriangle.Vertex_2.Normal, transpose(InInstance.ModelMatrix_Inverse));
+    OutTriangle.Vertex_2.UV          = InTriangle.Vertex_2.UV;
+
+    OutTriangle.MaterialID = InTriangle.MaterialID;
+
+    return OutTriangle;
+}
+
 fn GetHashValue(Seed : u32) -> u32
 {
     let state = Seed * 747796405u + 2891336453u;
@@ -642,6 +663,7 @@ fn TraceRay(InRay: Ray) -> HitResult
     
     BestHitResult.IsValidHit = false;
 
+    // Trace Ray
     for (var InstanceID: u32 = 0u; InstanceID < UniformBuffer.InstanceCount; InstanceID++)
     {
 
@@ -746,11 +768,12 @@ fn TraceRay(InRay: Ray) -> HitResult
 
         let HitInstance         : Instance          = GetInstance(BestHitResult.InstanceID);
         let HitMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(HitInstance.MeshID);
-        let HitPrimitive        : Triangle          = GetTriangle(HitMeshDescriptor, BestHitResult.PrimitiveID);
+        let HitPrimitiveLocal   : Triangle          = GetTriangle(HitMeshDescriptor, BestHitResult.PrimitiveID);
+        let HitPrimitive        : Triangle          = GetTriangleWorldSpace(HitInstance, HitPrimitiveLocal);
 
         BestHitResult.HitPoint                      = InRay.Start + (BestHitResult.HitDistance * InRay.Direction);
         BestHitResult.HitNormal                     = GetHitNormal(BestHitResult.HitPoint, HitPrimitive);
-        BestHitResult.MaterialID                    = HitPrimitive.MaterialID;
+        BestHitResult.MaterialID                    = HitPrimitiveLocal.MaterialID;
     }
     
     return BestHitResult;
