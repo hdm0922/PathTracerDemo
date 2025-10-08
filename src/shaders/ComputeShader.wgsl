@@ -828,7 +828,7 @@ fn BRDF(HitInfo : HitResult, InDirection : vec3<f32>, OutDirection : vec3<f32>) 
 
 fn SampleIndirectPath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed : ptr<function, u32>) -> PathSample
 {
-    // HitInfo 해석
+    // 1. HitInfo 해석
     let HitInstance         : Instance          = GetInstance(HitInfo.InstanceID);
     let HitMeshDescriptor   : MeshDescriptor    = GetMeshDescriptor(HitInstance.MeshID);
     let HitMaterial         : Material          = GetMaterial(HitMeshDescriptor, HitInfo.MaterialID);
@@ -836,87 +836,48 @@ fn SampleIndirectPath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed
     let Metalness           : f32               = HitMaterial.Metalness;
     let Roughness           : f32               = HitMaterial.Roughness;
 
-    // 정반사 확률 P_specular 계산
+    // 2. 정반사 확률 P_specular 계산
     let F0                  : vec3<f32> = mix(vec3f(0.04), BaseColor, Metalness);
     let SpecularReflectance : f32       = dot(F0, vec3f(0.299, 0.587, 0.114));
     let P_specular          : f32       = mix(SpecularReflectance, 1.0, Metalness);
 
-    // 새로운 방향 L 결정
+    // 3. 새로운 방향 L 결정
     let V   : vec3<f32>     = OutDirection;
     let N   : vec3<f32>     = HitInfo.HitNormal;
     let TBN : mat3x3<f32>   = TBNMatrix(N);
     var L   : vec3<f32>;
-    var Attenuation : vec3<f32>;
 
-    // --- 🔽 1단계: 입력 법선(N) 검사 🔽 ---
-    if (abs(length(N) - 1.0) > 0.01) {
-        // 법선 벡터가 오염되었다면 빨간색 출력
-        return PathSample(vec3f(1.0, 0.0, 0.0), N);
-    }
-
-    if (Random(pRandomSeed) < P_specular)
+    // 4. P_specular에 따라 정반사/난반사 중 하나의 재질로 결정
+    if (Random(pRandomSeed) < P_specular) // 정반사 -> GGX Distribution
     {
-        // --- ✨ 정반사 경로 ---
-        let TBN = TBNMatrix(N);
         let H = TBN * SampleGGX(pRandomSeed, Roughness);
         L = reflect(-V, H);
-
-        let NdotL = max(dot(N, L), 0.0);
-        if (NdotL <= 0.0) { return PathSample(vec3f(0.0), L); }
-        
-        let NdotV = max(dot(N, V), 0.0);
-        let NdotH = max(dot(N, H), 0.0);
-        let VdotH = max(dot(V, H), 0.0);
-
-        // 오직 Specular 항들만 계산
-        let F = Frensel(VdotH, F0);
-        let D = GGXDistribution(NdotH, Roughness);
-        //let G = GeometryShadow(N, V, L, Roughness);
-
-        var GPrime : f32;
-        {
-            let R : f32 = Roughness + 1.0;
-            let K : f32 = R * R / 8.0;
-            let t : f32 = (NdotV * (1.0 - K) + K) * (NdotL * (1.0 - K) + K);
-            GPrime = 1.0/t;
-        }
-
-        //let BRDF_Specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
-        let BRDF_Specular = (D * GPrime * F) / 4.0;
-        let PDF_Specular = (D * NdotH) / max(4.0 * VdotH, 1e-4);
-
-
-        // Specular 항만 사용해 Attenuation 계산
-        Attenuation = BRDF_Specular * NdotL / max(PDF_Specular, 1e-4);
     }
-    else
+    else // 난반사 -> Cosine-Weighted Distribution
     {
-        // --- 🎨 난반사 경로 ---
-        let TBN = TBNMatrix(N);
         L = TBN * SampleCosineHemisphere(pRandomSeed);
-
-        let NdotL = max(dot(N, L), 0.0);
-        if (NdotL <= 0.0) { return PathSample(vec3f(0.0), L); }
-
-        // 오직 Diffuse 항들만 계산
-        let F = Frensel(max(dot(V, N), 0.0), F0); // Diffuse에서도 Fresnel은 필요
-        let kS = F;
-        let kD = (1.0 - kS) * (1.0 - Metalness); // 에너지 보존
-        let BRDF_Diffuse = (kD * BaseColor) / PI;
-        let PDF_Diffuse = NdotL / PI;
-
-        // Diffuse 항만 사용해 Attenuation 계산
-        Attenuation = BRDF_Diffuse * NdotL / max(PDF_Diffuse, 1e-4);
-        // 위 식은 (kD * BaseColor) 로 단순화됩니다.
     }
+
+    let Cosine  : f32       = dot(L, N); 
+    if (Cosine < 0.0) { return PathSample(vec3f(0.0), L); }
+
+    let H       : vec3<f32> = normalize(L + V);
+    let NdotH   : f32       = max(dot(N, H), 0.0);
+    let VdotH   : f32       = max(dot(V, H), 0.0);
+
+    // 결정된 L에 대한 실제 PDF 계산 (Lerp)
+    let PDF_Specular    : f32       = GGXDistribution(NdotH, Roughness) / (4.0 * VdotH);
+    let PDF_Diffuse     : f32       = Cosine / PI;
+    let PDF             : f32       = mix(PDF_Diffuse, PDF_Specular, P_specular);
+    let BRDF            : vec3<f32> = BRDF(HitInfo, L, V);
+
+    let Attenuation     : vec3<f32> = BRDF * Cosine / PDF;
 
     return PathSample(Attenuation, L);
-
 }
 
 fn SampleTransmissivePath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed : ptr<function, u32>) -> PathSample
 {
-
     let HitInstance : Instance = GetInstance(HitInfo.InstanceID);
     let HitMeshDescriptor : MeshDescriptor = GetMeshDescriptor(HitInstance.MeshID);
     let HitMaterial : Material = GetMaterial(HitMeshDescriptor, HitInfo.MaterialID);
