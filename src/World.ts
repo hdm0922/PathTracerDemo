@@ -30,7 +30,7 @@ export class World
 
             const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(4, 4, 4));
             const RotationMatrix = mat4.fromYRotation(mat4.create(), 0);
-            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(-0.7, -1.1, -1));
+            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(-1.5, -1.8, -1));
             InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
             InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), RotationMatrix, InstanceUsing.ModelMatrix);
             InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
@@ -95,7 +95,7 @@ export class World
         {
             const InstanceUsing = MirrorInstance;
 
-            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(2.9,0.5,0.5));
+            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(2.5,0.5,0.5));
             const RotationMatrix = mat4.fromYRotation(mat4.create(), -1);
             const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(1.5, 0, 0));
             InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
@@ -132,8 +132,8 @@ export class World
             Position    : vec3.create(),
             LightType   : 0,
 
-            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(-1, -2, -1)),
-            Intensity   : 5,
+            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, 0, -1)),
+            Intensity   : 3,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0,
@@ -144,11 +144,11 @@ export class World
 
         const PointLight_0 : Light =
         {
-            Position    : vec3.fromValues(0, 1, 0),
+            Position    : vec3.fromValues(0, 0, 2),
             LightType   : 1,
 
             Direction   : vec3.create(),
-            Intensity   : 10,
+            Intensity   : 1,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0,
@@ -159,11 +159,11 @@ export class World
 
         const RectLight_0 : Light =
         {
-            Position    : vec3.fromValues(0, -4.0, 0),
+            Position    : vec3.fromValues(0,0,3),
             LightType   : 2,
 
-            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, 1, 0)),
-            Intensity   : 5,
+            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, 0, -1)),
+            Intensity   : 0.5,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 0.4,
@@ -182,8 +182,8 @@ export class World
         this.InstancesPool.set("Window_0", WindowInstance);
 
         this.Lights.push(DirectionalLight_0);
-        this.Lights.push(PointLight_0);
-        this.Lights.push(RectLight_0);
+        // this.Lights.push(PointLight_0);
+        // this.Lights.push(RectLight_0);
 
         return;
     }
