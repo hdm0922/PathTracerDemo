@@ -6,27 +6,21 @@ Path Tracing은 물리적으로 정확한 빛을 계산하는 방법입니다.
 
 ## Rendering Equation
 
-> $$L_o(\vec{x}, \hat{\omega_o}) = L_e(\vec{x}, \hat{\omega_o}) + \int_{\Omega} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_i(\vec{x}, \hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i$$
+$$L_o(\vec{x}, \hat{\omega_o}) = L_e(\vec{x}, \hat{\omega_o}) + \int_{\Omega} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_i(\vec{x}, \hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i$$
 
 ($\hat{\omega_i}, \hat{\omega_o}$ 모두 $\vec{x}$ 에서 나가는 방향입니다.)
 
 위 Rendering Equation이 말하는 점은 명확합니다.
 
-> 표면 위 점 $\vec{x}$ 에서 $\hat{\omega_o}$ 방향으로 나가는 빛의 세기 $L_o(\vec{x}, \hat{\omega_o})$는,
-$\\$
-표면 자체의 빛나는 양 $L_e(\vec{x}, \hat{\omega_o})$ 과
-$\\$
-임의의 입사 방향 $\hat{\omega_i}$ 로부터 온 빛의 세기 $L_i(\vec{x}, \hat{\omega_i})$ 가 반사된 양 $f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_i(\vec{x}, \hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}})$
-$\\$
-들의 합과 같다.
+"표면 위 점 $\vec{x}$ 에서 $\hat{\omega_o}$ 방향으로 나가는 빛의 세기 $L_o(\vec{x}, \hat{\omega_o})$는, 표면 자체의 빛나는 양 $L_e(\vec{x}, \hat{\omega_o})$ 과 임의의 입사 방향 $\hat{\omega_i}$ 로부터 온 빛의 세기 $L_i(\vec{x}, \hat{\omega_i})$ 가 반사된 양 $f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_i(\vec{x}, \hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}})$ 들의 합과 같다."
 
 또한 진공에서 빛의 전파는 에너지를 보존시키기에, $L_i(\vec{x}, \hat{\omega_i})$ 는 다른 위치 $(\vec{x} + t_i\hat{\omega_i})$ 에서 $-\hat{\omega_i}$ 방향으로 출발한 빛의 세기와 같을 것입니다.
 
-> $$L_i(\vec{x}, \hat{\omega_i}) = L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) $$
+$$L_i(\vec{x}, \hat{\omega_i}) = L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) $$
 
 이로부터 Rendering Equation을 다시 작성하면
 
-> $$L_o(\vec{x}, \hat{\omega_o}) = L_e(\vec{x}, \hat{\omega_o}) + \int_{\Omega} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i$$
+$$L_o(\vec{x}, \hat{\omega_o}) = L_e(\vec{x}, \hat{\omega_o}) + \int_{\Omega} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i$$
 
 의 재귀적 형태로 나타납니다. Path Tracing은 이 방정식을 푸는 방법입니다.
 
@@ -39,13 +33,13 @@ $\\$
 
 그 후 확률변수의 기댓값 관점으로 주어진 적분을 해석합니다.
 
-> $$\int_{\Omega}f(\vec{x})d\vec{x} = \int_{\Omega}\frac{f(\vec{x})}{\rho(\vec{x})}\rho(\vec{x})d\vec{x} =  \langle \frac{f(X)}{\rho(X)} \rangle$$
+$$\int_{\Omega}f(\vec{x})d\vec{x} = \int_{\Omega}\frac{f(\vec{x})}{\rho(\vec{x})}\rho(\vec{x})d\vec{x} =  \langle \frac{f(X)}{\rho(X)} \rangle$$
 
 여기서 $X$는 영역 ${\Omega}$에서 정의되며 확률밀도함수 $\rho(\vec{x})$ 를 따르는 확률변수입니다.
 
 큰 수의 법칙에 의해 이 기댓값은 $M$이 충분히 크다면 앞서 추출한 표본들의 평균으로 표현할 수 있습니다.
 
-> $$\langle \frac{f(X)}{\rho(X)} \rangle \approx \frac{1}{M}\sum_{i=1}^M\frac{f(X_i)}{\rho(X_i)}$$
+$$\langle \frac{f(X)}{\rho(X)} \rangle \approx \frac{1}{M}\sum_{i=1}^M\frac{f(X_i)}{\rho(X_i)}$$
 
 이 방식은 Rendering Equation에 나타나는 복잡한 적분의 Reflection Term을 구하는데 유용하게 사용됩니다.
 
@@ -63,7 +57,7 @@ $\\$
 
 명시적인 위치가 없고, 방향만 있는 광원입니다. Directional Light의 발광 함수는 
 
-> $$L_e(\vec{x}, \hat{\omega}) = L_0\delta(\hat{\omega} - \hat{\omega_L}) $$
+$$L_e(\vec{x}, \hat{\omega}) = L_0\delta(\hat{\omega} - \hat{\omega_L}) $$
 
 와 같이 쓸 수 있습니다.
 
@@ -71,7 +65,7 @@ $\\$
 
 명시적인 위치만 있고, 위치로부터 주위로 고르게 퍼져나가는 점 광원입니다. Directional Light와 유사하게, Point Light의 발광 함수는
 
-> $$L_e(\vec{x}, \hat{\omega}) = \frac{L_0}{|\vec{x} - \vec{p}|^2}\delta(\hat{\omega} - \hat{\omega_L}) $$
+$$L_e(\vec{x}, \hat{\omega}) = \frac{L_0}{|\vec{x} - \vec{p}|^2}\delta(\hat{\omega} - \hat{\omega_L}) $$
 
 가 됩니다.
 
@@ -85,7 +79,7 @@ Rect Light 는 사각형 영역에 모여있는 Point Light의 집합입니다.
 
 Rendering Equation을 수치적으로 풀기 전에, 모든 입사광의 경로 집합 $\Omega$ 를 직접광과 간접광의 두 경우로 나누겠습니다. 이 때 Rendering Equation은
 
-> $$L_o(\vec{x}, \hat{\omega_o}) = L_e(\vec{x}, \hat{\omega_o}) \\+ \int_{Direct} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \\+ \int_{Indirect} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i$$
+$$L_o(\vec{x}, \hat{\omega_o}) = L_e(\vec{x}, \hat{\omega_o}) \\+ \int_{Direct} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \\+ \int_{Indirect} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i$$
 
 으로 쓸 수 있습니다.
 
@@ -93,19 +87,19 @@ Rendering Equation을 수치적으로 풀기 전에, 모든 입사광의 경로 
 
 Direct Light에서 나온 빛은, 곧 광원 자신이 만들어낸 빛입니다.
 
->$$L_o(\vec{x}, \hat{\omega}) = L_e(\vec{x}, \hat{\omega})$$
+$$L_o(\vec{x}, \hat{\omega}) = L_e(\vec{x}, \hat{\omega})$$
 
 
 
 Directional Light, Point Light와 같이 특별한 발광함수를 갖는 광원들은, 이 적분을 해석적으로 결정할 수 있게 됩니다. 예를 들어 Directional Light 는
 
-> $$ \int_{Directional} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \\= \int_{Directional} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_0\delta(-\hat{\omega_i} - \hat{\omega_L}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \\= L_0f_r(\vec{x}, -\hat{\omega_L}, \hat{\omega_o}) (-\hat{\omega_L} \cdot \hat{\mathbf{n}})$$
+$$ \int_{Directional} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \\= \int_{Directional} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_0\delta(-\hat{\omega_i} - \hat{\omega_L}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \\= L_0f_r(\vec{x}, -\hat{\omega_L}, \hat{\omega_o}) (-\hat{\omega_L} \cdot \hat{\mathbf{n}})$$
 
 가 되겠습니다. 이처럼 해석적으로 적분을 결정할 수 있는 Direct Light 항이 있는 반면, Indirect Light는 그렇게 하지 못합니다. 
 
 따라서 우리는 Monte-Carlo Integration 을 이용해 Indirect Light 항의 적분을 근사할 것입니다 (계산의 부하를 줄이기 위해 $M = 1$ 을 선택합니다). 확률밀도함수 $\rho(\vec{x})$ 를 사용해 하나의 방향 샘플 $\hat{\omega_X}$ 를 추출하면, 적분은
 
-> $$ \int_{Indirect} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \\\approx  \frac{1}{\rho(\vec{x} + t_X\hat{\omega_X})}f_r(\vec{x}, \hat{\omega_X}, \hat{\omega_o})(\hat{\omega_X} \cdot \hat{\mathbf{n}})L_o(\vec{x} + t_i\hat{\omega_X}, -\hat{\omega_X})$$
+$$ \int_{Indirect} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \\\approx  \frac{1}{\rho(\vec{x} + t_X\hat{\omega_X})}f_r(\vec{x}, \hat{\omega_X}, \hat{\omega_o})(\hat{\omega_X} \cdot \hat{\mathbf{n}})L_o(\vec{x} + t_i\hat{\omega_X}, -\hat{\omega_X})$$
 
 로 근사할 수 있습니다.
 
@@ -114,16 +108,16 @@ Directional Light, Point Light와 같이 특별한 발광함수를 갖는 광원
 Rendering Equation에서 해석적으로 결정할 수 있는 항들을 묶고, 
 
 
-> $$EmitAndDirect(\vec{x}, \hat{\omega_o}) = L_e(\vec{x}, \hat{\omega_o}) + \int_{Direct} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i$$
+$$EmitAndDirect(\vec{x}, \hat{\omega_o}) = L_e(\vec{x}, \hat{\omega_o}) + \int_{Direct} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i$$
 
 Indirect Path Sample에서 결정한 $L_o$의 계수를 하나로 묶겠습니다.
 
 
-> $$Attenuation(\vec{x}, \hat{\omega_o}, \hat{\omega_X}) = \frac{1}{\rho(\vec{x} + t_X\hat{\omega_X})}f_r(\vec{x}, \hat{\omega_X}, \hat{\omega_o})(\hat{\omega_X} \cdot \hat{\mathbf{n}})$$
+$$Attenuation(\vec{x}, \hat{\omega_o}, \hat{\omega_X}) = \frac{1}{\rho(\vec{x} + t_X\hat{\omega_X})}f_r(\vec{x}, \hat{\omega_X}, \hat{\omega_o})(\hat{\omega_X} \cdot \hat{\mathbf{n}})$$
 
 이렇게 묶으면, Rendering Equation은 최종적으로
 
-> $$L_o(\vec{x}, \hat{\omega_o}) = EmitAndDirect(\vec{x}, \hat{\omega_o}) \\+ Attenuation(\vec{x}, \hat{\omega_o}, \hat{\omega_X})L_o(\vec{x} + t_i\hat{\omega_X}, -\hat{\omega_X})$$
+$$L_o(\vec{x}, \hat{\omega_o}) = EmitAndDirect(\vec{x}, \hat{\omega_o}) \\+ Attenuation(\vec{x}, \hat{\omega_o}, \hat{\omega_X})L_o(\vec{x} + t_i\hat{\omega_X}, -\hat{\omega_X})$$
 
 로 요약할 수 있습니다.
 
