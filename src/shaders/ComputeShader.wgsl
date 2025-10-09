@@ -1019,6 +1019,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     // 2. Path Tracing 수행
     for (var BounceDepth : u32 = 0u; BounceDepth < 10u; BounceDepth++)
     {
+        // 간단한 레이트레이싱 수행
         let HitInfo : HitResult = TraceRay(CurrentRay);
 
         // 부딪히지 않았다면 -> 환경광 히트 처리 후 바운스 종료
@@ -1027,7 +1028,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         // Surface Emit + All Direct Lights 가 만드는 색 계산
         ResultColor += Throughput * GetSurfaceEmitAndDirectLight(HitInfo, -CurrentRay.Direction, &RandomSeed);
 
-        // 다음 경로를 샘플링하고, 해당 경로에서의 Attenuation 계산
+        // 다음 경로를 샘플링하고, 해당 경로에서의 Attenuation 계산 & Ray 발사
         let NextPathSample : PathSample = GetNextPathSampled(HitInfo, -CurrentRay.Direction, &RandomSeed);
 
         Throughput *= NextPathSample.Attenuation;

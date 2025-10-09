@@ -1,41 +1,5 @@
-# PathTracerDemo
-Minimal Path Tracer Using WebGPU
+# Path Tracer Demo
 
-# Installed
-npm i gl-matrix
+WebGPU를 이용해 PathTracing을 수행하는 프로젝트입니다.
 
-npm i @webgpu/types
-
-npm install three
-npm install --save-dev @types/three
-
-
-npm install three three-mesh-bvh // 09/30 -> Load방식 변경으로 당장엔 사용안함
-npm install --save-dev @types/three
-
-# GPU Storage Buffers
-
-SceneBuffer : 씬의 모든 Instance | 모든 Mesh들의 Layout | 모든 Mesh들의 MaterialArray
-
-Instance[0], ... , Instance[I] | MeshLayout[0], ... , MeshLayout[M] | MaterialArray[0], ... , MaterialArray[M]
-
-
-
-GeometryBuffer : 모든 Mesh들의 VertexArray | 모든 Mesh들의 IndexArray | 모든 Mesh들의 PrimitiveToMaterialIDArray
-
-VertexArray[0], ... , VertexArray[M] | IndexArray[0], ... , IndexArray[M] | PrimToMatArr[0], ... , PrimToMatArr[M]
-
-
-
-AccelBuffer : Tlas | 모든 Mesh들의 BlasArray
-
-Tlas | BlasArray[0], ... , BlasArray[M]
-
-# PBR
-
-Normal Distribution -> GGX
-
-Geometry Shadow -> Smith's Approximation (+ Schlick-GGX)
-
-Frensel -> Frensel-Schlick
-
++ [PathTracing Theory](./readables/Theory.md)
