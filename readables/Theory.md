@@ -93,13 +93,13 @@ $$L_o(\vec{x}, \hat{\omega}) = L_e(\vec{x}, \hat{\omega})$$
 
 Directional Light, Point Light와 같이 특별한 발광함수를 갖는 광원들은, 이 적분을 해석적으로 결정할 수 있게 됩니다. 예를 들어 Directional Light 는
 
-$$ \int_{Directional} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i = \int_{Directional} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_0\delta(-\hat{\omega_i} - \hat{\omega_L}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i = L_0f_r(\vec{x}, -\hat{\omega_L}, \hat{\omega_o}) (-\hat{\omega_L} \cdot \hat{\mathbf{n}})$$
+$$ \int_{Directional} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i = L_0f_r(\vec{x}, -\hat{\omega_L}, \hat{\omega_o}) (-\hat{\omega_L} \cdot \hat{\mathbf{n}})$$
 
 가 되겠습니다. 이처럼 해석적으로 적분을 결정할 수 있는 Direct Light 항이 있는 반면, Indirect Light는 그렇게 하지 못합니다. 
 
 따라서 우리는 Monte-Carlo Integration 을 이용해 Indirect Light 항의 적분을 근사할 것입니다 (계산의 부하를 줄이기 위해 $M = 1$ 을 선택합니다). 확률밀도함수 $\rho(\vec{x})$ 를 사용해 하나의 방향 샘플 $\hat{\omega_X}$ 를 추출하면, 적분은
 
-$$ \int_{Indirect} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \\\approx  \frac{1}{\rho(\vec{x} + t_X\hat{\omega_X})}f_r(\vec{x}, \hat{\omega_X}, \hat{\omega_o})(\hat{\omega_X} \cdot \hat{\mathbf{n}})L_o(\vec{x} + t_i\hat{\omega_X}, -\hat{\omega_X})$$
+$$ \int_{Indirect} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \approx  \frac{1}{\rho(\vec{x} + t_X\hat{\omega_X})}f_r(\vec{x}, \hat{\omega_X}, \hat{\omega_o})(\hat{\omega_X} \cdot \hat{\mathbf{n}})L_o(\vec{x} + t_i\hat{\omega_X}, -\hat{\omega_X})$$
 
 로 근사할 수 있습니다.
 
