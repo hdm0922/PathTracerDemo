@@ -79,7 +79,7 @@ Rect Light 는 사각형 영역에 모여있는 Point Light의 집합입니다.
 
 Rendering Equation을 수치적으로 풀기 전에, 모든 입사광의 경로 집합 $\Omega$ 를 직접광과 간접광의 두 경우로 나누겠습니다. 이 때 Rendering Equation은
 
-$$L_o(\vec{x}, \hat{\omega_o}) = L_e(\vec{x}, \hat{\omega_o}) \\+ \int_{Direct} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \\+ \int_{Indirect} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i$$
+$$L_o(\vec{x}, \hat{\omega_o}) = L_e(\vec{x}, \hat{\omega_o}) + \int_{Direct} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i + \int_{Indirect} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i$$
 
 으로 쓸 수 있습니다.
 
@@ -93,7 +93,7 @@ $$L_o(\vec{x}, \hat{\omega}) = L_e(\vec{x}, \hat{\omega})$$
 
 Directional Light, Point Light와 같이 특별한 발광함수를 갖는 광원들은, 이 적분을 해석적으로 결정할 수 있게 됩니다. 예를 들어 Directional Light 는
 
-$$ \int_{Directional} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \\= \int_{Directional} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_0\delta(-\hat{\omega_i} - \hat{\omega_L}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i \\= L_0f_r(\vec{x}, -\hat{\omega_L}, \hat{\omega_o}) (-\hat{\omega_L} \cdot \hat{\mathbf{n}})$$
+$$ \int_{Directional} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_o(\vec{x} + t_i\hat{\omega_i}, -\hat{\omega_i}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i = \int_{Directional} f_r(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) L_0\delta(-\hat{\omega_i} - \hat{\omega_L}) (\hat{\omega_i} \cdot \hat{\mathbf{n}}) d\omega_i = L_0f_r(\vec{x}, -\hat{\omega_L}, \hat{\omega_o}) (-\hat{\omega_L} \cdot \hat{\mathbf{n}})$$
 
 가 되겠습니다. 이처럼 해석적으로 적분을 결정할 수 있는 Direct Light 항이 있는 반면, Indirect Light는 그렇게 하지 못합니다. 
 
@@ -117,7 +117,7 @@ $$Attenuation(\vec{x}, \hat{\omega_o}, \hat{\omega_X}) = \frac{1}{\rho(\vec{x} +
 
 이렇게 묶으면, Rendering Equation은 최종적으로
 
-$$L_o(\vec{x}, \hat{\omega_o}) = EmitAndDirect(\vec{x}, \hat{\omega_o}) \\+ Attenuation(\vec{x}, \hat{\omega_o}, \hat{\omega_X})L_o(\vec{x} + t_i\hat{\omega_X}, -\hat{\omega_X})$$
+$$L_o(\vec{x}, \hat{\omega_o}) = EmitAndDirect(\vec{x}, \hat{\omega_o}) + Attenuation(\vec{x}, \hat{\omega_o}, \hat{\omega_X})L_o(\vec{x} + t_i\hat{\omega_X}, -\hat{\omega_X})$$
 
 로 요약할 수 있습니다.
 
