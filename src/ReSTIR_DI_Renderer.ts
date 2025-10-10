@@ -4,6 +4,8 @@ import computeShaderCode from './shaders/ComputeShader.wgsl?raw';
 import vertexShaderCode from './shaders/VertexShader.wgsl?raw';
 import fragmentShaderCode from './shaders/FragmentShader.wgsl?raw';
 
+import ReSTIR_DI_Pass1 from "./shaders/ReSTIR_DI_Pass1.wgsl?raw";
+
 import type { MeshDescriptor, SerializedMesh } from "./Structs";
 import { World } from "./World";
 import { ResourceManager } from "./ResourceManager";
@@ -64,7 +66,7 @@ function makeViewProjection(
 }
 
 
-export class Renderer
+export class ReSTIR_DI_Renderer
 {
 
     // GPU Device Stuff
@@ -74,6 +76,20 @@ export class Renderer
     public readonly Context         : GPUCanvasContext;
     public readonly PreferredFormat : GPUTextureFormat;
 
+///////////////////// ReSTIR DI Stuffs /////////////////////
+
+    public G_PositionTexture    : GPUTexture;
+    public G_NormalTexture      : GPUTexture;
+    public G_AlbedoTexture      : GPUTexture;
+    public G_EmissiveTexture    : GPUTexture;
+
+
+    public ComputePipeline_Pass1 : GPUComputePipeline;
+
+    public ComputeBindGroup_Pass1 : GPUBindGroup;
+
+
+///////////////////////////////////////////////////////////
     // WebGPU Resources
     public SceneTexture         : GPUTexture;
     public AccumTexture         : GPUTexture;
@@ -134,39 +150,46 @@ export class Renderer
         }
         
 
+        // Declare Stuffs
+        {
+            this.G_PositionTexture  = GPUTexture.prototype;
+            this.G_NormalTexture    = GPUTexture.prototype;
+            this.G_AlbedoTexture    = GPUTexture.prototype;
+            this.G_EmissiveTexture  = GPUTexture.prototype;
 
-        // Create WebGPU Resources
-        this.SceneTexture       = GPUTexture.prototype;
-        this.AccumTexture       = GPUTexture.prototype;
+            this.ComputePipeline_Pass1 = GPUComputePipeline.prototype;
 
-        this.UniformBuffer      = GPUBuffer.prototype;
-        this.SceneBuffer        = GPUBuffer.prototype;
-        this.GeometryBuffer     = GPUBuffer.prototype;
-        this.AccelBuffer        = GPUBuffer.prototype;
-
-        this.Textures           = [];
-
-        // Create WebGPU Pipelines
-        this.ComputePipeline    = GPUComputePipeline.prototype;
-        this.RenderPipeline     = GPURenderPipeline.prototype;
+            this.ComputeBindGroup_Pass1 = GPUBindGroup.prototype;
 
 
-        // Create WebGPU BindGroups
-        this.ComputeBindGroup   = GPUBindGroup.prototype;
-        this.RenderBindGroup    = GPUBindGroup.prototype;
 
+            this.SceneTexture       = GPUTexture.prototype;
+            this.AccumTexture       = GPUTexture.prototype;
 
-        // World Data
-        this.World              = World.prototype;
-        this.FrameCount         = 0;
+            this.UniformBuffer      = GPUBuffer.prototype;
+            this.SceneBuffer        = GPUBuffer.prototype;
+            this.GeometryBuffer     = GPUBuffer.prototype;
+            this.AccelBuffer        = GPUBuffer.prototype;
 
+            this.Textures           = [];
 
-        this.Offset_BlasBuffer = 0;
-        this.Offset_MaterialBuffer = 0;
-        this.Offset_LightBuffer = 0;
-        this.Offset_MeshDescriptorBuffer = 0;
-        this.Offset_IndexBuffer = 0;
-        this.Offset_PrimitiveToMaterialBuffer = 0;
+            this.ComputePipeline    = GPUComputePipeline.prototype;
+            this.RenderPipeline     = GPURenderPipeline.prototype;
+
+            this.ComputeBindGroup   = GPUBindGroup.prototype;
+            this.RenderBindGroup    = GPUBindGroup.prototype;
+
+            this.World              = World.prototype;
+        }
+
+        // Initialize Data
+        this.FrameCount                         = 0;
+        this.Offset_BlasBuffer                  = 0;
+        this.Offset_MaterialBuffer              = 0;
+        this.Offset_LightBuffer                 = 0;
+        this.Offset_MeshDescriptorBuffer        = 0;
+        this.Offset_IndexBuffer                 = 0;
+        this.Offset_PrimitiveToMaterialBuffer   = 0;
     }
 
 
@@ -322,7 +345,7 @@ export class Renderer
 
 
 
-    async Initialize(World: World): Promise<void>
+    Initialize(World: World): void
     {
         // Initialize Scene Stuffs
         this.World = World;
@@ -478,6 +501,65 @@ export class Renderer
             this.RenderBindGroup    = this.Device.createBindGroup(RenderBindGroupDescriptor);
         }
 
+
+        ///////////////////// ReSTIR DI Stuffs /////////////////////
+
+        // Create G-Buffers
+        {
+            const GBufferDescriptor : GPUTextureDescriptor =
+            {
+                size: { width: this.Canvas.width, height: this.Canvas.height },
+                format: "rgba32float",
+                usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING
+            };
+
+            this.G_PositionTexture  = this.Device.createTexture(GBufferDescriptor);
+            this.G_NormalTexture    = this.Device.createTexture(GBufferDescriptor);
+            this.G_AlbedoTexture    = this.Device.createTexture(GBufferDescriptor);
+            this.G_EmissiveTexture  = this.Device.createTexture(GBufferDescriptor);
+        }
+
+        // Compute Pipeline
+        {
+            const Pass1_ShaderModule    : GPUShaderModule = this.Device.createShaderModule({ code: ReSTIR_DI_Pass1 });
+            const Pass1_Descriptor      : GPUComputePipelineDescriptor =
+            {
+                layout  : "auto",
+                compute : { module: Pass1_ShaderModule, entryPoint: "cs_main" },
+            };
+
+            this.ComputePipeline_Pass1 = this.Device.createComputePipeline(Pass1_Descriptor);
+        }
+
+        // Compute BindGroup
+        {
+            const G_PositionView    : GPUTextureView = this.G_PositionTexture.createView();
+            const G_NormalView      : GPUTextureView = this.G_NormalTexture.createView();
+            const G_AlbedoView      : GPUTextureView = this.G_AlbedoTexture.createView();
+            const G_EmissiveView    : GPUTextureView = this.G_EmissiveTexture.createView();
+
+            const Pass1_Descriptor  : GPUBindGroupDescriptor =
+            {
+                layout: this.ComputePipeline_Pass1.getBindGroupLayout(0),
+                entries:
+                [
+                    { binding: 0, resource: { buffer: this.UniformBuffer } },
+                    { binding: 1, resource: { buffer: this.SceneBuffer }  },
+                    { binding: 2, resource: { buffer: this.GeometryBuffer } },
+                    { binding: 3, resource: { buffer: this.AccelBuffer } },
+
+                    { binding: 10, resource: G_PositionView },
+                    { binding: 11, resource: G_NormalView },
+                    { binding: 12, resource: G_AlbedoView },
+                    { binding: 13, resource: G_EmissiveView }
+                ],
+            };
+
+            this.ComputeBindGroup_Pass1 = this.Device.createBindGroup(Pass1_Descriptor);
+        }
+        
+        ///////////////////////////////////////////////////////////
+
         return;
     }
 
@@ -535,54 +617,22 @@ export class Renderer
 
         const CommandEncoder: GPUCommandEncoder = this.Device.createCommandEncoder();
 
-        // ComputePass (Path Tracing)
+
+        ///////////////////// ReSTIR DI Stuffs /////////////////////
+
+        // Pass 1. Compute Every Pixel's First Hit Information
         {
-            const ComputePass: GPUComputePassEncoder = CommandEncoder.beginComputePass();
-            
-            ComputePass.setPipeline(this.ComputePipeline);
-            ComputePass.setBindGroup(0, this.ComputeBindGroup);
+            const ComputePass : GPUComputePassEncoder = CommandEncoder.beginComputePass();
+
+            ComputePass.setPipeline(this.ComputePipeline_Pass1);
+            ComputePass.setBindGroup(0, this.ComputeBindGroup_Pass1);
             ComputePass.dispatchWorkgroups(Math.ceil(this.Canvas.width/8), Math.ceil(this.Canvas.height/8), 1);
 
             ComputePass.end();
         }
 
-        // Copy Texture : AccumTexture -> SceneTexture
-        {
-            const SourceTextureInfo     : GPUTexelCopyTextureInfo   = { texture: this.AccumTexture };
-            const DestTextureInfo       : GPUTexelCopyTextureInfo   = { texture: this.SceneTexture };
-            const TextureSize           : GPUExtent3DStrict         = { width: this.SceneTexture.width, height: this.SceneTexture.height };
+        ///////////////////////////////////////////////////////////
 
-            CommandEncoder.copyTextureToTexture(SourceTextureInfo, DestTextureInfo, TextureSize);
-        }
-        
-
-
-        // RenderPass (Draw SceneTexture)
-        {
-            const RenderPassDescriptor: GPURenderPassDescriptor =
-            {
-                colorAttachments:
-                [
-                    {
-                        view: this.Context.getCurrentTexture().createView(),
-                        loadOp: "clear",
-                        storeOp: "store",
-                        clearValue: { r:0, g:0, b:0, a:1 }
-                    }
-                ]
-            };
-
-
-            
-
-            const RenderPass: GPURenderPassEncoder = CommandEncoder.beginRenderPass(RenderPassDescriptor);
-
-            RenderPass.setPipeline(this.RenderPipeline);
-            RenderPass.setBindGroup(0, this.RenderBindGroup);
-            RenderPass.draw(6);
-
-            RenderPass.end();
-        }
 
         // Submit Encoder
         this.Device.queue.submit([CommandEncoder.finish()]);
