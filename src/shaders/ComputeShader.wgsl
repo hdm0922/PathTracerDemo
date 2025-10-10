@@ -951,12 +951,12 @@ fn SampleTransmissivePath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandom
     return PathSample(Attenuation, L);
 }
 
-fn GetSurfaceEmitAndDirectLight(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed : ptr<function, u32>) -> vec3<f32>
+fn GetDirectLight(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed : ptr<function, u32>) -> vec3<f32>
 {
     let HitMaterial : Material = GetMaterialFromHit(HitInfo);
 
-    // Sum of Surface Emit & All Direct Lights
-    var TotalColor : vec3<f32> = HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor;
+    // Sum of All Direct Lights
+    var TotalColor : vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 
     for (var LightID : u32 = 0u; LightID < UniformBuffer.LightSourceCount; LightID++)
     {
@@ -1020,13 +1020,15 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     for (var BounceDepth : u32 = 0u; BounceDepth < 10u; BounceDepth++)
     {
         // 간단한 레이트레이싱 수행
-        let HitInfo : HitResult = TraceRay(CurrentRay);
+        let HitInfo     : HitResult = TraceRay(CurrentRay);
+        let HitMaterial : Material = GetMaterialFromHit(HitInfo);
 
         // 부딪히지 않았다면 -> 환경광 히트 처리 후 바운스 종료
         if (!HitInfo.IsValidHit) { ResultColor += Throughput * EnvironmentColor; break; }
 
         // Surface Emit + All Direct Lights 가 만드는 색 계산
-        ResultColor += Throughput * GetSurfaceEmitAndDirectLight(HitInfo, -CurrentRay.Direction, &RandomSeed);
+        ResultColor += Throughput * (HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor);
+        ResultColor += Throughput * GetDirectLight(HitInfo, -CurrentRay.Direction, &RandomSeed);
 
         // 다음 경로를 샘플링하고, 해당 경로에서의 Attenuation 계산 & Ray 발사
         let NextPathSample : PathSample = GetNextPathSampled(HitInfo, -CurrentRay.Direction, &RandomSeed);
