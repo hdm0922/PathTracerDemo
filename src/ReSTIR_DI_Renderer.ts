@@ -1,69 +1,14 @@
-import { vec3, mat4 } from "gl-matrix";
+import type { MeshDescriptor, SerializedMesh }  from "./Structs";
+import      { World }                           from "./World";
+import      { Camera }                          from "./Camera";
+import      { ResourceManager }                 from "./ResourceManager";
+import      { ComputePass }                     from "./ComputePass";
 
-import computeShaderCode from './shaders/ComputeShader.wgsl?raw';
-import vertexShaderCode from './shaders/VertexShader.wgsl?raw';
-import fragmentShaderCode from './shaders/FragmentShader.wgsl?raw';
+import      { mat4 }                            from "wgpu-matrix";
 
 import ReSTIR_DI_Pass1 from "./shaders/ReSTIR_DI_Pass1.wgsl?raw";
 
-import type { MeshDescriptor, SerializedMesh } from "./Structs";
-import { World } from "./World";
-import { ResourceManager } from "./ResourceManager";
 
-function makeViewProjection(
-  cameraPos: vec3,
-  aspect: number,
-  options?: {
-    fovYDeg?: number;  // 기본 60도
-    near?: number;     // 기본 0.1
-    far?: number;      // 기본 1000
-    zZeroToOne?: boolean; // 기본 true(WebGPU)
-  }
-): mat4 {
-  const fovYDeg = options?.fovYDeg ?? 60;
-  const near    = options?.near    ?? 0.1;
-  const far     = options?.far     ?? 1000.0;
-  const zZO     = options?.zZeroToOne ?? false; // WebGPU면 true 권장 => true하니까 이상해지던데?? false해야 잘됨;;;
-
-  // --- View ---
-  const eye    = vec3.clone(cameraPos);
-  const center = vec3.fromValues(0, 0, 0);
-  const up     = vec3.fromValues(0, 1, 0);
-
-  // eye와 center가 같을 때 lookAt 불능 방지
-  if (vec3.squaredDistance(eye, center) < 1e-20) {
-    // 원점에 너무 가까우면 살짝 뒤로 밀어줌
-    eye[2] = 1.0;
-  }
-
-  const view = mat4.create();
-  mat4.lookAt(view, eye, center, up);
-
-  // --- Projection (기본은 OpenGL 규약용) ---
-  const fovYRad = (fovYDeg * Math.PI) / 180.0;
-  const projGL = mat4.create();
-  mat4.perspective(projGL, fovYRad, aspect, near, far);
-
-  // --- Z 규약 보정: OpenGL(-1..1) → WebGPU/D3D/Vulkan(0..1) ---
-  // z' = z*0.5 + 0.5 를 클립 공간에서 적용하는 행렬
-  let proj = projGL;
-  if (zZO) {
-    const depthFix = mat4.fromValues(
-      1, 0,   0,   0,
-      0, 1,   0,   0,
-      0, 0, 0.5, 0.5,
-      0, 0,   0,   1
-    );
-    proj = mat4.create();
-    mat4.multiply(proj, depthFix, projGL); // proj = depthFix * projGL
-  }
-
-  // --- ViewProjection ---
-  const viewProj = mat4.create();
-  mat4.multiply(viewProj, proj, view); // proj * view
-
-  return viewProj;
-}
 
 
 export class ReSTIR_DI_Renderer
@@ -76,42 +21,41 @@ export class ReSTIR_DI_Renderer
     public readonly Context         : GPUCanvasContext;
     public readonly PreferredFormat : GPUTextureFormat;
 
-///////////////////// ReSTIR DI Stuffs /////////////////////
 
-    public G_PositionTexture    : GPUTexture;
-    public G_NormalTexture      : GPUTexture;
-    public G_AlbedoTexture      : GPUTexture;
-    public G_EmissiveTexture    : GPUTexture;
-
-
-    public ComputePipeline_Pass1 : GPUComputePipeline;
-
-    public ComputeBindGroup_Pass1 : GPUBindGroup;
+    // Compute Pass
+    private GBufferCreationPass!    : ComputePass;
+    private InitialSamplingPass!    : ComputePass;
+    private SpatialReusePass!       : ComputePass;
+    private FinalShadingPass!       : ComputePass;
 
 
-///////////////////////////////////////////////////////////
+    // BindGroup Informations
+    private GBufferCreationPassBindGroup! : GPUBindGroup;
+
+
     // WebGPU Resources
-    public SceneTexture         : GPUTexture;
-    public AccumTexture         : GPUTexture;
+    private G_PositionTexture   : GPUTexture;
+    private G_NormalTexture     : GPUTexture;
+    private G_AlbedoTexture     : GPUTexture;
+    private G_EmissiveTexture   : GPUTexture;
 
-    public UniformBuffer        : GPUBuffer;
-    public SceneBuffer          : GPUBuffer;
-    public GeometryBuffer       : GPUBuffer;
-    public AccelBuffer          : GPUBuffer;
+    private ReservoirTexture_A  : GPUTexture;
 
-    public Textures             : GPUTexture[];
+    private Textures : GPUTexture[];
 
-    // WebGPU Pipelines
-    public ComputePipeline : GPUComputePipeline;
-    public RenderPipeline  : GPURenderPipeline;
+    private UniformBuffer_GBufferCreationPass! : GPUBuffer;
+    private UniformBuffer_InitialSamplingPass! : GPUBuffer;
 
-    // WebGPU BindGroups
-    public ComputeBindGroup : GPUBindGroup;
-    public RenderBindGroup  : GPUBindGroup;
+    private SceneBuffer     : GPUBuffer;
+    private GeometryBuffer  : GPUBuffer;
+    private AccelBuffer     : GPUBuffer;
+    private LightCDFBuffer  : GPUBuffer;
+
+
 
     // World Data
-    public World        : World;
-    public FrameCount   : number;
+    public World : World;
+    private Camera : Camera;
 
     // Data Offsets
     public Offset_MeshDescriptorBuffer      : number;
@@ -131,11 +75,13 @@ export class ReSTIR_DI_Renderer
     {
 
         // Get GPU Device Stuffs
-        this.Adapter            = Adapter;
-        this.Device             = Device;
-        this.Canvas             = Canvas;
-        this.Context            = Canvas.getContext('webgpu')!;
-        this.PreferredFormat    = navigator.gpu.getPreferredCanvasFormat();
+        {
+            this.Adapter            = Adapter;
+            this.Device             = Device;
+            this.Canvas             = Canvas;
+            this.Context            = Canvas.getContext('webgpu')!;
+            this.PreferredFormat    = navigator.gpu.getPreferredCanvasFormat();
+        }
 
         // Configure Context
         {
@@ -157,39 +103,30 @@ export class ReSTIR_DI_Renderer
             this.G_AlbedoTexture    = GPUTexture.prototype;
             this.G_EmissiveTexture  = GPUTexture.prototype;
 
-            this.ComputePipeline_Pass1 = GPUComputePipeline.prototype;
+            this.ReservoirTexture_A = GPUTexture.prototype;
 
-            this.ComputeBindGroup_Pass1 = GPUBindGroup.prototype;
+            this.LightCDFBuffer     = GPUBuffer.prototype;
 
-
-
-            this.SceneTexture       = GPUTexture.prototype;
-            this.AccumTexture       = GPUTexture.prototype;
-
-            this.UniformBuffer      = GPUBuffer.prototype;
             this.SceneBuffer        = GPUBuffer.prototype;
             this.GeometryBuffer     = GPUBuffer.prototype;
             this.AccelBuffer        = GPUBuffer.prototype;
 
             this.Textures           = [];
 
-            this.ComputePipeline    = GPUComputePipeline.prototype;
-            this.RenderPipeline     = GPURenderPipeline.prototype;
-
-            this.ComputeBindGroup   = GPUBindGroup.prototype;
-            this.RenderBindGroup    = GPUBindGroup.prototype;
-
             this.World              = World.prototype;
         }
 
         // Initialize Data
-        this.FrameCount                         = 0;
-        this.Offset_BlasBuffer                  = 0;
-        this.Offset_MaterialBuffer              = 0;
-        this.Offset_LightBuffer                 = 0;
-        this.Offset_MeshDescriptorBuffer        = 0;
-        this.Offset_IndexBuffer                 = 0;
-        this.Offset_PrimitiveToMaterialBuffer   = 0;
+        {
+            this.Offset_BlasBuffer                  = 0;
+            this.Offset_MaterialBuffer              = 0;
+            this.Offset_LightBuffer                 = 0;
+            this.Offset_MeshDescriptorBuffer        = 0;
+            this.Offset_IndexBuffer                 = 0;
+            this.Offset_PrimitiveToMaterialBuffer   = 0;
+
+            this.Camera = new Camera(this.Canvas.width, this.Canvas.height);
+        }
     }
 
 
@@ -345,20 +282,23 @@ export class ReSTIR_DI_Renderer
 
 
 
-    Initialize(World: World): void
+    async Initialize(World: World): Promise<void>
     {
         // Initialize Scene Stuffs
-        this.World = World;
-        this.FrameCount = 0;
+        {
+            this.World = World;
+            this.Camera.SetLocationFromXYZ(0,0,10);
+        }
+        
 
         // Build Scene
         const [SceneBufferData, GeometryBufferData, AccelBufferData, ImageBitmaps] = this.PrepareWorldData();
 
         // Create Uniform Buffer
         {
-            const UniformBufferUsageFlags: GPUBufferUsageFlags = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
+            const UniformBufferUsageFlags : GPUBufferUsageFlags = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
 
-            this.UniformBuffer = this.Device.createBuffer({ size: 256, usage: UniformBufferUsageFlags });
+            this.UniformBuffer_GBufferCreationPass = this.Device.createBuffer({ size: 256, usage: UniformBufferUsageFlags });
         }
 
         // Create Storage Buffers
@@ -414,136 +354,47 @@ export class ReSTIR_DI_Renderer
 
         }
 
-        // Create Scene Texture, AccumTexture
-        {
-            const SceneTextureUsageFlags  : GPUTextureUsageFlags  = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST;
-            const AccumTextureUsageFlags  : GPUTextureUsageFlags  = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC;
-
-            const SceneTextureDescriptor: GPUTextureDescriptor =
-            {
-                size: { width: this.Canvas.width, height: this.Canvas.height },
-                format: "rgba32float",
-                usage: SceneTextureUsageFlags
-            };
-
-            const AccumTextureDescriptor: GPUTextureDescriptor =
-            {
-                size: { width: this.Canvas.width, height: this.Canvas.height },
-                format: "rgba32float",
-                usage: AccumTextureUsageFlags
-            };
-
-            this.SceneTexture = this.Device.createTexture(SceneTextureDescriptor);
-            this.AccumTexture = this.Device.createTexture(AccumTextureDescriptor);
-        }
-
-        // Create Compute Pipeline, Render Pipeline
-        {
-            const ComputeShaderModuleDescriptor     : GPUShaderModuleDescriptor = { code: computeShaderCode };
-            const VertexShaderModuleDescriptor      : GPUShaderModuleDescriptor = { code: vertexShaderCode };
-            const FragmentShaderModuleDescriptor    : GPUShaderModuleDescriptor = { code: fragmentShaderCode };
-
-            const ComputeShaderEntryPoint           : string = "cs_main";
-            const VertexShaderEntryPoint            : string = "vs_main";
-            const FragmentShaderEntryPoint          : string = "fs_main";
-
-            const ComputeShaderModule   : GPUShaderModule = this.Device.createShaderModule(ComputeShaderModuleDescriptor);
-            const VertexShaderModule    : GPUShaderModule = this.Device.createShaderModule(VertexShaderModuleDescriptor);
-            const FragmentShaderModule  : GPUShaderModule = this.Device.createShaderModule(FragmentShaderModuleDescriptor);
-
-            const ComputePipelineDescriptor: GPUComputePipelineDescriptor =
-            {
-                layout  : "auto",
-                compute : { module: ComputeShaderModule, entryPoint: ComputeShaderEntryPoint },
-            };
-
-            const RenderPipelineDescriptor: GPURenderPipelineDescriptor =
-            {
-                layout      : "auto",
-                vertex      : { module: VertexShaderModule,     entryPoint: VertexShaderEntryPoint },
-                fragment    : { module: FragmentShaderModule,   entryPoint: FragmentShaderEntryPoint, targets : [{ format: this.PreferredFormat }] },
-                primitive   : { topology: "triangle-list" },
-            };
-
-            this.ComputePipeline = this.Device.createComputePipeline(ComputePipelineDescriptor);
-            this.RenderPipeline = this.Device.createRenderPipeline(RenderPipelineDescriptor);
-        }
-
-        // Create Bindgroups
-        {
-            const SceneTextureView: GPUTextureView = this.SceneTexture.createView();
-            const AccumTextureView: GPUTextureView = this.AccumTexture.createView();
-            
-            const ComputeBindGroupDescriptor: GPUBindGroupDescriptor =
-            {
-                layout: this.ComputePipeline.getBindGroupLayout(0),
-                entries:
-                [
-                    { binding: 0, resource: { buffer: this.UniformBuffer } },
-                    { binding: 1, resource: { buffer: this.SceneBuffer }  },
-                    { binding: 2, resource: { buffer: this.GeometryBuffer } },
-                    { binding: 3, resource: { buffer: this.AccelBuffer } },
-
-                    { binding: 10, resource: SceneTextureView },
-                    { binding: 11, resource: AccumTextureView },
-                ],
-            };
-
-            const RenderBindGroupDescriptor: GPUBindGroupDescriptor =
-            {
-                layout: this.RenderPipeline.getBindGroupLayout(0),
-                entries: [
-                    { binding: 0, resource: SceneTextureView }
-                ],
-            };
-
-            this.ComputeBindGroup   = this.Device.createBindGroup(ComputeBindGroupDescriptor);
-            this.RenderBindGroup    = this.Device.createBindGroup(RenderBindGroupDescriptor);
-        }
-
-
         ///////////////////// ReSTIR DI Stuffs /////////////////////
 
-        // Create G-Buffers
+        // Create Resources used in ReSTIR DI
         {
             const GBufferDescriptor : GPUTextureDescriptor =
             {
                 size: { width: this.Canvas.width, height: this.Canvas.height },
                 format: "rgba32float",
-                usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING
+                usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
+            };
+
+            const ReservoirBufferDescriptor : GPUTextureDescriptor =
+            {
+                size: { width: this.Canvas.width, height: this.Canvas.height },
+                format: "rgba32float",
+                usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
             };
 
             this.G_PositionTexture  = this.Device.createTexture(GBufferDescriptor);
             this.G_NormalTexture    = this.Device.createTexture(GBufferDescriptor);
             this.G_AlbedoTexture    = this.Device.createTexture(GBufferDescriptor);
             this.G_EmissiveTexture  = this.Device.createTexture(GBufferDescriptor);
+
+            this.ReservoirTexture_A = this.Device.createTexture(ReservoirBufferDescriptor);
         }
 
-        // Compute Pipeline
+        // Compute Pipeline & BindGroup
         {
-            const Pass1_ShaderModule    : GPUShaderModule = this.Device.createShaderModule({ code: ReSTIR_DI_Pass1 });
-            const Pass1_Descriptor      : GPUComputePipelineDescriptor =
-            {
-                layout  : "auto",
-                compute : { module: Pass1_ShaderModule, entryPoint: "cs_main" },
-            };
+            this.GBufferCreationPass = await ComputePass.Create(this.Device, ReSTIR_DI_Pass1);
 
-            this.ComputePipeline_Pass1 = this.Device.createComputePipeline(Pass1_Descriptor);
-        }
-
-        // Compute BindGroup
-        {
             const G_PositionView    : GPUTextureView = this.G_PositionTexture.createView();
             const G_NormalView      : GPUTextureView = this.G_NormalTexture.createView();
             const G_AlbedoView      : GPUTextureView = this.G_AlbedoTexture.createView();
             const G_EmissiveView    : GPUTextureView = this.G_EmissiveTexture.createView();
 
-            const Pass1_Descriptor  : GPUBindGroupDescriptor =
+            const GBufferCreationPass_Descriptor  : GPUBindGroupDescriptor =
             {
-                layout: this.ComputePipeline_Pass1.getBindGroupLayout(0),
+                layout: this.GBufferCreationPass.Pipeline.getBindGroupLayout(0),
                 entries:
                 [
-                    { binding: 0, resource: { buffer: this.UniformBuffer } },
+                    { binding: 0, resource: { buffer: this.UniformBuffer_GBufferCreationPass } },
                     { binding: 1, resource: { buffer: this.SceneBuffer }  },
                     { binding: 2, resource: { buffer: this.GeometryBuffer } },
                     { binding: 3, resource: { buffer: this.AccelBuffer } },
@@ -555,7 +406,7 @@ export class ReSTIR_DI_Renderer
                 ],
             };
 
-            this.ComputeBindGroup_Pass1 = this.Device.createBindGroup(Pass1_Descriptor);
+            this.GBufferCreationPassBindGroup = this.Device.createBindGroup(GBufferCreationPass_Descriptor);
         }
         
         ///////////////////////////////////////////////////////////
@@ -567,72 +418,63 @@ export class ReSTIR_DI_Renderer
 
     Update(): void
     {
-        this.FrameCount++;
 
-        // Camera Property
-        const camDir = vec3.normalize(vec3.create(), vec3.fromValues(0,0,1));
-        const camDist = 10;
-        const camPos = vec3.scale(vec3.create(), camDir, camDist);
-        const VP = makeViewProjection(camPos, this.Canvas.width / this.Canvas.height);
-        const VPINV = mat4.invert(mat4.create(), VP);
+        ///////////////////// Pass 1 /////////////////////
 
-        const ELEMENT_COUNT = 32;
-        const UniformData = new ArrayBuffer(4 * ELEMENT_COUNT);
         {
-            const Float32View = new Float32Array(UniformData);
-            const Uint32View = new Uint32Array(UniformData);
+            const CameraLocation = this.Camera.GetLocation();
+            const VPINV = mat4.invert(this.Camera.GetViewProjectionMatrix());
 
-            Uint32View[0] = this.Canvas.width;
-            Uint32View[1] = this.Canvas.height;
-            Uint32View[2] = 3; // Max Bounce
-            Uint32View[3] = 1;
-            
-            for(let iter=0; iter<16; iter++) Float32View[4 + iter] = VPINV?.[iter]!;
+            const ELEMENT_COUNT = 28;
+            const UniformData = new ArrayBuffer(4 * ELEMENT_COUNT);
+            {
+                const Float32View = new Float32Array(UniformData);
+                const Uint32View = new Uint32Array(UniformData);
 
-            Float32View[20] = camPos[0];
-            Float32View[21] = camPos[1];
-            Float32View[22] = camPos[2];
-            Uint32View [23] = this.FrameCount;
+                for(let iter=0; iter<16; iter++) Float32View[iter] = VPINV?.[iter]!;
 
-            Uint32View[24] = this.Offset_MeshDescriptorBuffer;
-            Uint32View[25] = this.Offset_MaterialBuffer;
-            Uint32View[26] = this.Offset_LightBuffer;
-            Uint32View[27] = this.Offset_IndexBuffer;
+                Float32View[16] = CameraLocation[0];
+                Float32View[17] = CameraLocation[1];
+                Float32View[18] = CameraLocation[2];
+                Uint32View[19] = this.World.InstancesPool.size;
 
-            Uint32View[28] = this.Offset_PrimitiveToMaterialBuffer;
-            Uint32View[29] = this.Offset_BlasBuffer;
-            Uint32View[30] = this.World.InstancesPool.size;
-            Uint32View[31] = this.World.Lights.length;
+                Uint32View[20] = this.Canvas.width;
+                Uint32View[21] = this.Canvas.height;
+                Uint32View[22] = this.Offset_MeshDescriptorBuffer;
+                Uint32View[23] = this.Offset_MaterialBuffer;
+
+                Uint32View[24] = this.Offset_LightBuffer;
+                Uint32View[25] = this.Offset_IndexBuffer;
+                Uint32View[26] = this.Offset_PrimitiveToMaterialBuffer;
+                Uint32View[27] = this.Offset_BlasBuffer;
+                
+            }
+
+            this.Device.queue.writeBuffer(this.UniformBuffer_GBufferCreationPass, 0, UniformData);
+
         }
+        
 
-        this.Device.queue.writeBuffer(this.UniformBuffer, 0, UniformData);
-
+        //////////////////////////////////////////////////
         return;
     }
 
 
 
-    async Render(): Promise<void>
+    Render() : void
     {
 
-        const CommandEncoder: GPUCommandEncoder = this.Device.createCommandEncoder();
-
+        const WorkgroupCount = [Math.ceil(this.Canvas.width/8), Math.ceil(this.Canvas.height/8), 1];
+        const CommandEncoder : GPUCommandEncoder = this.Device.createCommandEncoder();
 
         ///////////////////// ReSTIR DI Stuffs /////////////////////
 
         // Pass 1. Compute Every Pixel's First Hit Information
-        {
-            const ComputePass : GPUComputePassEncoder = CommandEncoder.beginComputePass();
+        this.GBufferCreationPass.Dispatch(CommandEncoder, this.GBufferCreationPassBindGroup, WorkgroupCount);
 
-            ComputePass.setPipeline(this.ComputePipeline_Pass1);
-            ComputePass.setBindGroup(0, this.ComputeBindGroup_Pass1);
-            ComputePass.dispatchWorkgroups(Math.ceil(this.Canvas.width/8), Math.ceil(this.Canvas.height/8), 1);
-
-            ComputePass.end();
-        }
+        
 
         ///////////////////////////////////////////////////////////
-
 
         // Submit Encoder
         this.Device.queue.submit([CommandEncoder.finish()]);

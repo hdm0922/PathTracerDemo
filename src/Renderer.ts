@@ -1,4 +1,4 @@
-import { vec3, mat4 } from "gl-matrix";
+import { mat4 } from "wgpu-matrix";
 
 import computeShaderCode from './shaders/ComputeShader.wgsl?raw';
 import vertexShaderCode from './shaders/VertexShader.wgsl?raw';
@@ -7,61 +7,7 @@ import fragmentShaderCode from './shaders/FragmentShader.wgsl?raw';
 import type { MeshDescriptor, SerializedMesh } from "./Structs";
 import { World } from "./World";
 import { ResourceManager } from "./ResourceManager";
-
-function makeViewProjection(
-  cameraPos: vec3,
-  aspect: number,
-  options?: {
-    fovYDeg?: number;  // 기본 60도
-    near?: number;     // 기본 0.1
-    far?: number;      // 기본 1000
-    zZeroToOne?: boolean; // 기본 true(WebGPU)
-  }
-): mat4 {
-  const fovYDeg = options?.fovYDeg ?? 60;
-  const near    = options?.near    ?? 0.1;
-  const far     = options?.far     ?? 1000.0;
-  const zZO     = options?.zZeroToOne ?? false; // WebGPU면 true 권장 => true하니까 이상해지던데?? false해야 잘됨;;;
-
-  // --- View ---
-  const eye    = vec3.clone(cameraPos);
-  const center = vec3.fromValues(0, 0, 0);
-  const up     = vec3.fromValues(0, 1, 0);
-
-  // eye와 center가 같을 때 lookAt 불능 방지
-  if (vec3.squaredDistance(eye, center) < 1e-20) {
-    // 원점에 너무 가까우면 살짝 뒤로 밀어줌
-    eye[2] = 1.0;
-  }
-
-  const view = mat4.create();
-  mat4.lookAt(view, eye, center, up);
-
-  // --- Projection (기본은 OpenGL 규약용) ---
-  const fovYRad = (fovYDeg * Math.PI) / 180.0;
-  const projGL = mat4.create();
-  mat4.perspective(projGL, fovYRad, aspect, near, far);
-
-  // --- Z 규약 보정: OpenGL(-1..1) → WebGPU/D3D/Vulkan(0..1) ---
-  // z' = z*0.5 + 0.5 를 클립 공간에서 적용하는 행렬
-  let proj = projGL;
-  if (zZO) {
-    const depthFix = mat4.fromValues(
-      1, 0,   0,   0,
-      0, 1,   0,   0,
-      0, 0, 0.5, 0.5,
-      0, 0,   0,   1
-    );
-    proj = mat4.create();
-    mat4.multiply(proj, depthFix, projGL); // proj = depthFix * projGL
-  }
-
-  // --- ViewProjection ---
-  const viewProj = mat4.create();
-  mat4.multiply(viewProj, proj, view); // proj * view
-
-  return viewProj;
-}
+import { Camera } from "./Camera";
 
 
 export class Renderer
@@ -105,6 +51,8 @@ export class Renderer
     public Offset_PrimitiveToMaterialBuffer : number;
     public Offset_BlasBuffer                : number;
 
+    // Camera
+    private Camera! : Camera;
 
     constructor
     (
@@ -167,6 +115,12 @@ export class Renderer
         this.Offset_MeshDescriptorBuffer = 0;
         this.Offset_IndexBuffer = 0;
         this.Offset_PrimitiveToMaterialBuffer = 0;
+
+        {
+            this.Camera = new Camera(this.Canvas.width, this.Canvas.height);
+
+            this.Camera.SetLocationFromXYZ(0,0,10);
+        }
     }
 
 
@@ -488,11 +442,9 @@ export class Renderer
         this.FrameCount++;
 
         // Camera Property
-        const camDir = vec3.normalize(vec3.create(), vec3.fromValues(0,0,1));
-        const camDist = 10;
-        const camPos = vec3.scale(vec3.create(), camDir, camDist);
-        const VP = makeViewProjection(camPos, this.Canvas.width / this.Canvas.height);
-        const VPINV = mat4.invert(mat4.create(), VP);
+        const CameraLocation = this.Camera.GetLocation();
+        const VP = this.Camera.GetViewProjectionMatrix();
+        const VPINV = mat4.invert(VP);
 
         const ELEMENT_COUNT = 32;
         const UniformData = new ArrayBuffer(4 * ELEMENT_COUNT);
@@ -507,9 +459,9 @@ export class Renderer
             
             for(let iter=0; iter<16; iter++) Float32View[4 + iter] = VPINV?.[iter]!;
 
-            Float32View[20] = camPos[0];
-            Float32View[21] = camPos[1];
-            Float32View[22] = camPos[2];
+            Float32View[20] = CameraLocation[0];
+            Float32View[21] = CameraLocation[1];
+            Float32View[22] = CameraLocation[2];
             Uint32View [23] = this.FrameCount;
 
             Uint32View[24] = this.Offset_MeshDescriptorBuffer;

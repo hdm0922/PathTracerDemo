@@ -4,24 +4,19 @@
 
 struct Uniform
 {
-    Resolution                          : vec2<u32>,
-    MAX_BOUNCE                          : u32,
-    SAMPLE_PER_PIXEL                    : u32,
-
     ViewProjectionMatrix_Inverse        : mat4x4<f32>,
-
+    
     CameraWorldPosition                 : vec3<f32>,
-    FrameIndex                          : u32,
+    InstanceCount                       : u32,
 
+    Resolution                          : vec2<u32>,
     Offset_MeshDescriptorBuffer         : u32,
     Offset_MaterialBuffer               : u32,
+    
     Offset_LightBuffer                  : u32,
     Offset_IndexBuffer                  : u32,
-
     Offset_PrimitiveToMaterialBuffer    : u32,
     Offset_BlasBuffer                   : u32,
-    InstanceCount                       : u32,
-    LightSourceCount                    : u32,
 };
 
 
