@@ -4,9 +4,11 @@
 
 struct Uniform
 {
-    Resolution : vec2<u32>,
-    Offset_LightBuffer : u32,
-    LightSourceCount : u32,
+    Resolution          : vec2<u32>,
+    Offset_LightBuffer  : u32,
+    LightSourceCount    : u32,
+
+    FrameIndex          : u32,
 };
 
 
@@ -33,6 +35,7 @@ struct Light
 //==========================================================================
 
 const STRIDE_LIGHT : u32 = 18u;
+const LIGHT_SAMPLE : u32 = 16u;
 
 const PI : f32 = 3.141592;
 
@@ -42,6 +45,7 @@ const PI : f32 = 3.141592;
 
 @group(0) @binding(0) var<uniform>          UniformBuffer   : Uniform;
 @group(0) @binding(1) var<storage, read>    SceneBuffer     : array<u32>;
+@group(0) @binding(2) var<storage, read>    LightCDFBuffer  : array<f32>;
 
 @group(0) @binding(10) var G_PositionTexture    : texture_2d<f32>;
 @group(0) @binding(11) var G_NormalTexture      : texture_2d<f32>;
@@ -74,6 +78,40 @@ fn GetLight(LightID : u32) -> Light
     return OutLight;
 }
 
+fn SampleLight(Value : f32) -> u32
+{
+    var L : u32 = 0u;
+    var R : u32 = UniformBuffer.LightSourceCount - 1u;
+    var M : u32 = (L + R) >> 1;
+
+    while (L < R)
+    {
+        if (Value < LightCDFBuffer[M]) { R = M; }
+        else { L = M + 1; }
+
+        M = (L + R) >> 1;
+    }
+
+    return M;
+}
+
+fn GetHashValue(Seed : u32) -> u32
+{
+    let state = Seed * 747796405u + 2891336453u;
+    let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+fn Random(pSeed : ptr<function, u32>) -> f32
+{
+    let Hash = GetHashValue(*pSeed); *pSeed++;
+    return f32(Hash) / 4294967295.0;
+}
+
+//==========================================================================
+// Functions ===============================================================
+//==========================================================================
+
 //==========================================================================
 // Shader Main =============================================================
 //==========================================================================
@@ -90,6 +128,30 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         if (!bPixelInBoundary_X || !bPixelInBoundary_Y) { return; }
     }
 
+    var RandomSeed : u32 = GetHashValue(ThreadID.x * 1342u + ThreadID.y * 4233u + UniformBuffer.FrameIndex * 21337u);
+
+    // 1. M개의 광원 추출
+    for (var iter : u32 = 0u; iter < LIGHT_SAMPLE; iter++)
+    {
+        let SampledLightID  : u32   = SampleLight(Random(&RandomSeed));
+        let LightSample     : Light = GetLight(SampledLightID);
+        let LightArea       : f32   = select(1.0, LightSample.Area, LightSample.LightType == 2u);
+        let P_Light         : f32   = LightCDFBuffer[SampledLightID] - select(LightCDFBuffer[SampledLightID-1], 0.0, SampledLightID == 0u);
+
+        // TODO : BSDF 등 캡슐화 완벽하게 한 후 P_hat 계산식 작성하기
+    }
+
+
+    if (false)
+    {
+        let x1 = SceneBuffer[0];
+        let x2 = LightCDFBuffer[0];
+        let x3 = textureLoad(G_PositionTexture, ThreadID.xy, 0);
+        let x4 = textureLoad(G_NormalTexture, ThreadID.xy, 0);
+        let x5 = textureLoad(G_AlbedoTexture, ThreadID.xy, 0);
+        let x6 = textureLoad(G_EmissiveTexture, ThreadID.xy, 0);
+        textureStore(ReservoirTexture, ThreadID.xy, vec4<f32>(0.0, 0.0, 0.0, 1.0));
+    }
     // textureLoad(G_PositionTexture, ThreadID.xy, 0);
 
 

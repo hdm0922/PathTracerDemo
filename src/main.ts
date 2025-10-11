@@ -28,6 +28,8 @@ async function main()
     ReSTIR_Renderer = new ReSTIR_DI_Renderer(Adapter, Device, Canvas);
   }
 
+
+
   // Load
   await ResourceManager.LoadResources();
 

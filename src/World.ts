@@ -133,10 +133,10 @@ export class World
             LightType   : 0,
 
             Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, 0, -1)),
-            Intensity   : 3,
+            Intensity   : 1,
 
             Color       : vec3.fromValues(1,1,1),
-            Area        : 0,
+            Area        : 1,
 
             U           : vec3.create(),
             V           : vec3.create(),
@@ -151,7 +151,7 @@ export class World
             Intensity   : 1,
 
             Color       : vec3.fromValues(1,1,1),
-            Area        : 0,
+            Area        : 1,
 
             U           : vec3.create(),
             V           : vec3.create(),
@@ -163,16 +163,14 @@ export class World
             LightType   : 2,
 
             Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, 0, -1)),
-            Intensity   : 0.5,
+            Intensity   : 20,
 
             Color       : vec3.fromValues(1,1,1),
-            Area        : 0.4,
+            Area        : 0.04,
 
             U           : vec3.fromValues(0.2,0,0),
             V           : vec3.fromValues(0,0,0.2),
         }
-        RectLight_0.Area = 4 * RectLight_0.U.length * RectLight_0.V.length;
-
         //this.InstancesPool.set("StarbucksCup_0", StarbucksCupInstance);
         //this.InstancesPool.set("Bench_0", BenchInstance);
         this.InstancesPool.set("Lamp_0", LampInstance);
@@ -182,8 +180,8 @@ export class World
         this.InstancesPool.set("Window_0", WindowInstance);
 
         this.Lights.push(DirectionalLight_0);
-        // this.Lights.push(PointLight_0);
-        // this.Lights.push(RectLight_0);
+        this.Lights.push(PointLight_0);
+        this.Lights.push(RectLight_0);
 
         return;
     }
@@ -215,4 +213,38 @@ export class World
         return [InstanceArray, MeshArray, MeshIDToIndexMap];
     }
 
+    public GetLightCDFBuffer() : ArrayBuffer
+    {
+
+        const LightPowerArray : Float32Array = new Float32Array(this.Lights.length);
+
+        for (const idx in this.Lights)
+        {
+            const CurrentLight : Light = this.Lights[idx];
+
+            const Luminance : number = 
+                0.2126 * CurrentLight.Color[0] + 
+                0.7152 * CurrentLight.Color[1] + 
+                0.0722 * CurrentLight.Color[2];
+
+            const LightPower : number = 
+                Luminance * CurrentLight.Intensity * 
+                (CurrentLight.LightType === 2 ? CurrentLight.Area : 1.0);
+
+            LightPowerArray[idx] = LightPower;
+        }
+
+        let TotalLighPower : number = 0.0;
+        for (const LightPower of LightPowerArray) { TotalLighPower += LightPower; }
+
+        const ProbabilityArray : Float32Array = new Float32Array(this.Lights.length);
+        for (const idx in ProbabilityArray) { ProbabilityArray[idx] = LightPowerArray[idx] / TotalLighPower; }
+
+        const LightCDFBuffer : ArrayBuffer = new ArrayBuffer(4 * this.Lights.length);
+        const Float32View : Float32Array = new Float32Array(LightCDFBuffer);
+        Float32View[0] = ProbabilityArray[0];
+        for (let iter=1; iter<Float32View.length; iter++) { Float32View[iter] = Float32View[iter-1] + ProbabilityArray[iter]; }
+
+        return LightCDFBuffer;
+    }
 }
