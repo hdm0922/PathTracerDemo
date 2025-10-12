@@ -23,7 +23,7 @@ export class ResourceManager
             ResourceManager.loadMesh("CeilingLamp"),
             ResourceManager.loadMesh("TestScene"),
             ResourceManager.loadMesh("Mirror"),
-            ResourceManager.loadMesh("TestWindow"),
+            ResourceManager.loadMesh("PureWindow"),
         ]);
 
         // Registering Models ...

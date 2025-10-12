@@ -993,7 +993,8 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
             let HitMaterial : Material  = GetMaterialFromHit(HitInfo);
             if (!HitInfo.IsValidHit) { ResultColor = EnvironmentColor; break; }
 
-            ResultColor.r = f32(HitInfo.MaterialID) / 3.0;
+            ResultColor = abs(HitInfo.HitNormal);
+            //ResultColor = HitMaterial.EmissiveColor;
         }
         
         textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ResultColor, 1.0)); 
@@ -1024,6 +1025,11 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         let Cosine  : f32       = abs(dot(HitInfo.HitNormal, InDirection));
         let InvPDF  : f32       = 1.0 / NextPathSample.PDF;
 
+        // if ((Cosine * BSDF * InvPDF).r > 1.0)
+        // {
+        //     ResultColor = vec3f(f32(BounceDepth) / 20.0);
+        //     break;
+        // }
         
         Throughput *= Cosine * BSDF * InvPDF;
         CurrentRay = Ray(HitInfo.HitPoint, InDirection);
