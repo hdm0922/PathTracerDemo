@@ -1,6 +1,6 @@
 import { mat4 } from "wgpu-matrix";
-
-import computeShaderCode from './shaders/ComputeShader.wgsl?raw';
+// ComputeShader  MonteCarloPathTracer
+import computeShaderCode from './shaders/MonteCarloPathTracer.wgsl?raw';
 import vertexShaderCode from './shaders/VertexShader.wgsl?raw';
 import fragmentShaderCode from './shaders/FragmentShader.wgsl?raw';
 
@@ -279,8 +279,13 @@ export class Renderer
     async Initialize(World: World): Promise<void>
     {
         // Initialize Scene Stuffs
-        this.World = World;
-        this.FrameCount = 0;
+        {
+            this.World = World;
+            this.FrameCount = 0;
+            this.Camera.SetLocationFromXYZ(0,0,3);
+            // this.Camera.SetYaw(90);
+        }
+
 
         // Build Scene
         const [SceneBufferData, GeometryBufferData, AccelBufferData, ImageBitmaps] = this.PrepareWorldData();

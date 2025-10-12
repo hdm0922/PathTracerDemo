@@ -30,6 +30,7 @@ export class World
 
             const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(4, 4, 4));
             const RotationMatrix = mat4.fromYRotation(mat4.create(), 0);
+            //const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(0,0,0));
             const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(-1.5, -1.8, -1));
             InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
             InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), RotationMatrix, InstanceUsing.ModelMatrix);
@@ -42,8 +43,15 @@ export class World
             ModelMatrix : mat4.identity(mat4.create()),
         };
         {
-            const LampTranslationMatrix2 = mat4.fromTranslation(mat4.create(), vec3.fromValues(-0.8, 0, 0.4));
-            AnotherLamp.ModelMatrix = LampTranslationMatrix2;
+            const InstanceUsing = AnotherLamp;
+
+            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(4, 4, 4));
+            const RotationMatrix = mat4.fromYRotation(mat4.create(), 0);
+            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(0,0,-2));
+            //const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(-1.5, -1.8, -1));
+            InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
+            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), RotationMatrix, InstanceUsing.ModelMatrix);
+            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
         }
 
         const BenchInstance : Instance =
@@ -133,7 +141,7 @@ export class World
             LightType   : 0,
 
             Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, 0, -1)),
-            Intensity   : 1,
+            Intensity   : 5,
 
             Color       : vec3.fromValues(1,1,1),
             Area        : 1,
