@@ -142,6 +142,13 @@ Rendering Equation의 최종 형태는
 
 $$
 \begin{aligned}
+L_{\mathrm{out}}(\mathbf{x}, {\hat{\omega}}_o) &= L_{\mathrm{emit}}(\mathbf{x}, {\hat{\omega}}_o) + \sum\int_{\mathrm{Light}} f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o) L_{\mathrm{emit}}(\mathbf{x}', -{\hat{\omega}}_i) V(\mathbf{x}' \leftrightarrow \mathbf{x}) (\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) d\omega_i \\
+&+ \frac{1}{\rho({\hat{\omega}}_X)} f_s(\mathbf{x}, {\hat{\omega}}_X, {\hat{\omega}}_o) (\hat{\mathbf{n}} \cdot {\hat{\omega}}_X) L_{\mathrm{out}}(\mathbf{x}', -{\hat{\omega}}_X) V(\mathbf{x}' \leftrightarrow \mathbf{x})
+\end{aligned}
+$$
+
+<!-- $$
+\begin{aligned}
 L_{out}(\mathbf{x}, {\hat{\omega}}_o) &= 
 L_{emit}(\mathbf{x}, {\hat{\omega}}_o) + 
 
@@ -158,7 +165,7 @@ f_s(\mathbf{x}, {\hat{\omega}}_X, {\hat{\omega}}_o)
 L_{out}(\mathbf{x}', -{\hat{\omega}}_X)
 V(\mathbf{x}' \leftrightarrow \mathbf{x})
 \end{aligned}
-$$
+$$ -->
 
 로 풀이된다. 
 
