@@ -155,9 +155,9 @@ return PixelColor;
 
 # References
 
-+ [Rendering equation(Wikipedia)][Rendering-Equation-Wiki]
-+ [Stanford Computer Graphics PDF][Stanford-Computer-Graphics-pdf]
-+ [LearnOpenGL PBR][LearnOpenGL-PBR-Theory]
++ [Rendering equation(Wikipedia)](https://en.wikipedia.org/wiki/Rendering_equation)
++ [Monte Carlo Path Tracing PDF](https://graphics.stanford.edu/courses/cs348b-01/course29.hanrahan.pdf)
++ [LearnOpenGL PBR](https://learnopengl.com/PBR/Theory)
 
 
 
