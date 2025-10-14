@@ -123,7 +123,7 @@ $$
 
 $$ \rho(\hat{\omega}) \propto f_s(\mathbf{x}, \hat{\omega}, {\hat{\omega}}_o)(\hat{\mathbf{n}} \cdot \hat{\omega}) $$
 
-최종적으로 Indirect Light 항은 샘플 $ {\hat{\omega}}_X \sim \rho(\hat{\omega}) $ 에 대해
+최종적으로 Indirect Light 항은 샘플 ${\hat{\omega}}_X \sim \rho(\hat{\omega})$ 에 대해
 
 $$ 
 \frac{1}{\rho({\hat{\omega}}_X)}
@@ -142,26 +142,20 @@ Rendering Equation의 최종 형태는
 
 $$
 \begin{aligned}
-
 L_{\mathrm{out}}(\mathbf{x}, {\hat{\omega}}_o) &= 
-
 L_{\mathrm{emit}}(\mathbf{x}, {\hat{\omega}}_o) + 
-
 \sum\int_{\mathrm{Light}} 
 f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o) 
 L_{\mathrm{emit}}(\mathbf{x}', -{\hat{\omega}}_i) 
 V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
 (\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
 d\omega_i 
-
 \\&+ 
-
 \frac{1}{\rho({\hat{\omega}}_X)} 
 f_s(\mathbf{x}, {\hat{\omega}}_X, {\hat{\omega}}_o) 
 (\hat{\mathbf{n}} \cdot {\hat{\omega}}_X) 
 L_{\mathrm{out}}(\mathbf{x}', -{\hat{\omega}}_X) 
 V(\mathbf{x}' \leftrightarrow \mathbf{x})
-
 \end{aligned}
 $$
 
@@ -173,26 +167,19 @@ $$
 
 $$
 \begin{aligned}
-
 \mathrm{EmitAndDirectLight}[\text{i}] &= 
-
 L_{\mathrm{emit}}(\mathbf{x}, {\hat{\omega}}_o) + 
-
 \sum\int_{\mathrm{Light}} 
 f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o) 
 L_{\mathrm{emit}}(\mathbf{x}', -{\hat{\omega}}_i) 
 V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
 (\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
 d\omega_i
-
 \\ \\
-
 \mathrm{Attenuation}[\text{i}] &= 
-
 \frac{1}{\rho({\hat{\omega}}_X)} 
 f_s(\mathbf{x}, {\hat{\omega}}_X, {\hat{\omega}}_o) 
 (\hat{\mathbf{n}} \cdot {\hat{\omega}}_X)
-
 \end{aligned}
 $$
 
