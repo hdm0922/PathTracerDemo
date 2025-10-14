@@ -2,42 +2,42 @@
 
 Pixel의 색을 결정하는 문제는 곧, Pixel $\rightarrow$ Camera 방향에 대한 빛의 색을 결정하는 문제다.
 
-이 광선은 씬의 특정 표면에서 출발했을 것이다. 표면의 위치 $\vec{x}$ 에서 방향 $\hat{\omega_o}$ 로 방출되는 빛의 색은
+이 광선은 씬의 특정 표면에서 출발했을 것이다. 표면의 위치 $\mathbf{x}$ 에서 방향 ${\hat{\omega}}_o$ 로 방출되는 빛의 색은
 
 $$
-L_{out}(\vec{x}, \hat{\omega_o}) = 
-L_{emit}(\vec{x}, \hat{\omega_o}) + 
+L_{out}(\mathbf{x}, {\hat{\omega}}_o) = 
+L_{emit}(\mathbf{x}, {\hat{\omega}}_o) + 
 \int_{\Omega} 
-f_s(\vec{x}, \hat{\omega_i}, \hat{\omega_o}) 
-L_{in}(\vec{x}, \hat{\omega_i}) 
-(\hat{\mathbf{n}} \cdot \hat{\omega_i}) 
+f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o) 
+L_{in}(\mathbf{x}, {\hat{\omega}}_i) 
+(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
 d\omega_i
 $$
 
-의 식으로 주어진다(영역 $\Omega$ 는 $\vec{x}$ 를 중심으로 하는 반구).
+의 식으로 주어진다(영역 $\Omega$ 는 $\mathbf{x}$ 를 중심으로 하는 반구).
 
 이 식을 Rendering Equation이라고 칭하며, 한 점에서 나가는 빛의 색은 "자신이 방출하는 색 + 모든 방향에서 입사하는 빛이 반사된 색" 이라는 사실을 수식으로 나타낸 것이다.
 
-진공에서 에너지는 보존되기에, 빛 $\vec{x}' \rightarrow \vec{x}$ 에 대하여
+진공에서 에너지는 보존되기에, 빛 $\mathbf{x}' \rightarrow \mathbf{x}$ 에 대하여
 
-$$L_{in}(\vec{x}, \hat{\omega}) = L_{out}(\vec{x}', -\hat{\omega})$$
+$$L_{in}(\mathbf{x}, \hat{\omega}) = L_{out}(\mathbf{x}', -\hat{\omega})$$
 
-로 표현할 수 있겠다. 실제로는 $\vec{x}' \rightarrow \vec{x}$ 의 경로가 막히지 않아야 하므로 더 정확하게는
+로 표현할 수 있겠다. 실제로는 $\mathbf{x}' \rightarrow \mathbf{x}$ 의 경로가 막히지 않아야 하므로 더 정확하게는
 
-$$L_{in}(\vec{x}, \hat{\omega}) = L_{out}(\vec{x}', -\hat{\omega}) V(\vec{x}' \leftrightarrow \vec{x})$$
+$$L_{in}(\mathbf{x}, \hat{\omega}) = L_{out}(\mathbf{x}', -\hat{\omega}) V(\mathbf{x}' \leftrightarrow \mathbf{x})$$
 
 의 표현이 적절하다.
 
 즉 Rendering Equation은 그 자체로 $L_{out}$ 에 대한 재귀적 방정식이다.
 
 $$
-L_{out}(\vec{x}, \hat{\omega_o}) = 
-L_{emit}(\vec{x}, \hat{\omega_o}) + 
+L_{out}(\mathbf{x}, {\hat{\omega}}_o) = 
+L_{emit}(\mathbf{x}, {\hat{\omega}}_o) + 
 \int_{\Omega} 
-f_s(\vec{x}, \hat{\omega_i}, \hat{\omega_o})
-L_{out}(\vec{x}', -\hat{\omega_i}) 
-V(\vec{x}' \leftrightarrow \vec{x}) 
-(\hat{\mathbf{n}} \cdot \hat{\omega_i})
+f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o)
+L_{out}(\mathbf{x}', -{\hat{\omega}}_i) 
+V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
+(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i)
 d\omega_i
 $$
 
@@ -52,12 +52,12 @@ $$
 Rendering Equation에 나타나는 반사항을 한 번 살펴보자.
 
 $$
-L_{reflect}(\vec{x}, \hat{\omega_o}) = 
+L_{reflect}(\mathbf{x}, {\hat{\omega}}_o) = 
 \int_{\Omega} 
-f_s(\vec{x}, \hat{\omega_i}, \hat{\omega_o})
-L_{out}(\vec{x}', -\hat{\omega_i}) 
-V(\vec{x}' \leftrightarrow \vec{x}) 
-(\hat{\mathbf{n}} \cdot \hat{\omega_i}) 
+f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o)
+L_{out}(\mathbf{x}', -{\hat{\omega}}_i) 
+V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
+(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
 d\omega_i
 $$
 
@@ -66,26 +66,26 @@ $$
 $\Omega$ 를 두 독립적인 집합 $\Omega_{Direct}, \Omega_{Indirect}$ 로 나누자. 빛의 출처가 광원이라면 해당 방향은 $\Omega_{Direct}$ 에 속하며, 그렇지 않다면 $\Omega_{Indirect}$ 에 속한다.
 
 $$
-\begin{align*}
-L_{reflect}(\vec{x}, \hat{\omega_o}) &= 
+\begin{aligned}
+L_{reflect}(\mathbf{x}, {\hat{\omega}}_o) &= 
 \int_{Direct} 
-f_s(\vec{x}, \hat{\omega_i}, \hat{\omega_o})
-L_{out}(\vec{x}', -\hat{\omega_i}) 
-V(\vec{x}' \leftrightarrow \vec{x}) 
-(\hat{\mathbf{n}} \cdot \hat{\omega_i}) 
+f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o)
+L_{out}(\mathbf{x}', -{\hat{\omega}}_i) 
+V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
+(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
 d\omega_i \\&+
 \int_{Indirect} 
-f_s(\vec{x}, \hat{\omega_i}, \hat{\omega_o})
-L_{out}(\vec{x}', -\hat{\omega_i}) 
-V(\vec{x}' \leftrightarrow \vec{x}) 
-(\hat{\mathbf{n}} \cdot \hat{\omega_i}) 
+f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o)
+L_{out}(\mathbf{x}', -{\hat{\omega}}_i) 
+V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
+(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
 d\omega_i
-\end{align*}
+\end{aligned}
 $$
 
 이며, 광원에서 나오는 빛은 광원이 만들어낸 빛 뿐이므로
 
-$$ L_{out}(\vec{x_L}, \hat{\omega}) = L_{emit}(\vec{x_L}, \hat{\omega}) $$
+$$ L_{out}(\mathbf{x_L}, \hat{\omega}) = L_{emit}(\mathbf{x_L}, \hat{\omega}) $$
 
 이 성립하겠다.
 
@@ -93,10 +93,10 @@ $$ L_{out}(\vec{x_L}, \hat{\omega}) = L_{emit}(\vec{x_L}, \hat{\omega}) $$
 
 $$
 \sum\int_{Light} 
-f_s(\vec{x}, \hat{\omega_i}, \hat{\omega_o})
-L_{emit}(\vec{x}', -\hat{\omega_i}) 
-V(\vec{x}' \leftrightarrow \vec{x}) 
-(\hat{\mathbf{n}} \cdot \hat{\omega_i}) 
+f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o)
+L_{emit}(\mathbf{x}', -{\hat{\omega}}_i) 
+V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
+(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
 d\omega_i
 $$
 
@@ -110,27 +110,27 @@ Rendering Equation 에서 표현되는 Indirect Light 항은
 
 $$
 \int_{Indirect} 
-f_s(\vec{x}, \hat{\omega_i}, \hat{\omega_o})
-L_{out}(\vec{x}', -\hat{\omega_i})
-V(\vec{x}' \leftrightarrow \vec{x}) 
-(\hat{\mathbf{n}} \cdot \hat{\omega_i}) 
+f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o)
+L_{out}(\mathbf{x}', -{\hat{\omega}}_i)
+V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
+(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
 d\omega_i
 $$
 
 이다. 이 적분은 Monte-Carlo Integration을 사용해 값을 추정해야 하고, 앞서 논의한 바에 따르자면 PDF의 선택은 피적분함수와 유사할수록 좋다.
 
-현재 단계에서는 $L_{out}(\vec{x}', -\hat{\omega_i}), V(\vec{x}' \leftrightarrow \vec{x})$ 를 모두 알지 못하기에 사용할 수 없고, 이들을 제외한 함수를 PDF의 선택에 사용하는 것이 최선이다.
+현재 단계에서는 $L_{out}(\mathbf{x}', -{\hat{\omega}}_i), V(\mathbf{x}' \leftrightarrow \mathbf{x})$ 를 모두 알지 못하기에 사용할 수 없고, 이들을 제외한 함수를 PDF의 선택에 사용하는 것이 최선이다.
 
-$$ \rho(\hat{\omega}) \propto f_s(\vec{x}, \hat{\omega}, \hat{\omega_o})(\hat{\mathbf{n}} \cdot \hat{\omega}) $$
+$$ \rho(\hat{\omega}) \propto f_s(\mathbf{x}, \hat{\omega}, {\hat{\omega}}_o)(\hat{\mathbf{n}} \cdot \hat{\omega}) $$
 
-최종적으로 Indirect Light 항은 샘플 $ \hat{\omega_X} \sim \rho(\hat{\omega}) $ 에 대해
+최종적으로 Indirect Light 항은 샘플 $ {\hat{\omega}}_X \sim \rho(\hat{\omega}) $ 에 대해
 
 $$ 
-\frac{1}{\rho(\hat{\omega_X})}
-f_s(\vec{x}, \hat{\omega_X}, \hat{\omega_o}) 
-(\hat{\mathbf{n}} \cdot \hat{\omega_X})
-L_{out}(\vec{x}', -\hat{\omega_X})
-V(\vec{x}' \leftrightarrow \vec{x})
+\frac{1}{\rho({\hat{\omega}}_X)}
+f_s(\mathbf{x}, {\hat{\omega}}_X, {\hat{\omega}}_o) 
+(\hat{\mathbf{n}} \cdot {\hat{\omega}}_X)
+L_{out}(\mathbf{x}', -{\hat{\omega}}_X)
+V(\mathbf{x}' \leftrightarrow \mathbf{x})
 $$
 
 꼴로 표현될 수 있다.
@@ -141,42 +141,42 @@ $$
 Rendering Equation의 최종 형태는
 
 $$
-\begin{align*}
-L_{out}(\vec{x}, \hat{\omega_o}) &= 
-L_{emit}(\vec{x}, \hat{\omega_o}) + 
+\begin{aligned}
+L_{out}(\mathbf{x}, {\hat{\omega}}_o) &= 
+L_{emit}(\mathbf{x}, {\hat{\omega}}_o) + 
 
 \sum\int_{Light} 
-f_s(\vec{x}, \hat{\omega_i}, \hat{\omega_o})
-L_{emit}(\vec{x}', -\hat{\omega_i}) 
-V(\vec{x}' \leftrightarrow \vec{x}) 
-(\hat{\mathbf{n}} \cdot \hat{\omega_i}) 
+f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o)
+L_{emit}(\mathbf{x}', -{\hat{\omega}}_i) 
+V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
+(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
 d\omega_i \\&+ 
 
-\frac{1}{\rho(\hat{\omega_X})}
-f_s(\vec{x}, \hat{\omega_X}, \hat{\omega_o}) 
-(\hat{\mathbf{n}} \cdot \hat{\omega_X})
-L_{out}(\vec{x}', -\hat{\omega_X})
-V(\vec{x}' \leftrightarrow \vec{x})
-\end{align*}
+\frac{1}{\rho({\hat{\omega}}_X)}
+f_s(\mathbf{x}, {\hat{\omega}}_X, {\hat{\omega}}_o) 
+(\hat{\mathbf{n}} \cdot {\hat{\omega}}_X)
+L_{out}(\mathbf{x}', -{\hat{\omega}}_X)
+V(\mathbf{x}' \leftrightarrow \mathbf{x})
+\end{aligned}
 $$
 
 로 풀이된다. 
 
-식의 흐름이 $\vec{x} \rightarrow \vec{x}' \rightarrow ... \rightarrow \vec{x_L}$ 의 경로를 요구하는데, 이 경로를 따라가며 적분을 계산하는 과정을 Path Tracing 이라고 한다.
+식의 흐름이 $\mathbf{x} \rightarrow \mathbf{x}' \rightarrow ... \rightarrow \mathbf{x_L}$ 의 경로를 요구하는데, 이 경로를 따라가며 적분을 계산하는 과정을 Path Tracing 이라고 한다.
 
 식의 특정 항들을 새로이 정의해
 
 $$ 
-\begin{align*}
+\begin{aligned}
 EmitAndDirectLight[\text{i}] &= 
 
-L_{emit}(\vec{x}, \hat{\omega_o}) + 
+L_{emit}(\mathbf{x}, {\hat{\omega}}_o) + 
 
 \sum\int_{Light} 
-f_s(\vec{x}, \hat{\omega_i}, \hat{\omega_o})
-L_{emit}(\vec{x}', -\hat{\omega_i}) 
-V(\vec{x}' \leftrightarrow \vec{x}) 
-(\hat{\mathbf{n}} \cdot \hat{\omega_i}) 
+f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o)
+L_{emit}(\mathbf{x}', -{\hat{\omega}}_i) 
+V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
+(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
 d\omega_i
 
 \\
@@ -184,10 +184,10 @@ d\omega_i
 
 Attenuation[\text{i}] &= 
 
-\frac{1}{\rho(\hat{\omega_X})}
-f_s(\vec{x}, \hat{\omega_X}, \hat{\omega_o}) 
-(\hat{\mathbf{n}} \cdot \hat{\omega_X})
-\end{align*}
+\frac{1}{\rho({\hat{\omega}}_X)}
+f_s(\mathbf{x}, {\hat{\omega}}_X, {\hat{\omega}}_o) 
+(\hat{\mathbf{n}} \cdot {\hat{\omega}}_X)
+\end{aligned}
 $$
 
 으로 표현하면, 간소화된 Rendering Equation

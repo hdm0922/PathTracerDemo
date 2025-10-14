@@ -3,27 +3,27 @@
 
 ## Background
 
-Monte Carlo Integration은 어느 함수 $f(\vec{x})$ 의 영역 $\Omega$ 에서의 정적분
+Monte Carlo Integration은 어느 함수 $f(\mathbf{x})$ 의 영역 $\Omega$ 에서의 정적분
 
-$$ I = \int_\Omega f(\vec{x}) dV $$
+$$ I = \int_\Omega f(\mathbf{x}) dV $$
 
 를 구하는 방법 중 하나다.
 
-먼저 영역 $\Omega$ 에서 잘 정의된 임의의 확률밀도함수 $\rho(\vec{x})$ 를 정의하고, 이를 따르는 확률변수를 $X$ 라고 하자.
+먼저 영역 $\Omega$ 에서 잘 정의된 임의의 확률밀도함수 $\rho(\mathbf{x})$ 를 정의하고, 이를 따르는 확률변수를 $X$ 라고 하자.
 
 $$ X \sim \rho(X) $$
 
 기댓값의 관점에서 $I$ 는
 
 $$ 
-I = \int_\Omega f(\vec{x}) dV = 
-\int_\Omega \left[ \frac{ f(\vec{x}) }{ \rho(\vec{x}) } \right] \rho(\vec{x}) dV =
+I = \int_\Omega f(\mathbf{x}) dV = 
+\int_\Omega \left[ \frac{ f(\mathbf{x}) }{ \rho(\mathbf{x}) } \right] \rho(\mathbf{x}) dV =
 \langle \frac{f(X)}{\rho(X)} \rangle
 $$
 
 로 표현된다.
 
-확률밀도함수 $\rho(\vec{x})$ 를 따라 샘플링한 $M$ 개의 Candidte Sample Set을 $\left[ X_1, X_2, ... , X_M \right]$ 이라고 하자.
+확률밀도함수 $\rho(\mathbf{x})$ 를 따라 샘플링한 $M$ 개의 Candidte Sample Set을 $\left[ X_1, X_2, ... , X_M \right]$ 이라고 하자.
 
 대수의 법칙은 $M$ 이 충분히 크다면, 이들의 이산 평균을 실제 기댓값의 근사치로 사용할 수 있음을 보여준다.
 
@@ -40,7 +40,7 @@ $$ \hat{I} = \frac{f(X)}{\rho(X)} $$
 
 이다. 하나의 Sample을 사용했기에 추정치 자체는 $I$ 와 차이가 날 수 있다. 하지만 $\hat{I}$ 의 평균은 반드시 $I$ 임이 보장된다.
 
-$$ \operatorname{E}(\hat{I}) = I $$
+$$ \mathrm{E}(\hat{I}) = I $$
 
 확률변수 $X$ 의 Sampling Logic인 확률밀도함수 $\rho(X)$ 는 온전히 사용자의 선택에 의해 결정된다.
 
@@ -54,7 +54,7 @@ $$ \operatorname{E}(\hat{I}) = I $$
 
 $\rho(X)$ 는 확률밀도함수의 정규화 조건으로부터
 
-$$ \int_\Omega \rho(\vec{x}) dV = A\int_\Omega f(\vec{x}) dV = 1 $$
+$$ \int_\Omega \rho(\mathbf{x}) dV = A\int_\Omega f(\mathbf{x}) dV = 1 $$
 
 $$ \rho(X) = I^{-1} f(X)  $$
 
