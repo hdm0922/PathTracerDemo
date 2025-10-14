@@ -67,19 +67,8 @@ $\Omega$ 를 두 독립적인 집합 $\Omega_{Direct}, \Omega_{Indirect}$ 로 �
 
 $$
 \begin{aligned}
-L_{reflect}(\mathbf{x}, {\hat{\omega}}_o) &= 
-\int_{Direct} 
-f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o)
-L_{out}(\mathbf{x}', -{\hat{\omega}}_i) 
-V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
-(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
-d\omega_i \\&+
-\int_{Indirect} 
-f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o)
-L_{out}(\mathbf{x}', -{\hat{\omega}}_i) 
-V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
-(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
-d\omega_i
+L_{\mathrm{reflect}}(\mathbf{x}, {\hat{\omega}}_o) &= \int_{\mathrm{Direct}} f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o) L_{\mathrm{out}}(\mathbf{x}', -{\hat{\omega}}_i) V(\mathbf{x}' \leftrightarrow \mathbf{x}) (\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) d\omega_i \\
+&+ \int_{\mathrm{Indirect}} f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o) L_{\mathrm{out}}(\mathbf{x}', -{\hat{\omega}}_i) V(\mathbf{x}' \leftrightarrow \mathbf{x}) (\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) d\omega_i
 \end{aligned}
 $$
 
