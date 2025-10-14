@@ -50,7 +50,7 @@ $$ \mathrm{E}(\hat{I}) = I $$
 
 ### Perfect Importance Sampling
 
-가장 이상적인 전략은 $ \rho \propto f$ 인 경우로, $X$ 의 선택에 관계없이 $\hat{I} $ 가 일정하기 때문에 $M = 1$ 의 선택만으로 분산 없는 추정치를 얻을 수 있다. 이 경우를 Perfect Importance Sampling 이라고 한다.
+가장 이상적인 전략은 $ \rho \propto f $ 인 경우로, $X$ 의 선택에 관계없이 $ \hat{I} $ 가 일정하기 때문에 $M = 1$ 의 선택만으로 분산 없는 추정치를 얻을 수 있다. 이 경우를 Perfect Importance Sampling 이라고 한다.
 
 $\rho(X)$ 는 확률밀도함수의 정규화 조건으로부터
 
