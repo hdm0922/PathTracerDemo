@@ -150,7 +150,7 @@ L_{\mathrm{emit}}(\mathbf{x}', -{\hat{\omega}}_i)
 V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
 (\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
 d\omega_i 
-\\&+ 
+\\ &+ 
 \frac{1}{\rho({\hat{\omega}}_X)} 
 f_s(\mathbf{x}, {\hat{\omega}}_X, {\hat{\omega}}_o) 
 (\hat{\mathbf{n}} \cdot {\hat{\omega}}_X) 
