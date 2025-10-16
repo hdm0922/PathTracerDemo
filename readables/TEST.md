@@ -20,3 +20,5 @@ $$ k = \frac{(R + 1)^2}{8} $$
 $$ F(L, H) = F_0 + (1 - F_0) \times [1 - \text{saturate}(L \cdot H)]^5 $$
 
 $$ F_0 = \text{lerp}((\frac{1 - IOR}{1 + IOR})^2, \text{Albedo}, \text{Metalness}) $$
+
+---
