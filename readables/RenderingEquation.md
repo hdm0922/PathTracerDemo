@@ -14,9 +14,9 @@ L_{in}(\mathbf{x}, {\hat{\omega}}_i)
 d\omega_i
 $$
 
-의 식으로 주어진다(영역 $\Omega$ 는 $\mathbf{x}$ 를 중심으로 하는 반구).
+의 식으로 주어진다(영역 $\Omega$ 는 $\mathbf{x}$ 를 중심으로 하는 단위 구).
 
-이 식을 Rendering Equation이라고 칭하며, 한 점에서 나가는 빛의 색은 "자신이 방출하는 색 + 모든 방향에서 입사하는 빛이 반사된 색" 이라는 사실을 수식으로 나타낸 것이다.
+이 식을 Rendering Equation이라고 칭하며, 한 점에서 나가는 빛의 색은 "자신이 방출하는 색 + 모든 방향에서 입사하는 빛이 반사/굴절된 색" 이라는 사실을 수식으로 나타낸 것이다.
 
 진공에서 에너지는 보존되기에, 빛 $\mathbf{x}' \rightarrow \mathbf{x}$ 에 대하여
 
@@ -41,7 +41,7 @@ V(\mathbf{x}' \leftrightarrow \mathbf{x})
 d\omega_i
 $$
 
-표면의 고유 정보들로부터 $L_{emit}$ 은 쉽게 결정할 수 있는 반면, 반사항을 표현하는 적분은 값을 구하기 매우 힘들다.
+표면의 고유 정보들로부터 $L_{emit}$ 은 쉽게 결정할 수 있는 반면, 반사/굴절항을 표현하는 적분은 값을 구하기 매우 힘들다.
 
 결론부터 말하자면 이 적분을 Monte-Carlo 방법으로 풀어야 할 것인데, 하나의 일관된 PDF 의 선택은 필연적으로 큰 분산을 낳을 것이다. 
 
@@ -49,7 +49,7 @@ $$
 
 ## Direct Light
 
-Rendering Equation에 나타나는 반사항을 한 번 살펴보자.
+Rendering Equation에 나타나는 반사/굴절항을 한 번 살펴보자.
 
 $$
 L_{reflect}(\mathbf{x}, {\hat{\omega}}_o) = 

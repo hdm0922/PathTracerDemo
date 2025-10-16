@@ -282,6 +282,7 @@ export class Renderer
         {
             this.World = World;
             this.FrameCount = 0;
+            this.Camera.SetYaw(0);
             this.Camera.SetLocationFromXYZ(0,0,3);
             // this.Camera.SetYaw(90);
         }

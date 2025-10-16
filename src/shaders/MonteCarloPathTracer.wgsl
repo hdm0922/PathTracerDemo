@@ -275,9 +275,9 @@ fn GetMaterial(InMeshDescriptor : MeshDescriptor, MaterialID : u32) -> Material
     OutMaterial.EmissiveTextureID   = SceneBuffer[Offset + 16u];
     OutMaterial.NormalTextureID     = SceneBuffer[Offset + 17u];
 
+    // ===================
+    OutMaterial.BaseColor = vec4<f32>(0.2, 0.4, 0.9, OutMaterial.BaseColor.a);
     OutMaterial.Roughness = max(OutMaterial.Roughness, 0.01);
-    // OutMaterial.Roughness = 0.0;
-    // OutMaterial.Metalness = 1.0;
 
     return OutMaterial;
 }
@@ -590,7 +590,7 @@ fn BRDF(HitInfo : HitResult, L : vec3<f32>, V : vec3<f32>) -> vec3<f32>
     let VdotH : f32 = max(dot(V, H), 0.0);
 
     let HitMaterial : Material  = GetMaterialFromHit(HitInfo);
-    let BaseColor   : vec3<f32> = vec3(1.0, 1.0, 1.0);//HitMaterial.BaseColor.rgb;
+    let BaseColor   : vec3<f32> = HitMaterial.BaseColor.rgb;
     let Metalness   : f32       = HitMaterial.Metalness;
     let Roughness   : f32       = HitMaterial.Roughness;
     let Transmissive: f32       = HitMaterial.Transmissive;
@@ -601,7 +601,7 @@ fn BRDF(HitInfo : HitResult, L : vec3<f32>, V : vec3<f32>) -> vec3<f32>
     let F   : vec3<f32> = Frensel(VdotH, F0);
 
     let kS  : vec3<f32> = F;
-    let kD  : vec3<f32> = (1.0 - kS) * (1.0 - Metalness) * (1.0 - Transmissive);
+    let kD  : vec3<f32> = (1.0 - kS) * (1.0 - Metalness);
 
     let BRDF_Diffuse    : vec3<f32> = (kD / PI) * BaseColor;
     let BRDF_Specular   : vec3<f32> = kS * D * G0 * 0.25;
@@ -666,9 +666,7 @@ fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
         let HitMaterial : Material = GetMaterialFromHit(ClosestHit);
         if (HitMaterial.Transmissive == 0.0) { return vec3<f32>(0.0, 0.0, 0.0); }
 
-        // TEMP : 모든 유리는 흰색입니다
-        // Transmittance *= HitMaterial.BaseColor.rgb;
-        Transmittance   *= vec3<f32>(1.0, 1.0, 1.0);
+        Transmittance   *= HitMaterial.BaseColor.rgb;
         RemainDistance  -= ClosestHit.HitDistance;
         CurrentRay       = Ray(ClosestHit.HitPoint, CurrentRay.Direction);
     }
@@ -680,7 +678,7 @@ fn SampleOpaquePath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed :
 {
     // 1. HitInfo 해석
     let HitMaterial : Material  = GetMaterialFromHit(HitInfo);
-    let BaseColor   : vec3<f32> = vec3f(1.0); // TEMP
+    let BaseColor   : vec3<f32> = HitMaterial.BaseColor.rgb;
     let Metalness   : f32       = HitMaterial.Metalness;
     let Roughness   : f32       = HitMaterial.Roughness;
  

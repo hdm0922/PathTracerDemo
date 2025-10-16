@@ -16,3 +16,6 @@ WebGPU를 이용해 Path Tracer 를 구현하는 프로젝트입니다.
 + [Rendering equation(Wikipedia)](https://en.wikipedia.org/wiki/Rendering_equation)
 + [Monte Carlo Path Tracing PDF](https://graphics.stanford.edu/courses/cs348b-01/course29.hanrahan.pdf)
 + [LearnOpenGL PBR](https://learnopengl.com/PBR/Theory)
+
++ [A Reflectance Model for Computer Graphics](https://graphics.pixar.com/library/ReflectanceModel/paper.pdf)
++ [Microfacet Models for Refraction](https://www.graphics.cornell.edu/~bjw/microfacetbsdf.pdf)
