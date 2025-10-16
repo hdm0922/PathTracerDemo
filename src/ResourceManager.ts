@@ -21,12 +21,12 @@ export class ResourceManager
             ResourceManager.loadMesh("Bench"),
             ResourceManager.loadMesh("StarbucksCup"),
             ResourceManager.loadMesh("CeilingLamp"),
-            ResourceManager.loadMesh("TestScene"),
+            ResourceManager.loadMesh("DEBUG_SCENE"),
             ResourceManager.loadMesh("Mirror"),
             ResourceManager.loadMesh("PureWindow"),
         ]);
 
-        console.log(StarbucksCupMesh.Data);
+        console.log(SceneMesh.Data);
 
         // Registering Models ...
         ResourceManager.MeshPool.set("Lamp", LampMesh);

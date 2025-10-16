@@ -276,7 +276,7 @@ fn GetMaterial(InMeshDescriptor : MeshDescriptor, MaterialID : u32) -> Material
     OutMaterial.NormalTextureID     = SceneBuffer[Offset + 17u];
 
     // ===================
-    OutMaterial.BaseColor = vec4<f32>(0.2, 0.4, 0.9, OutMaterial.BaseColor.a);
+    //OutMaterial.BaseColor = vec4<f32>(1.0, 1.0, 1.0, OutMaterial.BaseColor.a);
     OutMaterial.Roughness = max(OutMaterial.Roughness, 0.01);
 
     return OutMaterial;
@@ -910,7 +910,7 @@ fn CalculateDirectLighting(HitInfo : HitResult, OutDirection : vec3<f32>, pRando
             BSDFValue           = BSDF(HitInfo, L, OutDirection);
             VisibilityFactor    = Visibility(HitInfo.HitPoint, End);
             Geometry            = max(dot(L, HitInfo.HitNormal), 0.0);
-            InvPDF              = 1.0;
+            InvPDF              = 1.0; // Sampling을 하지 않는다는 의미의 항등원 1.0
         }
 
         else if (LightSource.LightType == 1u) // Point Light
@@ -921,7 +921,7 @@ fn CalculateDirectLighting(HitInfo : HitResult, OutDirection : vec3<f32>, pRando
             BSDFValue           = BSDF(HitInfo, L, OutDirection);
             VisibilityFactor    = Visibility(HitInfo.HitPoint, LightSource.Position);
             Geometry            = max(dot(L, HitInfo.HitNormal), 0.0) / (D * D);
-            InvPDF              = 1.0;
+            InvPDF              = 1.0; // Sampling을 하지 않는다는 의미의 항등원 1.0
         }
 
         else if (LightSource.LightType == 2u) // Rect Light
@@ -991,13 +991,14 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
             let HitMaterial : Material  = GetMaterialFromHit(HitInfo);
             if (!HitInfo.IsValidHit) { ResultColor = EnvironmentColor; break; }
 
-            let Min : u32 = 1300u;
-            let Max : u32 = 1500u;
-            if ((Min <= HitInfo.PrimitiveID) && (HitInfo.PrimitiveID <= Max)) { ResultColor.r = 1.0; }
-            //if (HitInfo.MaterialID == 1u) { ResultColor.r = 1.0; }
+            let Min : u32 = 0u;
+            let Max : u32 = 1u;
+            //if ((Min <= HitInfo.PrimitiveID) && (HitInfo.PrimitiveID <= Max)) { ResultColor.r = 1.0; }
+            //if (HitInfo.MaterialID == 3u) { ResultColor.g = 1.0; }
+            if (HitInfo.PrimitiveID == 6u) { ResultColor.b = 1.0; }
             //12082
-            //ResultColor.r = f32(abs(HitInfo.PrimitiveID)) / 30000.0;
-            //ResultColor.r = f32(abs(HitInfo.MaterialID)) / 3.0;
+            //ResultColor.r = f32(abs(HitInfo.PrimitiveID)) / 30.0;
+            //ResultColor.r = f32(abs(HitInfo.MaterialID)) / 5.0;
             //ResultColor = HitMaterial.EmissiveColor;
         }
         

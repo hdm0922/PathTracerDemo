@@ -188,10 +188,10 @@ export class World
             U           : vec3.fromValues(0.4,0,0),
             V           : vec3.fromValues(0,0,0.4),
         }
-        this.InstancesPool.set("StarbucksCup_0", StarbucksCupInstance);
+        //this.InstancesPool.set("StarbucksCup_0", StarbucksCupInstance);
         //this.InstancesPool.set("Bench_0", BenchInstance);
         //this.InstancesPool.set("Lamp_0", LampInstance);
-        //this.InstancesPool.set("Scene_0", SceneInstance);
+        this.InstancesPool.set("Scene_0", SceneInstance);
         //this.InstancesPool.set("Lamp_1", AnotherLamp);
         //this.InstancesPool.set("Mirror_0", MirrorInstance);
         //this.InstancesPool.set("Window_0", WindowInstance);

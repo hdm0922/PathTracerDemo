@@ -199,7 +199,7 @@ export class Renderer
                 [MergedMaterialArray, MaterialArrayDescriptor] = ResourceManager.MergeArrays(MaterialArrays);
             }
 
-            
+            //console.log("Materials : ", MergedMaterialArray);
             // Merge Texture TODO
             // ...
 
@@ -287,7 +287,7 @@ export class Renderer
             this.World = World;
             this.FrameCount = 0;
             this.Camera.SetYaw(0);
-            this.Camera.SetLocationFromXYZ(0,0,1);
+            this.Camera.SetLocationFromXYZ(-1.8,0.3,5.4);
             // this.Camera.SetYaw(90);
         }
 
