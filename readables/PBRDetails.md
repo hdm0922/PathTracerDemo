@@ -151,8 +151,7 @@ f_s(\mathbf{x}, {\hat{\omega}}_i, {\hat{\omega}}_o)
 L_0\delta(-\hat{\omega}_i -\hat{\omega}_L) 
 V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
 (\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) 
-d\omega_i 
-\\=
+d\omega_i =
 f_s(\mathbf{x}, -\hat{\omega}_L, {\hat{\omega}}_o) 
 L_0
 V(\mathbf{x}' \leftrightarrow \mathbf{x}) 
