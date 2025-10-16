@@ -982,7 +982,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     var Throughput          : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
     let EnvironmentColor    : vec3<f32> = vec3<f32>(0.3, 0.3, 0.3);
 
-    let DEBUG : bool = false;
+    let DEBUG : bool = true;
     if (DEBUG)
     {
         for (var BounceDepth : u32 = 0u; BounceDepth < 1u; BounceDepth++)
@@ -991,7 +991,13 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
             let HitMaterial : Material  = GetMaterialFromHit(HitInfo);
             if (!HitInfo.IsValidHit) { ResultColor = EnvironmentColor; break; }
 
-            ResultColor = abs(HitInfo.HitNormal);
+            let Min : u32 = 1300u;
+            let Max : u32 = 1500u;
+            if ((Min <= HitInfo.PrimitiveID) && (HitInfo.PrimitiveID <= Max)) { ResultColor.r = 1.0; }
+            //if (HitInfo.MaterialID == 1u) { ResultColor.r = 1.0; }
+            //12082
+            //ResultColor.r = f32(abs(HitInfo.PrimitiveID)) / 30000.0;
+            //ResultColor.r = f32(abs(HitInfo.MaterialID)) / 3.0;
             //ResultColor = HitMaterial.EmissiveColor;
         }
         

@@ -26,6 +26,8 @@ export class ResourceManager
             ResourceManager.loadMesh("PureWindow"),
         ]);
 
+        console.log(StarbucksCupMesh.Data);
+
         // Registering Models ...
         ResourceManager.MeshPool.set("Lamp", LampMesh);
         ResourceManager.MeshPool.set("Bench", BenchMesh);

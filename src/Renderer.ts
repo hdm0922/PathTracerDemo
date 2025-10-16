@@ -132,19 +132,21 @@ export class Renderer
         const [InstanceArray, MeshArray, MeshIDToIndexMap] = this.World.PackWorldData();
 
         // World의 정보들로부터 GPU에 올릴 데이터들 Serialize
-        let TlasData : Uint32Array; // TODO
-        let InstanceRawData : Uint32Array;
-        let LightRawData : Uint32Array;
-        let MeshDescriptorRawData : Uint32Array;
-        let SerializedMeshData : SerializedMesh;
+        let TlasData                : Uint32Array; // TODO
+        let InstanceRawData         : Uint32Array;
+        let LightRawData            : Uint32Array;
+        let MeshDescriptorRawData   : Uint32Array;
+        let SerializedMeshData      : SerializedMesh;
         {
-            TlasData = new Uint32Array();
+            TlasData        = new Uint32Array();
             InstanceRawData = ResourceManager.SerializeInstanceArray(InstanceArray, MeshIDToIndexMap);
-            LightRawData = ResourceManager.SerializeLightArray(this.World.Lights);
+            LightRawData    = ResourceManager.SerializeLightArray(this.World.Lights);
 
             const MeshCount = MeshArray.length;
             const ParsedMeshArray : Array<SerializedMesh> = new Array<SerializedMesh>(MeshCount);
             for (let iter = 0; iter < MeshArray.length; iter++) ParsedMeshArray[iter] = ResourceManager.SerializeMesh(MeshArray[iter]);
+
+            console.log(ParsedMeshArray[0])
 
             // Merge Blas
             let MergedBlasArray     : Uint32Array;
@@ -186,6 +188,7 @@ export class Renderer
                 [MergedPrimitiveToMaterialArray, PrimitiveToMaterialArrayDescriptor] = ResourceManager.MergeArrays(PrimitiveToMaterialArrays);
             }
 
+
             // Merge Material
             let MergedMaterialArray     : Uint32Array;
             let MaterialArrayDescriptor : Uint32Array;
@@ -196,6 +199,7 @@ export class Renderer
                 [MergedMaterialArray, MaterialArrayDescriptor] = ResourceManager.MergeArrays(MaterialArrays);
             }
 
+            
             // Merge Texture TODO
             // ...
 
@@ -283,7 +287,7 @@ export class Renderer
             this.World = World;
             this.FrameCount = 0;
             this.Camera.SetYaw(0);
-            this.Camera.SetLocationFromXYZ(0,0,3);
+            this.Camera.SetLocationFromXYZ(0,0,1);
             // this.Camera.SetYaw(90);
         }
 
