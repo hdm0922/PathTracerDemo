@@ -10,6 +10,7 @@ WebGPU를 이용해 Path Tracer 를 구현하는 프로젝트입니다.
 
 + [Monte-Carlo Integration](./readables/MonteCarloIntegration.md)
 + [Rendering Equation](./readables/RenderingEquation.md)
++ [PBR Details](./readables/PBRDetails.md)
 
 ## Reference
 
