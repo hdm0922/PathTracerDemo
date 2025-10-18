@@ -4,7 +4,8 @@ WebGPU를 이용해 Path Tracer 를 구현하는 프로젝트입니다.
 
 ## Result
 
-<img width="886" height="664" alt="SampleImage" src="https://github.com/user-attachments/assets/dbdbdddb-4c9e-4fb0-9d9d-2774a578a7e9" />
+<img width="717" height="508" alt="image" src="https://github.com/user-attachments/assets/0a8a60ae-a557-4426-a5fe-ccfd7388d922" />
+
 
 ## Theory
 
