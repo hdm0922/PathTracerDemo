@@ -4,6 +4,23 @@ export class ResourceManager
 {
     public static MeshPool : Map<string, SerializedMesh> = new Map();
     
+    public static async LoadAssets(AssetNames : string[]) : Promise<void>
+    {
+
+        const LoadAsset = AssetNames.map
+        (
+            async (Name) => 
+            { 
+                const MeshLoaded = await SerializedMesh.Load(Name); 
+                ResourceManager.MeshPool.set(Name, MeshLoaded);
+            }
+        );
+
+        await Promise.all(LoadAsset);
+
+        return;
+    }
+
     public static MergeArrays(InArrays : Uint32Array[]) : [Uint32Array, Uint32Array]
     {
         if (InArrays.length === 0) return [new Uint32Array(), new Uint32Array()];

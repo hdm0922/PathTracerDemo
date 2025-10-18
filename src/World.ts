@@ -1,9 +1,9 @@
-import type { Vec3 }  from 'wgpu-matrix';
-import      { vec3 }  from 'wgpu-matrix';
+import type { Quat, Vec3 }  from 'wgpu-matrix';
+import      { quat, vec3 }  from 'wgpu-matrix';
 
 import { ResourceManager } from './ResourceManager.ts';
 import { SerializedMesh } from "./SerializedMesh.ts";
-import { Instance, Light, DirectionalLight } from './Structs.ts';
+import { Instance, Light, DirectionalLight, PointLight, RectLight } from './Structs.ts';
 
 
 
@@ -18,29 +18,73 @@ export class World
         this.Lights         = [];
     }
 
+    public AddInstance
+    (
+        InstanceName    : string, 
+        MeshName        : string,
+        Translation     : Vec3 = vec3.fromValues(0,0,0),
+        Rotation        : Quat = quat.identity(),
+        Scale           : Vec3 = vec3.fromValues(1,1,1)
+    )                   : void
+    {
+        const InstanceToAdd : Instance = new Instance(MeshName, Translation, Rotation, Scale);
+        this.InstancesPool.set(InstanceName, InstanceToAdd);
+
+        return;
+    };
+
+    public AddDirectionalLight
+    (
+        Direction   : Vec3,
+        Color       : Vec3,
+        Intensity   : number,
+    )
+    {
+        const DirectionalLightToAdd : DirectionalLight = new DirectionalLight(Direction, Color, Intensity);
+        this.Lights.push(DirectionalLightToAdd);
+
+        return;
+    }
+
+    public AddPointLight
+    (
+        Position    : Vec3,
+        Color       : Vec3,
+        Intensity   : number,
+    )
+    {
+        const PointLightToAdd : PointLight = new PointLight(Position, Color, Intensity);
+        this.Lights.push(PointLightToAdd);
+
+        return;
+    }
+
+    public AddRectLight
+    (
+        Position    : Vec3,
+        U           : Vec3,
+        V           : Vec3,
+        Color       : Vec3,
+        Intensity   : number
+    )
+    {
+        const RectLightToAdd : RectLight = new RectLight(Position, Color, U, V, Intensity);
+        this.Lights.push(RectLightToAdd);
+
+        return;
+    }
+
     public Initialize(): void
     {
 
-        // Add Instance (TestScene)
-        {
-            const InstanceName : string = "TestScene";
-            this.InstancesPool.set(InstanceName, new Instance(InstanceName));
-        }
+        this.AddInstance("SceneInstance", "TestScene");
+        //this.AddInstance("LampInstance", "Lamp");
 
-        {
-            const InstanceName : string = "Lamp";
-            this.InstancesPool.set(InstanceName, new Instance(InstanceName));
-        }
-
-        // Add Light (DirectionalLight)
-        {
-            const LightDirection    : Vec3      = vec3.normalize( vec3.fromValues(0, 0, -1) );
-            const LightColor        : Vec3      = vec3.fromValues(1, 1, 1);
-            const LightIntensity    : number    = 2;
-
-            const DirectionalLight_0 : DirectionalLight = new DirectionalLight(LightDirection, LightColor, LightIntensity);
-            this.Lights.push(DirectionalLight_0);
-        }
+        this.AddDirectionalLight(
+            vec3.fromValues(0, 0, -1), 
+            vec3.fromValues(1, 1, 1),
+            2
+        );
 
         return;
     }

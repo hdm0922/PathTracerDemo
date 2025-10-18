@@ -1,5 +1,5 @@
 import { mat4 } from "wgpu-matrix";
-// ComputeShader  MonteCarloPathTracer
+
 import computeShaderCode from './shaders/ComputeShader.wgsl?raw';
 import vertexShaderCode from './shaders/VertexShader.wgsl?raw';
 import fragmentShaderCode from './shaders/FragmentShader.wgsl?raw';
@@ -9,9 +9,8 @@ import { Camera } from "./Camera";
 import { ResourceManager } from "./ResourceManager";
 import { MeshDescriptor } from "./Structs";
 
-export class AnotherRenderer
+export class Renderer
 {
-
     // GPU Device Stuff
     public readonly Adapter         : GPUAdapter;
     public readonly Device          : GPUDevice;
