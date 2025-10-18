@@ -1,8 +1,8 @@
-import { SerializedMesh } from './SerializedMesh.ts';
+import { Mesh } from './Structs.ts';
 
 export class ResourceManager
 {
-    public static MeshPool : Map<string, SerializedMesh> = new Map();
+    public static MeshPool : Map<string, Mesh> = new Map();
     
     public static async LoadAssets(AssetNames : string[]) : Promise<void>
     {
@@ -11,12 +11,15 @@ export class ResourceManager
         (
             async (Name) => 
             { 
-                const MeshLoaded = await SerializedMesh.Load(Name); 
+                const MeshLoaded = await Mesh.Load(Name); 
                 ResourceManager.MeshPool.set(Name, MeshLoaded);
             }
         );
 
         await Promise.all(LoadAsset);
+
+        const ChairMesh : Mesh = ResourceManager.MeshPool.get("Chair")!;
+        console.log(ChairMesh);
 
         return;
     }

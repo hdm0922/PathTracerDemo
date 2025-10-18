@@ -2,8 +2,7 @@ import type { Quat, Vec3 }  from 'wgpu-matrix';
 import      { quat, vec3 }  from 'wgpu-matrix';
 
 import { ResourceManager } from './ResourceManager.ts';
-import { SerializedMesh } from "./SerializedMesh.ts";
-import { Instance, Light, DirectionalLight, PointLight, RectLight } from './Structs.ts';
+import { Instance, Mesh, SerializedMesh, Light, DirectionalLight, PointLight, RectLight } from './Structs.ts';
 
 
 
@@ -85,7 +84,7 @@ export class World
             const Rotation      : Quat = quat.identity();
             const Scale         : Vec3 = vec3.fromValues(1,1,1);
 
-            this.AddInstance("SceneInstance", "TestScene", Translation, Rotation, Scale);
+            //this.AddInstance("SceneInstance_0", "TestScene", Translation, Rotation, Scale);
         }
 
         // Add PureWindow Instance
@@ -94,9 +93,26 @@ export class World
             const Rotation      : Quat = quat.rotateY(quat.identity(), 3.14/2);
             const Scale         : Vec3 = vec3.fromValues(1,1,1);
 
-            this.AddInstance("WindowInstance", "PureWindow", Translation, Rotation, Scale);
+            this.AddInstance("WindowInstance_0", "PureWindow", Translation, Rotation, Scale);
         }
 
+        // Add Chair Instance
+        {
+            const Translation   : Vec3 = vec3.fromValues(0,0,0);
+            const Rotation      : Quat = quat.identity();
+            const Scale         : Vec3 = vec3.fromValues(0.02,0.02,0.02);
+
+            this.AddInstance("ChairInstance_0", "Chair", Translation, Rotation, Scale);
+        }
+
+        // Add Another Chair Instance
+        {
+            const Translation   : Vec3 = vec3.fromValues(200,0,0);
+            const Rotation      : Quat = quat.identity();
+            const Scale         : Vec3 = vec3.fromValues(0.02,0.02,0.02);
+
+            this.AddInstance("ChairInstance_1", "Chair", Translation, Rotation, Scale);
+        }
         // =========================================
 
 
@@ -156,12 +172,15 @@ export class World
         
         const InstanceArray = convertMapToArray<Instance>(this.InstancesPool)[0];
 
-        const UsedMeshes: Map<string, SerializedMesh> = new Map<string, SerializedMesh>();
-        for (const instance of InstanceArray) UsedMeshes.set(instance.MeshID, ResourceManager.MeshPool.get(instance.MeshID)!);
-
-        const [MeshArray, MeshIDToIndexMap] = convertMapToArray(UsedMeshes);
-        
-        return [InstanceArray, MeshArray, MeshIDToIndexMap];
+        const UsedMeshesSerialized : Map<string, SerializedMesh> = new Map<string, SerializedMesh>();
+        for (const InstanceUsing of InstanceArray) 
+        {
+            const MeshToSerialize : Mesh = ResourceManager.MeshPool.get(InstanceUsing.MeshID)!;
+            UsedMeshesSerialized.set(InstanceUsing.MeshID, MeshToSerialize.Serialize());
+        }
+                
+        const [SerializedMeshArray, MeshIDToIndexMap] = convertMapToArray(UsedMeshesSerialized);
+        return [InstanceArray, SerializedMeshArray, MeshIDToIndexMap];
     }
 
 }

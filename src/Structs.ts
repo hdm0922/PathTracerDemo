@@ -1,7 +1,10 @@
 import * as THREE from 'three';
-import type { Vec3, Vec4, Mat4, Quat }  from 'wgpu-matrix';
-import      { vec3, quat, mat4, vec4 }  from 'wgpu-matrix';
-
+import type { Vec3, Vec4, Mat4, Quat }          from 'wgpu-matrix';
+import      { vec3, quat, mat4, vec4 }          from 'wgpu-matrix';
+import      { GLTFLoader }                      from 'three/examples/jsm/loaders/GLTFLoader.js';
+import      { mergeGeometries }                 from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import      { computeBoundsTree, MeshBVH, SAH } from 'three-mesh-bvh';
+import      { ResourceManager }                 from './ResourceManager';
 
 
 export class Instance
@@ -52,6 +55,194 @@ export class Instance
         return Uint32View;
     }
 };
+
+export class Mesh
+{
+    private readonly BlasTree           : ArrayBuffer[];
+    private readonly VertexPositions    : Float32Array;
+    private readonly VertexNormals      : Float32Array;
+    private readonly VertexUVs          : Float32Array;
+    private readonly IndexArray         : Uint32Array;
+    private readonly Materials          : Material[];
+
+    public readonly VertexCount         : number;
+    public readonly IndexCount          : number;
+    public readonly SubMeshCount        : number;
+
+    private constructor(InMesh : THREE.Mesh)
+    {
+        // Build Blas Tree
+        {
+            THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+            const BVH : MeshBVH = InMesh.geometry.computeBoundsTree({strategy: SAH, maxLeafTris: 10})!;
+
+            this.BlasTree = [];
+            for (const BlasData of (BVH as any)._roots) this.BlasTree.push(BlasData);
+        }
+
+        // Vertex Data
+        {
+            this.VertexCount        = InMesh.geometry.attributes["position"].count;
+            this.VertexPositions    = new Float32Array(InMesh.geometry.attributes["position"].array);
+            this.VertexNormals      = new Float32Array(InMesh.geometry.attributes["normal"].array);
+            this.VertexUVs          = InMesh.geometry.attributes["uv"] ? new Float32Array(InMesh.geometry.attributes["uv"].array) : new Float32Array();
+        }
+
+        // Index Data
+        {
+            this.IndexArray = new Uint32Array(InMesh.geometry.index?.array!);
+            this.IndexCount = this.IndexArray.length;
+        }
+
+        // Material Data
+        {
+            this.Materials = [];
+
+            const MeshStandardMaterials : THREE.MeshStandardMaterial[] = InMesh.material as THREE.MeshStandardMaterial[];
+            for (const MeshStandardMaterial of MeshStandardMaterials) { this.Materials.push(new Material(MeshStandardMaterial)); }
+        
+            this.SubMeshCount = this.Materials.length;
+        }
+
+    }
+
+    public static async Load(Name : string) : Promise<Mesh>
+    {
+        const LoadPath = "../assets/" + Name + ".glb";
+
+        const ModelLoader = new GLTFLoader();
+        const Model         = await ModelLoader.loadAsync(LoadPath);      
+        const Meshes        : THREE.Mesh[]              = [];
+        const Geometries    : THREE.BufferGeometry[]    = [];
+        const Materials     : THREE.Material[]          = [];
+
+        function traverseGLTF(object : THREE.Object3D) : void
+        {
+            if ((object as THREE.Mesh).isMesh) Meshes.push(object as THREE.Mesh);
+            if (!object.children || !(object.children.length > 0)) return;
+            for (const child of object.children) traverseGLTF(child);
+            return;
+        }
+
+        traverseGLTF(Model.scene);
+
+        for (let iter = 0; iter < Meshes.length; iter++)
+        {
+            const Mesh = Meshes[iter];
+
+            Mesh.geometry.applyMatrix4(Mesh.matrixWorld);
+            Geometries.push(Mesh.geometry);
+
+            if (Array.isArray(Mesh.material)) { Materials.push(...Mesh.material); }
+            else { Materials.push(Mesh.material); }
+        }
+
+        const MergedMesh : THREE.Mesh = new THREE.Mesh(mergeGeometries(Geometries, true), Materials);
+        return new Mesh(MergedMesh);
+    }
+
+    public Serialize() : SerializedMesh
+    {
+        // Serialize Blas Array
+        let SerializedBlasArray         : Uint32Array;
+        let SerializedSubBlasRootArray  : Uint32Array;
+        {
+            const SubBlasArrays : Uint32Array[] = [];
+            for (const BlasData of this.BlasTree) { SubBlasArrays.push(new Uint32Array(BlasData)); }
+
+            [SerializedBlasArray, SerializedSubBlasRootArray] = ResourceManager.MergeArrays(SubBlasArrays);
+        }
+
+        // Serialize Vertex Array
+        let SerializedVertexArray : Uint32Array;
+        {
+            const STRIDE_VERTEX = 8;
+            const BYTELENGTH_VERTEX = 4 * STRIDE_VERTEX;
+
+            const VertexArray : ArrayBuffer = new ArrayBuffer(BYTELENGTH_VERTEX * this.VertexCount);
+            const Float32View : Float32Array = new Float32Array(VertexArray);
+
+            for (let VertexID : number = 0; VertexID < this.VertexCount; VertexID++)
+            {
+                const Offset = STRIDE_VERTEX * VertexID;
+
+                Float32View[Offset + 0] = this.VertexPositions[3 * VertexID + 0];
+                Float32View[Offset + 1] = this.VertexPositions[3 * VertexID + 1];
+                Float32View[Offset + 2] = this.VertexPositions[3 * VertexID + 2];
+
+                Float32View[Offset + 3] = this.VertexNormals[3 * VertexID + 0];
+                Float32View[Offset + 4] = this.VertexNormals[3 * VertexID + 1];
+                Float32View[Offset + 5] = this.VertexNormals[3 * VertexID + 2];
+
+                if (this.VertexUVs.length)
+                {
+                    Float32View[Offset + 6] = this.VertexUVs[2 * VertexID + 0];
+                    Float32View[Offset + 7] = this.VertexUVs[2 * VertexID + 1];
+                }
+            }
+
+            SerializedVertexArray = new Uint32Array(VertexArray);
+        }
+
+        // Serialize Index Array
+        let SerializedIndexArray : Uint32Array;
+        {
+            SerializedIndexArray = new Uint32Array(this.IndexArray);
+        }
+
+        // Serialize Material & Texture
+        let SerializedMaterialArray : Uint32Array;
+        let TextureArray            : Array<ImageBitmap>;
+        {
+            const SerializedMaterials : Uint32Array[] = [];
+            for (const MaterialToSerialize of this.Materials) { SerializedMaterials.push(MaterialToSerialize.Serialize()); }
+
+            SerializedMaterialArray = ResourceManager.MergeArrays(SerializedMaterials)[0];
+            TextureArray = new Array<ImageBitmap>();
+        }
+
+        // Create SerializedMesh Object
+        const MeshSerialized : SerializedMesh = new SerializedMesh
+        (
+            SerializedBlasArray, 
+            SerializedSubBlasRootArray,
+            SerializedVertexArray, 
+            SerializedIndexArray,
+            SerializedMaterialArray, 
+            TextureArray
+        );
+
+        return MeshSerialized;
+    }
+}
+
+export class SerializedMesh
+{
+    public readonly BlasArray!          : Uint32Array;
+    public readonly SubBlasRootArray!   : Uint32Array;
+    public readonly VertexArray!        : Uint32Array;
+    public readonly IndexArray!         : Uint32Array;
+    public readonly MaterialArray!      : Uint32Array;
+    public readonly TextureArray!       : Array<ImageBitmap>;
+
+    constructor
+    (
+        BlasArray           : Uint32Array,
+        SubBlasRootArray    : Uint32Array,
+        VertexArray         : Uint32Array,
+        IndexArray          : Uint32Array,
+        MaterialArray       : Uint32Array,
+        TextureArray        : Array<ImageBitmap>
+    ) 
+    {
+        this.BlasArray          = BlasArray;
+        this.SubBlasRootArray   = SubBlasRootArray;
+        this.VertexArray        = VertexArray;
+        this.IndexArray         = IndexArray;
+        this.MaterialArray      = MaterialArray;
+        this.TextureArray       = TextureArray;
+    }
+}
 
 export class MeshDescriptor
 {
