@@ -1,14 +1,16 @@
-import { vec3, mat4 } from "gl-matrix";
+import type { Vec3 }  from 'wgpu-matrix';
+import      { vec3 }  from 'wgpu-matrix';
 
-import type { Instance, Mesh, Light } from './Structs.ts';
 import { ResourceManager } from './ResourceManager.ts';
+import { SerializedMesh } from "./SerializedMesh.ts";
+import { Instance, Light, DirectionalLight } from './Structs.ts';
+
+
 
 export class World 
 {
-    // Resource Pools
     public InstancesPool    : Map<string, Instance>;
     public Lights           : Array<Light>;
-
     
     constructor()
     {
@@ -16,194 +18,34 @@ export class World
         this.Lights         = [];
     }
 
-
     public Initialize(): void
     {
 
-        const LampInstance: Instance =
+        // Add Instance (TestScene)
         {
-            MeshID      : "Lamp",
-            ModelMatrix : mat4.identity(mat4.create()),
-        };
-        {
-            const InstanceUsing = LampInstance;
-
-            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(4, 4, 4));
-            const RotationMatrix = mat4.fromYRotation(mat4.create(), 0);
-            //const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(0,0,0));
-            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(-1.5, -1.8, -1));
-            InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
-            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), RotationMatrix, InstanceUsing.ModelMatrix);
-            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
+            const InstanceName : string = "TestScene";
+            this.InstancesPool.set(InstanceName, new Instance(InstanceName));
         }
 
-        const AnotherLamp : Instance =
         {
-            MeshID      : "Lamp",
-            ModelMatrix : mat4.identity(mat4.create()),
-        };
-        {
-            const InstanceUsing = AnotherLamp;
-
-            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(4, 4, 4));
-            const RotationMatrix = mat4.fromYRotation(mat4.create(), 0);
-            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(0,0,-2));
-            //const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(-1.5, -1.8, -1));
-            InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
-            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), RotationMatrix, InstanceUsing.ModelMatrix);
-            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
+            const InstanceName : string = "Lamp";
+            this.InstancesPool.set(InstanceName, new Instance(InstanceName));
         }
 
-        const BenchInstance : Instance =
+        // Add Light (DirectionalLight)
         {
-            MeshID      : "Bench",
-            ModelMatrix : mat4.identity(mat4.create()),
-        };
-        {
-            const InstanceUsing = BenchInstance;
+            const LightDirection    : Vec3      = vec3.normalize( vec3.fromValues(0, 0, -1) );
+            const LightColor        : Vec3      = vec3.fromValues(1, 1, 1);
+            const LightIntensity    : number    = 2;
 
-            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(0.005, 0.005, 0.005));
-            const RotationMatrix = mat4.fromYRotation(mat4.create(), 3.14);
-            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(1, 0, 0));
-            InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
-            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), RotationMatrix, InstanceUsing.ModelMatrix);
-            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
+            const DirectionalLight_0 : DirectionalLight = new DirectionalLight(LightDirection, LightColor, LightIntensity);
+            this.Lights.push(DirectionalLight_0);
         }
-
-        const StarbucksCupInstance : Instance =
-        {
-            MeshID      : "StarbucksCup",
-            ModelMatrix : mat4.fromScaling(mat4.create(), vec3.fromValues(1, 2, 2)), 
-        }
-        {
-            const InstanceUsing = StarbucksCupInstance;
-
-            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(5, 5, 5));
-            const RotationMatrix = mat4.fromYRotation(mat4.create(), 3.14);
-            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(-0.9, -0.5, 5));
-            InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
-            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), RotationMatrix, InstanceUsing.ModelMatrix);
-            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
-        }
-        const CeilingLampInstance : Instance =
-        {
-            MeshID      : "CeilingLamp",
-            ModelMatrix : mat4.create(),
-        }
-        {
-            const InstanceUsing = CeilingLampInstance;
-
-            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(0, -1.9, 0));
-            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
-        }
-
-        const SceneInstance : Instance =
-        {
-            MeshID      : "TestScene",
-            ModelMatrix : mat4.create(),
-        }
-
-
-        const MirrorInstance : Instance =
-        {
-            MeshID      : "Mirror",
-            ModelMatrix : mat4.create(),
-        }
-        {
-            const InstanceUsing = MirrorInstance;
-
-            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(2.5,0.5,0.5));
-            const RotationMatrix = mat4.fromYRotation(mat4.create(), -1);
-            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(1.5, 0, 0));
-            InstanceUsing.ModelMatrix = mat4.mul(mat4.create(), ScaleMatrix, InstanceUsing.ModelMatrix);
-            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), RotationMatrix, InstanceUsing.ModelMatrix);
-            InstanceUsing.ModelMatrix =  mat4.mul(mat4.create(), TranslationMatrix, InstanceUsing.ModelMatrix);
-        }
-
-        const WindowInstance : Instance =
-        {
-            MeshID : "Window",
-            ModelMatrix : mat4.create(),
-        }
-        {
-            const InstanceUsing = WindowInstance;
-
-            const ScaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(1,1,1));
-            const RotationMatrix = mat4.fromYRotation(mat4.create(), -3.14/2);
-            const TranslationMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(0,0, -0.5));
-
-            mat4.mul(InstanceUsing.ModelMatrix, ScaleMatrix, InstanceUsing.ModelMatrix);
-            mat4.mul(InstanceUsing.ModelMatrix, RotationMatrix, InstanceUsing.ModelMatrix);
-            mat4.mul(InstanceUsing.ModelMatrix, TranslationMatrix, InstanceUsing.ModelMatrix);
-        }
-
-
-
-
-
-
-
-
-        const DirectionalLight_0 : Light =
-        {
-            Position    : vec3.create(),
-            LightType   : 0,
-
-            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, 0, -1)),
-            Intensity   : 1.3,
-
-            Color       : vec3.fromValues(1,1,1),
-            Area        : 1,
-
-            U           : vec3.create(),
-            V           : vec3.create(),
-        }
-
-        const PointLight_0 : Light =
-        {
-            Position    : vec3.fromValues(0, 0.4, 0),
-            LightType   : 1,
-
-            Direction   : vec3.create(),
-            Intensity   : 10,
-
-            Color       : vec3.fromValues(1,1,1),
-            Area        : 1,
-
-            U           : vec3.create(),
-            V           : vec3.create(),
-        }
-
-        const RectLight_0 : Light =
-        {
-            Position    : vec3.fromValues(0,-0.5,0),
-            LightType   : 2,
-
-            Direction   : vec3.normalize(vec3.create(), vec3.fromValues(0, -1, 0)),
-            Intensity   : 20,
-
-            Color       : vec3.fromValues(1,1,1),
-            Area        : 0.16,
-
-            U           : vec3.fromValues(0.4,0,0),
-            V           : vec3.fromValues(0,0,0.4),
-        }
-        //this.InstancesPool.set("StarbucksCup_0", StarbucksCupInstance);
-        //this.InstancesPool.set("Bench_0", BenchInstance);
-        //this.InstancesPool.set("Lamp_0", LampInstance);
-        this.InstancesPool.set("Scene_0", SceneInstance);
-        //this.InstancesPool.set("Lamp_1", AnotherLamp);
-        //this.InstancesPool.set("Mirror_0", MirrorInstance);
-        //this.InstancesPool.set("Window_0", WindowInstance);
-
-        this.Lights.push(DirectionalLight_0);
-        //this.Lights.push(PointLight_0);
-        //this.Lights.push(RectLight_0);
 
         return;
     }
 
-    public PackWorldData() : [Array<Instance>, Array<Mesh>, Map<string, number>]
+    public PackWorldData() : [Array<Instance>, Array<SerializedMesh>, Map<string, number>]
     {
         function convertMapToArray<T>(InMap: Map<string, T>): [T[], Map<string, number>]
         {
@@ -222,7 +64,7 @@ export class World
         
         const InstanceArray = convertMapToArray<Instance>(this.InstancesPool)[0];
 
-        const UsedMeshes: Map<string, Mesh> = new Map<string, Mesh>();
+        const UsedMeshes: Map<string, SerializedMesh> = new Map<string, SerializedMesh>();
         for (const instance of InstanceArray) UsedMeshes.set(instance.MeshID, ResourceManager.MeshPool.get(instance.MeshID)!);
 
         const [MeshArray, MeshIDToIndexMap] = convertMapToArray(UsedMeshes);
@@ -230,38 +72,4 @@ export class World
         return [InstanceArray, MeshArray, MeshIDToIndexMap];
     }
 
-    public GetLightCDFBuffer() : ArrayBuffer
-    {
-
-        const LightPowerArray : Float32Array = new Float32Array(this.Lights.length);
-
-        for (const idx in this.Lights)
-        {
-            const CurrentLight : Light = this.Lights[idx];
-
-            const Luminance : number = 
-                0.2126 * CurrentLight.Color[0] + 
-                0.7152 * CurrentLight.Color[1] + 
-                0.0722 * CurrentLight.Color[2];
-
-            const LightPower : number = 
-                Luminance * CurrentLight.Intensity * 
-                (CurrentLight.LightType === 2 ? CurrentLight.Area : 1.0);
-
-            LightPowerArray[idx] = LightPower;
-        }
-
-        let TotalLighPower : number = 0.0;
-        for (const LightPower of LightPowerArray) { TotalLighPower += LightPower; }
-
-        const ProbabilityArray : Float32Array = new Float32Array(this.Lights.length);
-        for (const idx in ProbabilityArray) { ProbabilityArray[idx] = LightPowerArray[idx] / TotalLighPower; }
-
-        const LightCDFBuffer : ArrayBuffer = new ArrayBuffer(4 * this.Lights.length);
-        const Float32View : Float32Array = new Float32Array(LightCDFBuffer);
-        Float32View[0] = ProbabilityArray[0];
-        for (let iter=1; iter<Float32View.length; iter++) { Float32View[iter] = Float32View[iter-1] + ProbabilityArray[iter]; }
-
-        return LightCDFBuffer;
-    }
 }
