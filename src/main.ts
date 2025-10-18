@@ -33,6 +33,7 @@ async function main()
     [
       "TestScene", 
       "Lamp",
+      "PureWindow",
     ];
 
     await ResourceManager.LoadAssets(FileNamesToLoad);

@@ -248,8 +248,10 @@ fn GetMaterial(InMeshDescriptor : MeshDescriptor, MaterialID : u32) -> Material
     OutMaterial.IOR                 = bitcast<f32>(SceneBuffer[Offset + 11u]);
 
     // ===================
-    //OutMaterial.Albedo = vec4<f32>(1.0, 1.0, 1.0, OutMaterial.Albedo.a);
-    OutMaterial.Roughness = max(OutMaterial.Roughness, 0.01);
+    let YELLOW : vec4<f32> = vec4<f32>(1.0, 1.0, 0.0, OutMaterial.Albedo.a);
+
+    OutMaterial.Albedo      = select(OutMaterial.Albedo, YELLOW, OutMaterial.Transmission > 0.0 );
+    OutMaterial.Roughness   = max(OutMaterial.Roughness, 0.01);
 
     return OutMaterial;
 }
@@ -565,8 +567,9 @@ fn BRDF(HitInfo : HitResult, L : vec3<f32>, V : vec3<f32>) -> vec3<f32>
 
 fn BTDF(HitInfo : HitResult, L : vec3<f32>, V : vec3<f32>) -> vec3<f32>
 {
-    let HitMaterial : Material = GetMaterialFromHit(HitInfo);
-    let Roughness : f32 = HitMaterial.Roughness;
+    let HitMaterial : Material  = GetMaterialFromHit(HitInfo);
+    let Albedo      : vec3<f32> = HitMaterial.Albedo.rgb;
+    let Roughness   : f32       = HitMaterial.Roughness;
 
     let bViewNormalSameHemisphere : bool = (dot(V, HitInfo.HitNormal) > 0.0);
     let n_in    : f32 = select(1.0, HitMaterial.IOR, bViewNormalSameHemisphere);
@@ -588,7 +591,7 @@ fn BTDF(HitInfo : HitResult, L : vec3<f32>, V : vec3<f32>) -> vec3<f32>
     let F0  : vec3<f32> = vec3f(nr * nr);
     let F   : vec3<f32> = Frensel(LdotH, F0);
 
-    let Numerator : vec3<f32> = n_out * n_out * (1.0 - F) * LdotH * VdotH * G0 * D;
+    let Numerator : vec3<f32> = n_out * n_out * (1.0 - F) * LdotH * VdotH * G0 * D * Albedo;
     let BTDFValue : vec3<f32> = Numerator / max(H_norm * H_norm, 1e-4);
 
     return BTDFValue;
@@ -936,7 +939,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     var CurrentRay          : Ray       = GenerateRayFromThreadID(ThreadID.xy);
     var ResultColor         : vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
     var Throughput          : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
-    let EnvironmentColor    : vec3<f32> = vec3<f32>(0.3, 0.3, 0.3);
+    let EnvironmentColor    : vec3<f32> = vec3<f32>(0.5, 0.5, 0.5);
 
     let DEBUG : bool = false;
     if (DEBUG)
@@ -944,6 +947,10 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         for (var BounceDepth : u32 = 0u; BounceDepth < 1u; BounceDepth++)
         {
             let HitInfo : HitResult = TraceRay(CurrentRay);
+            let HitMaterial = GetMaterialFromHit(HitInfo);
+            
+            ResultColor = HitInfo.HitNormal;
+            //ResultColor.r = HitMaterial.Transmission;
         }
 
         textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ResultColor, 1.0)); 

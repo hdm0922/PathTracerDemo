@@ -26,11 +26,11 @@ export class Instance
         const RotationMatrix    : Mat4 = mat4.fromQuat(Rotation);
         const ScaleMatrix       : Mat4 = mat4.scaling(Scale);
 
-        const ModelMatrix       : Mat4 = mat4.identity();
+        let ModelMatrix : Mat4 = mat4.identity();
 
-        mat4.mul(ModelMatrix, ScaleMatrix);
-        mat4.mul(ModelMatrix, RotationMatrix);
-        mat4.mul(ModelMatrix, TranslationMatrix);
+        ModelMatrix = mat4.mul(ModelMatrix, ScaleMatrix);
+        ModelMatrix = mat4.mul(ModelMatrix, RotationMatrix);
+        ModelMatrix = mat4.mul(ModelMatrix, TranslationMatrix);
 
         this.ModelMatrix            = ModelMatrix;
         this.ModelMatrix_Inverse    = mat4.invert(ModelMatrix);
@@ -154,8 +154,6 @@ export class Material
         return new Uint32Array(MaterialRawData);
     }
 }
-
-
 
 export class Light
 {

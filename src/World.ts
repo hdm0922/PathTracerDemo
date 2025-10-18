@@ -77,14 +77,62 @@ export class World
     public Initialize(): void
     {
 
-        this.AddInstance("SceneInstance", "TestScene");
-        //this.AddInstance("LampInstance", "Lamp");
+        // ========== ADD INSTANCES ==========
 
-        this.AddDirectionalLight(
-            vec3.fromValues(0, 0, -1), 
-            vec3.fromValues(1, 1, 1),
-            2
-        );
+        // Add TestScene Instance
+        {
+            const Translation   : Vec3 = vec3.fromValues(0,0,0);
+            const Rotation      : Quat = quat.identity();
+            const Scale         : Vec3 = vec3.fromValues(1,1,1);
+
+            this.AddInstance("SceneInstance", "TestScene", Translation, Rotation, Scale);
+        }
+
+        // Add PureWindow Instance
+        {
+            const Translation   : Vec3 = vec3.fromValues(0,0,0);
+            const Rotation      : Quat = quat.rotateY(quat.identity(), 3.14/2);
+            const Scale         : Vec3 = vec3.fromValues(1,1,1);
+
+            this.AddInstance("WindowInstance", "PureWindow", Translation, Rotation, Scale);
+        }
+
+        // =========================================
+
+
+
+        // ========== ADD LIGHTS ==========
+
+        // Add Directional Light
+        {
+            const Direction : Vec3      = vec3.normalize( vec3.fromValues(0, 0, -1) );
+            const Color     : Vec3      = vec3.fromValues(1, 1, 1);
+            const Intensity : number    = 2.0;
+
+            //this.AddDirectionalLight(Direction, Color, Intensity);
+        }
+
+        // Add point Light
+        {
+            const Position  : Vec3      = vec3.fromValues(0, 0, -2);
+            const Color     : Vec3      = vec3.fromValues(1, 1, 1);
+            const Intensity : number    = 10.0;
+
+            this.AddPointLight(Position, Color, Intensity);
+        }
+
+        // Add Rect Light
+        {
+            const Position  : Vec3      = vec3.fromValues(0, 1, 0);
+            const U         : Vec3      = vec3.fromValues(0.4, 0, 0);
+            const V         : Vec3      = vec3.fromValues(0, 0, 0.4);
+            const Color     : Vec3      = vec3.fromValues(1, 1, 1);
+            const Intensity : number    = 50;
+
+            //this.AddRectLight(Position, U, V, Color, Intensity);
+        }
+
+        // =========================================
 
         return;
     }
