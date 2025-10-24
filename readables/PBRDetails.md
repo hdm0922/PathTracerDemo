@@ -18,7 +18,7 @@ BSDF(Bidirectional scattering distribution function) 는 양방향 산란 분포
 
 를 모두 고려하는 상위 개념이다.
 
-![alt text](image.png)
+![alt text](Image_BSDF.png)
 
 실제로는 빛은 반사되거나 투과되거나 둘 중 하나의 상태만 가질 수 있다. 
 
@@ -72,7 +72,7 @@ $$k_d = (1 - F)(1 - \text{Metalness})$$
 
 BTDF는 Walter의 모델을 사용한다. 투과성 재질의 경우 BTDF가 사용되며, 자세한 공식은 아래와 같다.
 
-$$ \text{BTDF}(L, V) = |L \cdot H| \times |V \cdot H| \times \frac{\eta_o^2 \times (1 - F(L,H))}{(\eta_i(L \cdot H) + \eta_o(V \cdot H))^2} \times \frac{G(N,V,L)}{|N \cdot V| |N \cdot L|} \times D(N,H)$$
+$$ \text{BTDF}(L, V) = |L \cdot H| \times |V \cdot H| \times \frac{\eta_o^2 \times (1 - F(L,H))}{(\eta_i(L \cdot H) + \eta_o(V \cdot H))^2} \times \frac{G(N,V,L)}{|N \cdot V| |N \cdot L|} \times D(N,H) $$
 
 $$ H = \text{normalize}(\eta_iL + \eta_oV) $$
 
@@ -90,7 +90,7 @@ $$ D(N, H) = \frac{\text{Roughness}^4}{\pi[(N \cdot H)^2 (\text{Roughness}^4 - 1
 
 $\text{G}$ 는 Geometry Shadow Function 으로, 실시간 렌더링에서 표준으로 사용되는 Smith-Schlick 근사식을 채택한다.
 
-$$ G(N,V,L) = \frac{(N \cdot L)}{(N \cdot L)(1 - k) + k} \times \frac{(N \cdot V)}{(N \cdot V)(1 - k) + k}$$
+$$ G(N,V,L) = \frac{(N \cdot L)}{(N \cdot L)(1 - k) + k} \times \frac{(N \cdot V)}{(N \cdot V)(1 - k) + k} $$
 $$ k = \frac{(\text{Roughness} + 1)^2}{8} $$
 
 $\text{F}$ 는 Frensel Function 이다.
@@ -125,7 +125,7 @@ G(\mathbf{x}' \leftrightarrow \mathbf{x})
 dA
 $$
 
-의 면적분으로 바뀐다. 새로운 함수 G는 변수변환의 Jacobian과 $(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i) $ 항을 모두 포함한 기하 함수이다.
+의 면적분으로 바뀐다. 새로운 함수 G는 변수변환의 Jacobian과 $(\hat{\mathbf{n}} \cdot {\hat{\omega}}_i)$ 항을 모두 포함한 기하 함수이다.
 
 $$ G(\mathbf{x}' \leftrightarrow \mathbf{x}) = \frac{|\hat{\mathbf{n}} \cdot {\hat{\omega}}_i||\hat{\mathbf{n}}' \cdot {\hat{\omega}}_i|}{|\mathbf{x}' - \mathbf{x}|^2} $$
 
