@@ -50,4 +50,3 @@ Output : FrameTexture
 이 하나의 광원이 주는 Light를 계산한 후, FinalReservoirBuffer의 UCW로 곱해 최종 Pixel 색을 결정한다.
 
 Color = W_X * f(X)
-

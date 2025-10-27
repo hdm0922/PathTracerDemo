@@ -84,7 +84,7 @@ export class World
             const Rotation      : Quat = quat.identity();
             const Scale         : Vec3 = vec3.fromValues(1,1,1);
 
-            //this.AddInstance("SceneInstance_0", "TestScene", Translation, Rotation, Scale);
+            this.AddInstance("SceneInstance_0", "TestScene", Translation, Rotation, Scale);
         }
 
         // Add PureWindow Instance
@@ -102,7 +102,7 @@ export class World
             const Rotation      : Quat = quat.identity();
             const Scale         : Vec3 = vec3.fromValues(0.02,0.02,0.02);
 
-            this.AddInstance("ChairInstance_0", "Chair", Translation, Rotation, Scale);
+            //this.AddInstance("ChairInstance_0", "Chair", Translation, Rotation, Scale);
         }
 
         // Add Another Chair Instance
@@ -111,7 +111,7 @@ export class World
             const Rotation      : Quat = quat.identity();
             const Scale         : Vec3 = vec3.fromValues(0.02,0.02,0.02);
 
-            this.AddInstance("ChairInstance_1", "Chair", Translation, Rotation, Scale);
+            //this.AddInstance("ChairInstance_1", "Chair", Translation, Rotation, Scale);
         }
         // =========================================
 
