@@ -93,12 +93,12 @@ export class World
             const Rotation      : Quat = quat.rotateY(quat.identity(), 3.14/2);
             const Scale         : Vec3 = vec3.fromValues(1,1,1);
 
-            this.AddInstance("WindowInstance_0", "PureWindow", Translation, Rotation, Scale);
+            //this.AddInstance("WindowInstance_0", "PureWindow", Translation, Rotation, Scale);
         }
 
         // Add Chair Instance
         {
-            const Translation   : Vec3 = vec3.fromValues(0,0,0);
+            const Translation   : Vec3 = vec3.fromValues(0,-90,0);
             const Rotation      : Quat = quat.identity();
             const Scale         : Vec3 = vec3.fromValues(0.02,0.02,0.02);
 
@@ -111,7 +111,7 @@ export class World
             const Rotation      : Quat = quat.identity();
             const Scale         : Vec3 = vec3.fromValues(0.02,0.02,0.02);
 
-            //this.AddInstance("ChairInstance_1", "Chair", Translation, Rotation, Scale);
+            //this.AddInstance("ChairInstance_1", "Series3300_3303", Translation, Rotation, Scale);
         }
         // =========================================
 

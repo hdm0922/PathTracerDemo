@@ -429,7 +429,8 @@ export class ReSTIR_DI_Renderer
         
         // Pass 2
         {
-            this.InitialSamplingPass = await ComputePass.Create(this.Device, ReSTIR_DI_Pass2);
+            this.InitialSam
+            plingPass = await ComputePass.Create(this.Device, ReSTIR_DI_Pass2);
 
             const G_PositionView    : GPUTextureView = this.G_PositionTexture.createView();
             const G_NormalView      : GPUTextureView = this.G_NormalTexture.createView();
@@ -504,15 +505,18 @@ export class ReSTIR_DI_Renderer
         
         // Pass 2
         {
-            const ELEMENT_COUNT : number        = 4;
+            const ELEMENT_COUNT : number        = 21;
             const UniformData   : ArrayBuffer   = new ArrayBuffer(4 * ELEMENT_COUNT);
+            const Float32View   : Float32Array  = new Float32Array(UniformData);
             const Uint32View    : Uint32Array   = new Uint32Array(UniformData);
             {
-                Uint32View[0] = this.Canvas.width;
-                Uint32View[1] = this.Canvas.height;
-                Uint32View[2] = this.Offset_LightBuffer;
-                Uint32View[3] = this.World.Lights.length;
-                Uint32View[4] = this.FrameCount;
+                for(let iter=0; iter<16; iter++) Float32View[iter] = VPINV?.[iter]!;
+
+                Uint32View[16] = this.Canvas.width;
+                Uint32View[17] = this.Canvas.height;
+                Uint32View[18] = this.Offset_LightBuffer;
+                Uint32View[19] = this.World.Lights.length;
+                Uint32View[20] = this.FrameCount;
             }
 
             this.Device.queue.writeBuffer(this.UniformBuffer_InitialSamplingPass, 0, UniformData);
