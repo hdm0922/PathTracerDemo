@@ -382,6 +382,12 @@ export class Light
         this.Area       = Area;
     }
 
+    public GetLuminance() : number
+    {
+        const LightColor : Vec3 = vec3.scale(this.Color, this.Intensity);
+        return vec3.dot(LightColor, vec3.fromValues(0.2126, 0.7152, 0.0722));
+    }
+
     public Serialize() : Uint32Array
     {
         const LightRawData  : ArrayBuffer   = new ArrayBuffer(4 * Light.Stride);

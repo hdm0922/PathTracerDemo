@@ -45,6 +45,7 @@ export class Renderer
     public Offset_MeshDescriptorBuffer      : number;
     public Offset_MaterialBuffer            : number;
     public Offset_LightBuffer               : number;
+    public Offset_LightsCDFBuffer           : number;
     public Offset_IndexBuffer               : number;
     public Offset_SubBlasRootArrayBuffer    : number;
     public Offset_BlasBuffer                : number;
@@ -110,6 +111,7 @@ export class Renderer
         this.Offset_BlasBuffer = 0;
         this.Offset_MaterialBuffer = 0;
         this.Offset_LightBuffer = 0;
+        this.Offset_LightsCDFBuffer = 0;
         this.Offset_MeshDescriptorBuffer = 0;
         this.Offset_IndexBuffer = 0;
         this.Offset_SubBlasRootArrayBuffer = 0;
@@ -153,6 +155,12 @@ export class Renderer
             }
 
             LightRawData = ResourceManager.MergeArrays(SerializedLightArray)[0];
+        }
+
+        let LightsCDFRawData : Uint32Array;
+        {
+            const LightsCDFArrayBuffer : ArrayBuffer = this.World.GetLightCDFBuffer();
+            LightsCDFRawData = new Uint32Array(LightsCDFArrayBuffer);
         }
 
         let VertexRawData       : Uint32Array;
@@ -230,13 +238,14 @@ export class Renderer
             MeshDescriptorRawData = ResourceManager.MergeArrays(SerializedMeshDescriptorArray)[0];
         }
                 
-        // Scene Buffer에 들어갈 데이터 채우기 | Instance + Light + MeshDescriptor + Material
-        const ArraysInSceneBuffer  = [InstanceRawData, LightRawData, MeshDescriptorRawData, MaterialRawData];
+        // Scene Buffer에 들어갈 데이터 채우기 | Instance + MeshDescriptor + Material  + Light + LightsCDF
+        const ArraysInSceneBuffer  = [InstanceRawData, MeshDescriptorRawData, MaterialRawData, LightRawData, LightsCDFRawData];
         const [SceneBufferData, SceneBufferOffsets] = ResourceManager.MergeArrays(ArraysInSceneBuffer);
         {
-            this.Offset_LightBuffer             = SceneBufferOffsets[1];
-            this.Offset_MeshDescriptorBuffer    = SceneBufferOffsets[2];
-            this.Offset_MaterialBuffer          = SceneBufferOffsets[3];
+            this.Offset_MeshDescriptorBuffer    = SceneBufferOffsets[1];
+            this.Offset_MaterialBuffer          = SceneBufferOffsets[2];
+            this.Offset_LightBuffer             = SceneBufferOffsets[3];
+            this.Offset_LightsCDFBuffer         = SceneBufferOffsets[4];
         }
 
         // Geometry Buffer에 들어갈 데이터 채우기 | Vertex + Index + PrimitiveToMaterial
@@ -254,7 +263,11 @@ export class Renderer
             this.Offset_BlasBuffer = AccelBufferOffsets[1];
         }
 
-
+        {
+            const arrbuf = this.World.GetLightCDFBuffer();
+            console.log("CDF : ", new Float32Array(arrbuf));
+        }
+        
 
         const SceneBufferRawData : ArrayBuffer = new ArrayBuffer(4 * SceneBufferData.length);
         {
@@ -454,7 +467,7 @@ export class Renderer
         const VP = this.Camera.GetViewProjectionMatrix();
         const VPINV = mat4.invert(VP);
 
-        const ELEMENT_COUNT = 32;
+        const ELEMENT_COUNT = 33;
         const UniformData = new ArrayBuffer(4 * ELEMENT_COUNT);
         {
             const Float32View = new Float32Array(UniformData);
@@ -475,12 +488,13 @@ export class Renderer
             Uint32View[24] = this.Offset_MeshDescriptorBuffer;
             Uint32View[25] = this.Offset_MaterialBuffer;
             Uint32View[26] = this.Offset_LightBuffer;
-            Uint32View[27] = this.Offset_IndexBuffer;
+            Uint32View[27] = this.Offset_LightsCDFBuffer;
+            Uint32View[28] = this.Offset_IndexBuffer;
 
-            Uint32View[28] = this.Offset_SubBlasRootArrayBuffer;
-            Uint32View[29] = this.Offset_BlasBuffer;
-            Uint32View[30] = this.World.InstancesPool.size;
-            Uint32View[31] = this.World.Lights.length;
+            Uint32View[29] = this.Offset_SubBlasRootArrayBuffer;
+            Uint32View[30] = this.Offset_BlasBuffer;
+            Uint32View[31] = this.World.InstancesPool.size;
+            Uint32View[32] = this.World.Lights.length;
         }
 
         this.Device.queue.writeBuffer(this.UniformBuffer, 0, UniformData);

@@ -16,11 +16,13 @@ struct Uniform
     Offset_MeshDescriptorBuffer     : u32,
     Offset_MaterialBuffer           : u32,
     Offset_LightBuffer              : u32,
-    Offset_IndexBuffer              : u32,
+    Offset_LightsCDFBuffer          : u32,
 
+    Offset_IndexBuffer              : u32,
     Offset_SubBlasRootArrayBuffer   : u32,
     Offset_BlasBuffer               : u32,
     InstanceCount                   : u32,
+    
     LightSourceCount                : u32,
 };
 
@@ -481,7 +483,7 @@ fn TBNMatrix(N : vec3<f32>) -> mat3x3<f32>
 
 fn Luminance(X : vec3<f32>) -> f32
 {
-    return dot(X, vec3f(0.299, 0.587, 0.114));
+    return dot(X, vec3<f32>(0.2126, 0.7152, 0.0722));
 }
 
 fn GGXDistribution(NdotH : f32, Roughness : f32) -> f32
@@ -817,6 +819,46 @@ fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
     return vec3<f32>(0.0, 0.0, 0.0);
 }
 
+fn GeometryFactor(A : HitResult, B : HitResult) -> f32
+{
+    let r   : vec3<f32> = A.HitPoint - B.HitPoint;
+    let dir : vec3<f32> = normalize(r);
+
+    let Cos_A : f32 = abs( dot(A.HitNormal, dir) );
+    let Cos_B : f32 = abs( dot(B.HitNormal, dir) );
+
+    return Cos_A * Cos_B / dot(r, r);
+}
+
+fn GeometryFactor_Light(LightSource : Light, Surface : HitResult) -> f32
+{
+    switch ( LightSource.LightType )
+    {
+        case 0u : // Directional Light
+        { 
+            return abs( dot(Surface.HitNormal, LightSource.Direction) ); 
+        }
+        case 1u : // Point Light
+        {
+            let r   : vec3<f32> = LightSource.Position - Surface.HitPoint;
+            let dir : vec3<f32> = normalize(r);
+            let Cos : f32 = abs( dot(Surface.HitNormal, dir) );
+
+            return Cos / dot(r, r);
+        }
+        case 2u : // Rect Light
+        {
+            var R : HitResult = HitResult();
+            R.HitPoint  = LightSource.Position;
+            R.HitNormal = LightSource.Direction;
+
+            return GeometryFactor(Surface, R);
+        }
+        case 3u : { return 1.0; }
+        default : { return 0.0; }
+    }
+}
+
 //==========================================================================
 // Functions ===============================================================
 //==========================================================================
@@ -950,14 +992,14 @@ fn TraceRay(InRay: Ray) -> HitResult
     return BestHitResult;
 }
 
-fn CalculateDirectLighting(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed : ptr<function, u32>) -> vec3<f32>
+fn DirectLightsColor(Surface : HitResult, V : vec3<f32>, pRandomSeed : ptr<function, u32>) -> vec3<f32>
 {
-    let HitMaterial : Material = GetMaterialFromHit(HitInfo);
+    let SurfaceMaterial : Material = GetMaterialFromHit(Surface);
 
     var TotalColor : vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
     for (var LightID : u32 = 0u; LightID < UniformBuffer.LightSourceCount; LightID++)
     {
-        let LightSource     : Light     = GetLight(LightID);
+        var LightSource     : Light     = GetLight(LightID);
         let LightRadiance   : vec3<f32> = LightSource.Intensity * LightSource.Color;
 
         var BSDFValue           : vec3<f32>;
@@ -968,22 +1010,21 @@ fn CalculateDirectLighting(HitInfo : HitResult, OutDirection : vec3<f32>, pRando
         if (LightSource.LightType == 0u) // Directional Light
         {
             let L   : vec3<f32> = -LightSource.Direction;
-            let End : vec3<f32> = HitInfo.HitPoint + L * 1e11;
+            let End : vec3<f32> = Surface.HitPoint + L * 1e11;
 
-            BSDFValue           = BSDF(HitInfo, L, OutDirection);
-            VisibilityFactor    = Visibility(HitInfo.HitPoint, End);
-            Geometry            = max(dot(L, HitInfo.HitNormal), 0.0);
+            BSDFValue           = BSDF(Surface, L, V);
+            VisibilityFactor    = Visibility(Surface.HitPoint, End);
+            Geometry            = GeometryFactor_Light(LightSource, Surface); //max(dot(L, Surface.HitNormal), 0.0);
             InvPDF              = 1.0; // Sampling을 하지 않는다는 의미의 항등원 1.0
         }
 
         else if (LightSource.LightType == 1u) // Point Light
         {
-            let D : f32         = length(LightSource.Position - HitInfo.HitPoint);
-            let L : vec3<f32>   = (LightSource.Position - HitInfo.HitPoint) / D;
+            let L : vec3<f32>   = normalize(LightSource.Position - Surface.HitPoint);
 
-            BSDFValue           = BSDF(HitInfo, L, OutDirection);
-            VisibilityFactor    = Visibility(HitInfo.HitPoint, LightSource.Position);
-            Geometry            = max(dot(L, HitInfo.HitNormal), 0.0) / (D * D);
+            BSDFValue           = BSDF(Surface, L, V);
+            VisibilityFactor    = Visibility(Surface.HitPoint, LightSource.Position);
+            Geometry            = GeometryFactor_Light(LightSource, Surface); //max(dot(L, Surface.HitNormal), 0.0) / (D * D);
             InvPDF              = 1.0; // Sampling을 하지 않는다는 의미의 항등원 1.0
         }
 
@@ -991,14 +1032,12 @@ fn CalculateDirectLighting(HitInfo : HitResult, OutDirection : vec3<f32>, pRando
         {
             let Random_U : f32 = (Random(pRandomSeed) * 2.0) - 1.0;
             let Random_V : f32 = (Random(pRandomSeed) * 2.0) - 1.0;
-            let SamplePoint : vec3<f32> = LightSource.Position + (Random_U * LightSource.U) + (Random_V * LightSource.V);
+            LightSource.Position += (Random_U * LightSource.U) + (Random_V * LightSource.V);
+            let L : vec3<f32>   = normalize(LightSource.Position - Surface.HitPoint);
 
-            let D : f32         = length(SamplePoint - HitInfo.HitPoint);
-            let L : vec3<f32>   = (SamplePoint - HitInfo.HitPoint) / D;
-
-            BSDFValue           = BSDF(HitInfo, L, OutDirection);
-            VisibilityFactor    = Visibility(HitInfo.HitPoint, SamplePoint);
-            Geometry            = max(dot(-L, LightSource.Direction), 0.0) * max(dot(L, HitInfo.HitNormal), 0.0) / (D * D);
+            BSDFValue           = BSDF(Surface, L, V);
+            VisibilityFactor    = Visibility(Surface.HitPoint, LightSource.Position);
+            Geometry            = GeometryFactor_Light(LightSource, Surface); //max(dot(-L, LightSource.Direction), 0.0) * max(dot(L, Surface.HitNormal), 0.0) / (D * D);
             InvPDF              = LightSource.Area;
         }
 
@@ -1007,6 +1046,7 @@ fn CalculateDirectLighting(HitInfo : HitResult, OutDirection : vec3<f32>, pRando
 
     return TotalColor;
 }
+
 
 //==========================================================================
 // TEST Functions ==========================================================
@@ -1051,7 +1091,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 
         // Surface Emit + All Direct Lights 가 만드는 색 계산
         ResultColor += Throughput * (HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor);
-        ResultColor += Throughput * CalculateDirectLighting(HitInfo, V, &RandomSeed);
+        ResultColor += Throughput * DirectLightsColor(HitInfo, V, &RandomSeed);
 
         // 다음 경로를 샘플링하고, 해당 경로에서의 Attenuation 계산 & Ray 발사
         let L       : vec3<f32> = SampleBSDF(HitInfo, V, &RandomSeed);

@@ -429,8 +429,7 @@ export class ReSTIR_DI_Renderer
         
         // Pass 2
         {
-            this.InitialSam
-            plingPass = await ComputePass.Create(this.Device, ReSTIR_DI_Pass2);
+            this.InitialSamplingPass = await ComputePass.Create(this.Device, ReSTIR_DI_Pass2);
 
             const G_PositionView    : GPUTextureView = this.G_PositionTexture.createView();
             const G_NormalView      : GPUTextureView = this.G_NormalTexture.createView();
