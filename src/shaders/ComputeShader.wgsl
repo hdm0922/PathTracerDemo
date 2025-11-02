@@ -479,6 +479,11 @@ fn TBNMatrix(N : vec3<f32>) -> mat3x3<f32>
 // PBR Helpers =============================================================
 //==========================================================================
 
+fn Luminance(X : vec3<f32>) -> f32
+{
+    return dot(X, vec3f(0.299, 0.587, 0.114));
+}
+
 fn GGXDistribution(NdotH : f32, Roughness : f32) -> f32
 {
     let Alpha   : f32 = Roughness * Roughness;
@@ -606,6 +611,187 @@ fn BSDF(HitInfo : HitResult, L : vec3<f32>, V : vec3<f32>) -> vec3<f32>
     return T * BTDF(HitInfo, L, V);
 }
 
+fn SampleBRDF(Surface : HitResult, V : vec3<f32>, pRandomSeed : ptr<function, u32>) -> vec3<f32>
+{
+    // 1. HitInfo 해석
+    let SurfaceMaterial : Material  = GetMaterialFromHit(Surface);
+    let Albedo          : vec3<f32> = SurfaceMaterial.Albedo.rgb;
+    let Metalness       : f32       = SurfaceMaterial.Metalness;
+    let Roughness       : f32       = SurfaceMaterial.Roughness;
+ 
+    // 2. 정반사 확률 P_specular 계산
+    let F0          : vec3<f32> = mix(vec3f(0.04), Albedo, Metalness);
+    let P_specular  : f32       = mix(Luminance(F0), 1.0, Metalness);
+
+    // 3. 새로운 방향 L 결정
+    let N   : vec3<f32>     = Surface.HitNormal;
+    let TBN : mat3x3<f32>   = TBNMatrix(N);
+    var L   : vec3<f32>;
+
+    // 4. P_specular에 따라 정반사/난반사 중 하나의 재질로 결정
+    if (Random(pRandomSeed) < P_specular) // 정반사 -> GGX Distribution
+    {
+        let H = TBN * SampleGGX(pRandomSeed, Roughness);
+        L = reflect(-V, H);
+    }
+    else // 난반사 -> Cosine-Weighted Distribution
+    {
+        L = TBN * SampleCosineHemisphere(pRandomSeed);
+    }
+
+    return L;
+}
+
+fn SampleBTDF(Surface : HitResult, V : vec3<f32>, pRandomSeed : ptr<function, u32>) -> vec3<f32>
+{
+    let HitMaterial : Material  = GetMaterialFromHit(Surface);
+    let Roughness   : f32       = HitMaterial.Roughness;
+
+    let bViewNormalSameHemisphere : bool = (dot(V, Surface.HitNormal) > 0.0);
+    let n_in        : f32       = select(HitMaterial.IOR, 1.0, bViewNormalSameHemisphere);
+    let n_out       : f32       = select(1.0, HitMaterial.IOR, bViewNormalSameHemisphere);
+    let IORRatio    : f32       = n_in / n_out;
+    let N           : vec3<f32> = select(-Surface.HitNormal, Surface.HitNormal, bViewNormalSameHemisphere);
+
+    // 2. Frensel's Equation 으로부터 Reflection 확률 계산 (Schlik's Approximation)
+    var P_reflection : f32;
+    {
+        let r   : f32 = (1.0 - IORRatio) / (1.0 + IORRatio);
+        let r2  : f32 = r * r;
+        let R2  : f32 = IORRatio * IORRatio;
+
+        let cosTheta : f32 = abs(dot(V, N));
+        P_reflection = Frensel(cosTheta, vec3f(r * r)).x;
+
+        // 전반사 고려
+        if ( cosTheta * cosTheta < (R2 - 1.0)/R2 ) { P_reflection = 1.0; }
+    }
+
+    // 3. 확률에 따라 새로운 방향 L 결정
+    let bTreatAsReflection : bool = (Random(pRandomSeed) < P_reflection);
+
+    let TBN : mat3x3<f32>   = TBNMatrix(N);
+    let H   : vec3<f32>     = TBN * SampleGGX(pRandomSeed, Roughness);
+    let L   : vec3<f32>     = normalize(select(refract(-V, H, IORRatio), reflect(-V, H), bTreatAsReflection));
+
+    return L;
+}
+
+fn SampleBSDF(Surface : HitResult, V : vec3<f32>, pRandomSeed : ptr<function, u32>) -> vec3<f32>
+{
+    let SurfaceMaterial     : Material  = GetMaterialFromHit(Surface);
+    let bTreatAsTransparent : bool      = Random(pRandomSeed) < SurfaceMaterial.Transmission;
+
+    if (bTreatAsTransparent) { return SampleBTDF(Surface, V, pRandomSeed); }
+    return SampleBRDF(Surface, V, pRandomSeed);
+}
+
+fn PDF_BRDF(Surface : HitResult, L : vec3<f32>, V : vec3<f32>) -> f32
+{
+    // 1. HitInfo 해석
+    let SurfaceMaterial : Material  = GetMaterialFromHit(Surface);
+    let Albedo          : vec3<f32> = SurfaceMaterial.Albedo.rgb;
+    let Metalness       : f32       = SurfaceMaterial.Metalness;
+    let Roughness       : f32       = SurfaceMaterial.Roughness;
+ 
+    // 2. 정반사 확률 P_specular 계산
+    let F0          : vec3<f32> = mix(vec3f(0.04), Albedo, Metalness);
+    let P_specular  : f32       = mix(Luminance(F0), 1.0, Metalness);
+
+    // 3. PDF_BRDF 계산
+    let N       : vec3<f32> = Surface.HitNormal;
+    let H       : vec3<f32> = normalize(L + V);
+    let LdotN   : f32       = max(dot(L, N), 0.0);
+    let NdotH   : f32       = max(dot(N, H), 0.0);
+    let VdotH   : f32       = max(dot(V, H), 0.0);
+
+    let PDF_Specular    : f32 = GGXDistribution(NdotH, Roughness) / (4.0 * VdotH);
+    let PDF_Diffuse     : f32 = LdotN / PI;
+    let PDF_BRDF        : f32 = mix(PDF_Diffuse, PDF_Specular, P_specular);
+
+    return PDF_BRDF;
+}
+
+fn PDF_BTDF(HitInfo : HitResult, L : vec3<f32>, V : vec3<f32>) -> f32
+{
+    // --- 1. 기본 정보 및 IOR 설정 ---
+    let HitMaterial : Material = GetMaterialFromHit(HitInfo);
+    let Roughness   : f32      = HitMaterial.Roughness;
+    let Alpha       : f32      = Roughness * Roughness; // PDF 계산에 필요
+
+    let bViewNormalSameHemisphere : bool = (dot(V, HitInfo.HitNormal) > 0.0);
+    let n_in   : f32 = select(HitMaterial.IOR, 1.0, bViewNormalSameHemisphere);
+    let n_out  : f32 = select(1.0, HitMaterial.IOR, bViewNormalSameHemisphere);
+    let IORRatio : f32 = n_in / n_out;
+    let N : vec3<f32> = select(-HitInfo.HitNormal, HitInfo.HitNormal, bViewNormalSameHemisphere);
+
+    // --- 2. 프레넬 반사 확률 계산 ---
+    var P_reflection : f32;
+    {
+        let r0 = (1.0 - IORRatio) / (1.0 + IORRatio);
+        let R0 = r0 * r0;
+        let cosTheta = abs(dot(V, N));
+        P_reflection = Frensel(cosTheta, vec3f(R0)).x;
+
+        let sinThetaSq = 1.0 - cosTheta * cosTheta;
+        let R2 = IORRatio * IORRatio;
+        if (sinThetaSq * R2 > 1.0) { P_reflection = 1.0; } // TIR
+    }
+    let P_transmission = 1.0 - P_reflection;
+
+
+    // --- 3. 두 경로의 PDF를 각각 계산 ---
+    
+    // 3a. 반사(Reflection) 경로 PDF 계산
+    var pdf_reflect : f32 = 0.0;
+    if (P_reflection > 0.0) {
+        // 반사 중간 벡터 H_reflect 계산
+        let H_reflect = normalize(V + L);
+        let NdotH_r = max(0.0, dot(N, H_reflect));
+        let VdotH_r = max(0.0, dot(V, H_reflect));
+
+        // p(L) = D(h_r) * |J_r| = D(h_r) / (4 * V.h_r)
+        if (VdotH_r > 0.0) {
+            pdf_reflect = GGXDistribution(NdotH_r, Roughness) / (4.0 * VdotH_r);
+        }
+    }
+
+    // 3b. 굴절(Transmission) 경로 PDF 계산
+    var pdf_transmit : f32 = 0.0;
+    if (P_transmission > 0.0) {
+        // 굴절 중간 벡터 H_refract 계산
+        let H_refract = normalize(V * n_out + L * n_in); // (스넬의 법칙에서 유도됨)
+        
+        let NdotH_t = max(0.0, dot(N, H_refract));
+        let VdotH_t = max(0.0, dot(V, H_refract));
+        let LdotH_t = max(0.0, dot(L, H_refract)); // L이 안쪽을 향해야 하지만, 여기선 H와의 각도만 필요
+
+        // 굴절 야코비안 |J_t| 계산
+        // |J_t| = (eta_o^2 * |V.H|) / (eta_i * L.H + eta_o * V.H)^2
+        // |J_t| = (n_out^2 * VdotH_t) / (n_in * LdotH_t + n_out * VdotH_t)^2
+        let denom = (n_in * LdotH_t + n_out * VdotH_t);
+        if (denom > 0.0) {
+            let J_transmit = (n_out * n_out * VdotH_t) / (denom * denom);
+            
+            // p(L) = D(h_t) * |J_t|
+            pdf_transmit = GGXDistribution(NdotH_t, Roughness) * abs(J_transmit);
+        }
+    }
+
+    // --- 4. 최종 결합 PDF 반환 ---
+    // PDF = (반사 선택 확률 * 반사 PDF) + (굴절 선택 확률 * 굴절 PDF)
+    return P_reflection * pdf_reflect + P_transmission * pdf_transmit;
+}
+
+fn PDF_BSDF(Surface : HitResult, L : vec3<f32>, V : vec3<f32>) -> f32
+{
+    return mix(
+        PDF_BRDF(Surface, L, V), 
+        PDF_BTDF(Surface, L, V), 
+        GetMaterialFromHit(Surface).Transmission
+    );
+}
+
 fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
 {
     var Transmittance   : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
@@ -629,88 +815,6 @@ fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
     }
 
     return vec3<f32>(0.0, 0.0, 0.0);
-}
-
-fn SampleOpaquePath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed : ptr<function, u32>) -> PathSample
-{
-    // 1. HitInfo 해석
-    let HitMaterial : Material  = GetMaterialFromHit(HitInfo);
-    let BaseColor   : vec3<f32> = HitMaterial.Albedo.rgb;
-    let Metalness   : f32       = HitMaterial.Metalness;
-    let Roughness   : f32       = HitMaterial.Roughness;
- 
-    // 2. 정반사 확률 P_specular 계산
-    let F0                  : vec3<f32> = mix(vec3f(0.04), BaseColor, Metalness);
-    let SpecularReflectance : f32       = dot(F0, vec3f(0.299, 0.587, 0.114));
-    let P_specular          : f32       = mix(SpecularReflectance, 1.0, Metalness);
-
-    // 3. 새로운 방향 L 결정
-    let V   : vec3<f32>     = OutDirection;
-    let N   : vec3<f32>     = HitInfo.HitNormal;
-    let TBN : mat3x3<f32>   = TBNMatrix(N);
-    var L   : vec3<f32>;
-
-    // 4. P_specular에 따라 정반사/난반사 중 하나의 재질로 결정
-    if (Random(pRandomSeed) < P_specular) // 정반사 -> GGX Distribution
-    {
-        let H = TBN * SampleGGX(pRandomSeed, Roughness);
-        L = reflect(-V, H);
-    }
-    else // 난반사 -> Cosine-Weighted Distribution
-    {
-        L = TBN * SampleCosineHemisphere(pRandomSeed);
-    }
-
-    let H       : vec3<f32> = normalize(L + V);
-    let LdotN   : f32       = max(dot(L, N), 0.0);
-    let NdotH   : f32       = max(dot(N, H), 0.0);
-    let VdotH   : f32       = max(dot(V, H), 0.0);
-
-    // 결정된 L에 대한 실제 PDF 계산
-    let PDF_Specular    : f32 = GGXDistribution(NdotH, Roughness) / (4.0 * VdotH);
-    let PDF_Diffuse     : f32 = LdotN / PI;
-    let PDF             : f32 = mix(PDF_Diffuse, PDF_Specular, P_specular);
-
-    return PathSample(L, PDF);
-}
-
-fn SampleTransmissivePath(HitInfo : HitResult, V : vec3<f32>, pRandomSeed : ptr<function, u32>) -> PathSample
-{
-    let HitMaterial : Material  = GetMaterialFromHit(HitInfo);
-    let Roughness   : f32       = HitMaterial.Roughness;
-
-    let bViewNormalSameHemisphere : bool = (dot(V, HitInfo.HitNormal) > 0.0);
-    let n_in        : f32       = select(HitMaterial.IOR, 1.0, bViewNormalSameHemisphere);
-    let n_out       : f32       = select(1.0, HitMaterial.IOR, bViewNormalSameHemisphere);
-    let IORRatio    : f32       = n_in / n_out;
-    let N           : vec3<f32> = select(-HitInfo.HitNormal, HitInfo.HitNormal, bViewNormalSameHemisphere);
-
-    // 2. Frensel's Equation 으로부터 Reflection 확률 계산 (Schlik's Approximation)
-    var P_reflection : f32;
-    {
-        let r   : f32 = (1.0 - IORRatio) / (1.0 + IORRatio);
-        let r2  : f32 = r * r;
-        let R2  : f32 = IORRatio * IORRatio;
-
-        let cosTheta : f32 = abs(dot(V, N));
-        P_reflection = Frensel(cosTheta, vec3f(r * r)).x;
-
-        // 전반사 고려
-        if ( cosTheta * cosTheta < (R2 - 1.0)/R2 ) { P_reflection = 1.0; }
-    }
-
-    // 3. 확률에 따라 새로운 방향 L 결정
-    let bTreatAsReflection : bool = (Random(pRandomSeed) < P_reflection);
-
-    let TBN : mat3x3<f32>   = TBNMatrix(N);
-    let H   : vec3<f32>     = TBN * SampleGGX(pRandomSeed, Roughness);
-    let L   : vec3<f32>     = normalize(select(refract(-V, H, IORRatio), reflect(-V, H), bTreatAsReflection));
-
-    let NdotH   : f32 = max(dot(N, H), 0.0);
-    let VdotH   : f32 = max(dot(V, H), 0.0);
-    let PDF     : f32 = GGXDistribution(NdotH, Roughness) / (4.0 * VdotH);
-
-    return PathSample(L, PDF);
 }
 
 //==========================================================================
@@ -904,18 +1008,10 @@ fn CalculateDirectLighting(HitInfo : HitResult, OutDirection : vec3<f32>, pRando
     return TotalColor;
 }
 
-fn SampleNextPath(HitInfo : HitResult, OutDirection : vec3<f32>, pRandomSeed : ptr<function, u32>) -> PathSample
-{
-    let HitMaterial         : Material  = GetMaterialFromHit(HitInfo);
-    let bTreatAsTransparent : bool      = Random(pRandomSeed) < HitMaterial.Transmission;
-
-    if (bTreatAsTransparent) { return SampleTransmissivePath(HitInfo, OutDirection, pRandomSeed); }
-    return SampleOpaquePath(HitInfo, OutDirection, pRandomSeed);
-}
-
 //==========================================================================
 // TEST Functions ==========================================================
 //==========================================================================
+
 
 //==========================================================================
 // Shader Main =============================================================
@@ -941,22 +1037,6 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     var Throughput          : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
     let EnvironmentColor    : vec3<f32> = vec3<f32>(0.5, 0.5, 0.5);
 
-    let DEBUG : bool = false;
-    if (DEBUG)
-    {
-        for (var BounceDepth : u32 = 0u; BounceDepth < 1u; BounceDepth++)
-        {
-            let HitInfo : HitResult = TraceRay(CurrentRay);
-            let HitMaterial = GetMaterialFromHit(HitInfo);
-            
-            ResultColor = HitInfo.HitNormal;
-            //ResultColor.r = HitMaterial.Transmission;
-        }
-
-        textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ResultColor, 1.0)); 
-        return;
-    }
-
     // 2. Path Tracing 수행
     for (var BounceDepth : u32 = 0u; BounceDepth < 10u; BounceDepth++)
     {
@@ -967,28 +1047,20 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         // 부딪히지 않았다면 -> 환경광 히트 처리 후 바운스 종료
         if (!HitInfo.IsValidHit) { ResultColor += Throughput * EnvironmentColor; break; }
 
-        let OutDirection : vec3<f32> = -CurrentRay.Direction;
+        let V : vec3<f32> = -CurrentRay.Direction;
 
         // Surface Emit + All Direct Lights 가 만드는 색 계산
         ResultColor += Throughput * (HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor);
-        ResultColor += Throughput * CalculateDirectLighting(HitInfo, OutDirection, &RandomSeed);
+        ResultColor += Throughput * CalculateDirectLighting(HitInfo, V, &RandomSeed);
 
         // 다음 경로를 샘플링하고, 해당 경로에서의 Attenuation 계산 & Ray 발사
-        let NextPathSample  : PathSample    = SampleNextPath(HitInfo, OutDirection, &RandomSeed);
-        let InDirection     : vec3<f32>     = NextPathSample.Direction;
+        let L       : vec3<f32> = SampleBSDF(HitInfo, V, &RandomSeed);
+        let BSDF    : vec3<f32> = BSDF(HitInfo, L, V);
+        let Cosine  : f32       = abs(dot(HitInfo.HitNormal, L));
+        let PDF     : f32       = PDF_BSDF(HitInfo, L, V);
 
-        let BSDF    : vec3<f32> = BSDF(HitInfo, InDirection, OutDirection);
-        let Cosine  : f32       = abs(dot(HitInfo.HitNormal, InDirection));
-        let InvPDF  : f32       = 1.0 / NextPathSample.PDF;
-
-        // if ((Cosine * BSDF * InvPDF).r > 1.0)
-        // {
-        //     ResultColor = vec3f(f32(BounceDepth) / 20.0);
-        //     break;
-        // }
-        
-        Throughput *= Cosine * BSDF * InvPDF;
-        CurrentRay = Ray(HitInfo.HitPoint, InDirection);
+        Throughput *= Cosine * BSDF / PDF;
+        CurrentRay = Ray(HitInfo.HitPoint, L);
        
         // Russian Roulette 기법으로 수송량 낮은 경로는 조기 탈락
         let P_Survive : f32 = max(Throughput.r, max(Throughput.g, Throughput.b));

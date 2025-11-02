@@ -1,6 +1,6 @@
 # ReSTIR Pipeline
 
-ReSTIR (Reservoir-based SpatioTemporal importance Resampling) 는 수많은 경로들과 광원들을 모두 추적하지 않고, 
+ReSTIR (Reservoir-based SpatioTemporal Importance Resampling) 는 수많은 경로들과 광원들을 모두 추적하지 않고, 
 
 좋은 품질의 샘플을 시/공간적으로 재사용해 무거운 PathTracing 의 수렴을 제한된 시간으로 낮추는 알고리즘이다.
 
