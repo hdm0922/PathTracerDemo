@@ -6,7 +6,6 @@ import      { mergeGeometries }                 from 'three/examples/jsm/utils/B
 import      { computeBoundsTree, MeshBVH, SAH } from 'three-mesh-bvh';
 import      { ResourceManager }                 from './ResourceManager';
 
-
 export class Instance
 {
     public static readonly Stride           : number = 33;

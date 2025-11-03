@@ -1,12 +1,14 @@
-import { Renderer } from "./Renderer";
-import { ResourceManager } from "./ResourceManager";
-import { World } from "./World";
+import { Renderer }         from "./Renderer";
+import { ResourceManager }  from "./ResourceManager";
+import { World }            from "./World";
+import { RendererTEST } from "./Renderer_Test";
+
 
 async function main()
 {
 
   // Create
-  let RoomRenderer  : Renderer;
+  let RoomRenderer  : RendererTEST;
   let RoomScene     : World;
   {
     const Adapter   = await navigator.gpu?.requestAdapter()     as GPUAdapter;
@@ -20,7 +22,7 @@ async function main()
     //console.log(Device.limits);
 
     RoomScene       = new World();
-    RoomRenderer    = new Renderer(Adapter, Device, Canvas);
+    RoomRenderer    = new RendererTEST(Adapter, Device, Canvas);
   }
 
 
@@ -46,7 +48,7 @@ async function main()
   // Initialize
   {
     RoomScene.Initialize();
-    RoomRenderer.Initialize(RoomScene);
+    await RoomRenderer.Initialize(RoomScene);
   }
 
 
