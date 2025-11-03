@@ -6,7 +6,6 @@ import      { mergeGeometries }                 from 'three/examples/jsm/utils/B
 import      { computeBoundsTree, MeshBVH, SAH } from 'three-mesh-bvh';
 import      { ResourceManager }                 from './ResourceManager';
 
-
 export class Instance
 {
     public static readonly Stride           : number = 33;
@@ -214,7 +213,7 @@ export class Mesh
 
         return MeshSerialized;
     }
-}
+};
 
 export class SerializedMesh
 {
@@ -242,7 +241,7 @@ export class SerializedMesh
         this.MaterialArray      = MaterialArray;
         this.TextureArray       = TextureArray;
     }
-}
+};
 
 export class MeshDescriptor
 {
@@ -323,6 +322,7 @@ export class Material
         this.AlbedoTexture      = InMaterial.map?.image as ImageBitmap;
         this.ORMTexture         = (InMaterial.aoMap || InMaterial.metalnessMap || InMaterial.roughnessMap)?.image as ImageBitmap;
         this.EmissiveTexture    = InMaterial.emissiveMap?.image as ImageBitmap;
+
     }
 
     public Serialize() : Uint32Array
@@ -344,7 +344,7 @@ export class Material
 
         return new Uint32Array(MaterialRawData);
     }
-}
+};
 
 export class Light
 {
@@ -408,7 +408,7 @@ export class Light
 
         return Uint32View;
     }
-}
+};
 
 export class DirectionalLight extends Light
 {
@@ -431,7 +431,7 @@ export class DirectionalLight extends Light
             0.0
         );
     }
-}
+};
 
 export class PointLight extends Light
 {
@@ -454,7 +454,7 @@ export class PointLight extends Light
             0.0
         );
     }
-}
+};
 
 export class RectLight extends Light
 {
@@ -483,4 +483,4 @@ export class RectLight extends Light
             Area
         );
     }
-}
+};
