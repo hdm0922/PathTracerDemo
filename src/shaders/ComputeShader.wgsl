@@ -22,7 +22,7 @@ struct Uniform
     Offset_SubBlasRootArrayBuffer   : u32,
     Offset_BlasBuffer               : u32,
     InstanceCount                   : u32,
-    
+
     LightSourceCount                : u32,
 };
 
@@ -129,14 +129,6 @@ struct HitResult
     HitPoint        : vec3<f32>,
     HitNormal       : vec3<f32>,
     MaterialID      : u32,
-};
-
-
-
-struct PathSample
-{
-    Direction   : vec3<f32>,
-    PDF         : f32,
 };
 
 //==========================================================================
@@ -908,8 +900,6 @@ fn TraceRay(InRay: Ray) -> HitResult
                 let BlasID          : u32       = Stack[StackPointer]; StackPointer--;
                 let CurrentBlasNode : BlasNode  = GetBlasNode(CurrentMeshDescriptor, SubMeshID, BlasID);
                 let bIsLeafNode     : bool      = bool(CurrentBlasNode.Count & 0xffff0000u);
-                    
-                //if (BlasID == 3u) { BestHitResult.MaterialID = 1557u; }
 
                 if (!bIsLeafNode)
                 {
@@ -1063,8 +1053,8 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 
     // 0. 범위 밖 스레드는 계산 X
     {
-        let bPixelInBoundary_X: bool = (ThreadID.x < UniformBuffer.Resolution.x);
-        let bPixelInBoundary_Y: bool = (ThreadID.y < UniformBuffer.Resolution.y);
+        let bPixelInBoundary_X : bool = (ThreadID.x < UniformBuffer.Resolution.x);
+        let bPixelInBoundary_Y : bool = (ThreadID.y < UniformBuffer.Resolution.y);
 
         if (!bPixelInBoundary_X || !bPixelInBoundary_Y) { return; }
     }
