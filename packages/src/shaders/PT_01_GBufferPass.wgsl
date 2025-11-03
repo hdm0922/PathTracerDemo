@@ -121,11 +121,12 @@ struct Ray
 
 struct CompactSurface
 {
-    InstanceID  : u32,
-    MaterialID  : u32,
-    PrimitiveID : u32,
-    Barycentric : vec2<f32>,
-}
+    IsValidSurface  : bool,
+    InstanceID      : u32,
+    MaterialID      : u32,
+    PrimitiveID     : u32,
+    Barycentric     : vec2<f32>,
+};
 
 
 
@@ -134,7 +135,7 @@ struct Surface
     Position    : vec3<f32>,
     Normal      : vec3<f32>,
     Material    : Material,
-}
+};
 
 
 
@@ -143,7 +144,7 @@ struct HitResult
     IsValidHit  : bool,
     HitDistance : f32,
     SurfaceInfo : CompactSurface,
-}
+};
 
 //==========================================================================
 // Constants ===============================================================
@@ -167,7 +168,7 @@ const PI : f32 = 3.141592;
 @group(0) @binding(2) var<storage, read>    GeometryBuffer  : array<u32>;
 @group(0) @binding(3) var<storage, read>    AccelBuffer     : array<u32>;
 
-@group(1) @binding(0) var G_Buffer : texture_storage_2d<rgba32float, write>;
+@group(1) @binding(10) var G_Buffer : texture_storage_2d<rgba32float, write>;
 
 //==========================================================================
 // Helpers =================================================================
@@ -263,13 +264,14 @@ fn GetLight(LightID : u32) -> Light
 
 fn GetCompactSurface(CompactSurfaceRawData : vec4<f32>) -> CompactSurface
 {
-    var OutCompactSurface       : CompactSurface    = CompactSurface();
-    let InstanceID_MaterialID   : u32               = bitcast<u32>(CompactSurfaceRawData.r);
+    var OutCompactSurface           : CompactSurface    = CompactSurface();
+    let Valid_InstanceID_MaterialID : u32               = bitcast<u32>(CompactSurfaceRawData.r);
 
-    OutCompactSurface.InstanceID    = ( InstanceID_MaterialID & 0xffff0000u );
-    OutCompactSurface.MaterialID    = ( InstanceID_MaterialID & 0x0000ffffu );
-    OutCompactSurface.PrimitiveID   = bitcast<u32>(CompactSurfaceRawData.g);
-    OutCompactSurface.Barycentric   = vec2<f32>( CompactSurfaceRawData.b, CompactSurfaceRawData.a );
+    OutCompactSurface.IsValidSurface    = bool( Valid_InstanceID_MaterialID & 0x80000000u );
+    OutCompactSurface.InstanceID        = ( Valid_InstanceID_MaterialID & 0x7fff0000u ) >> 16u;
+    OutCompactSurface.MaterialID        = ( Valid_InstanceID_MaterialID & 0x0000ffffu );
+    OutCompactSurface.PrimitiveID       = bitcast<u32>(CompactSurfaceRawData.g);
+    OutCompactSurface.Barycentric       = vec2<f32>( CompactSurfaceRawData.b, CompactSurfaceRawData.a );
 
     return OutCompactSurface;
 }
@@ -644,7 +646,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         let InstanceID  : u32 = HitSurface.SurfaceInfo.InstanceID << 16u;
         let MaterialID  : u32 = HitSurface.SurfaceInfo.MaterialID;
 
-        G_BufferValue.r = bitcast<f32>(ValidFlag + InstanceID + MaterialID);
+        G_BufferValue.r = bitcast<f32>(ValidFlag | InstanceID | MaterialID);
         G_BufferValue.g = bitcast<f32>(HitSurface.SurfaceInfo.PrimitiveID);
         G_BufferValue.b = HitSurface.SurfaceInfo.Barycentric.x;
         G_BufferValue.a = HitSurface.SurfaceInfo.Barycentric.y;

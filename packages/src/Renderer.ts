@@ -263,12 +263,6 @@ export class Renderer
             this.Offset_BlasBuffer = AccelBufferOffsets[1];
         }
 
-        {
-            const arrbuf = this.World.GetLightCDFBuffer();
-            console.log("CDF : ", new Float32Array(arrbuf));
-        }
-        
-
         const SceneBufferRawData : ArrayBuffer = new ArrayBuffer(4 * SceneBufferData.length);
         {
             const Uint32View : Uint32Array = new Uint32Array(SceneBufferRawData);
@@ -308,14 +302,14 @@ export class Renderer
 
         // Create Uniform Buffer
         {
-            const UniformBufferUsageFlags: GPUBufferUsageFlags = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
+            const UniformBufferUsageFlags : GPUBufferUsageFlags = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
 
             this.UniformBuffer = this.Device.createBuffer({ size: 256, usage: UniformBufferUsageFlags });
         }
 
         // Create Storage Buffers
         {
-            const StorageBufferUsageFlags: GPUBufferUsageFlags = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
+            const StorageBufferUsageFlags : GPUBufferUsageFlags = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
 
 
             // 1. Scene Buffer
@@ -507,7 +501,7 @@ export class Renderer
     async Render(): Promise<void>
     {
 
-        const CommandEncoder: GPUCommandEncoder = this.Device.createCommandEncoder();
+        const CommandEncoder : GPUCommandEncoder = this.Device.createCommandEncoder();
 
         // ComputePass (Path Tracing)
         {
@@ -522,15 +516,13 @@ export class Renderer
 
         // Copy Texture : AccumTexture -> SceneTexture
         {
-            const SourceTextureInfo     : GPUTexelCopyTextureInfo   = { texture: this.AccumTexture };
-            const DestTextureInfo       : GPUTexelCopyTextureInfo   = { texture: this.SceneTexture };
-            const TextureSize           : GPUExtent3DStrict         = { width: this.SceneTexture.width, height: this.SceneTexture.height };
+            const SourceTextureInfo : GPUTexelCopyTextureInfo   = { texture: this.AccumTexture };
+            const DestTextureInfo   : GPUTexelCopyTextureInfo   = { texture: this.SceneTexture };
+            const TextureSize       : GPUExtent3DStrict         = { width: this.SceneTexture.width, height: this.SceneTexture.height };
 
             CommandEncoder.copyTextureToTexture(SourceTextureInfo, DestTextureInfo, TextureSize);
         }
         
-
-
         // RenderPass (Draw SceneTexture)
         {
             const RenderPassDescriptor: GPURenderPassDescriptor =

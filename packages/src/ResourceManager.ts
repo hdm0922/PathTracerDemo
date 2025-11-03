@@ -6,7 +6,6 @@ export class ResourceManager
     
     public static async LoadAssets(AssetNames : string[]) : Promise<void>
     {
-
         const LoadAsset = AssetNames.map
         (
             async (Name) => 
@@ -17,9 +16,6 @@ export class ResourceManager
         );
 
         await Promise.all(LoadAsset);
-
-        const ChairMesh : Mesh = ResourceManager.MeshPool.get("Chair")!;
-        console.log(ChairMesh);
 
         return;
     }
