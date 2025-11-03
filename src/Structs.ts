@@ -322,6 +322,7 @@ export class Material
         this.AlbedoTexture      = InMaterial.map?.image as ImageBitmap;
         this.ORMTexture         = (InMaterial.aoMap || InMaterial.metalnessMap || InMaterial.roughnessMap)?.image as ImageBitmap;
         this.EmissiveTexture    = InMaterial.emissiveMap?.image as ImageBitmap;
+
     }
 
     public Serialize() : Uint32Array
