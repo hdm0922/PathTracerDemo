@@ -11,17 +11,17 @@ WebGPU를 이용해 Path Tracer 를 구현하는 프로젝트입니다.
 
 ### Basic Monte-Carlo Path Tracer
 
-+ [Monte-Carlo Integration](./readables/MonteCarloIntegration.md)
++ [Monte-Carlo Integration](./docs/readables/MonteCarloIntegration.md)
 
-+ [Rendering Equation](./readables/RenderingEquation.md)
++ [Rendering Equation](./docs/readables/RenderingEquation.md)
 
-+ [PBR Details](./readables/PBRDetails.md)
++ [PBR Details](./docs/readables/PBRDetails.md)
 
 ### Extending To ReSTIR
 
-+ [Sampling Methods](./readables/Sampling.md)
++ [Sampling Methods](./docs/readables/Sampling.md)
 
-+ [ReSTIR Pipeline Guide](./readables/ReSTIR_Pipeline.md)
++ [ReSTIR Pipeline Guide](./docs/readables/ReSTIR_Pipeline.md)
 
 ## Reference
 
