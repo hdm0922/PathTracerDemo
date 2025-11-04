@@ -13,8 +13,6 @@ struct Uniform
     FrameIndex          : u32,
 };
 
-
-
 struct Light
 {
     Position    : vec3<f32>,
@@ -47,6 +45,7 @@ const LIGHT_SAMPLE : u32 = 16u;
 
 const PI : f32 = 3.141592;
 
+
 //==========================================================================
 // GPU Bindings ============================================================
 //==========================================================================
@@ -60,7 +59,10 @@ const PI : f32 = 3.141592;
 @group(0) @binding(12) var G_AlbedoTexture      : texture_2d<f32>;
 @group(0) @binding(13) var G_EmissiveTexture    : texture_2d<f32>;
 
-@group(0) @binding(14) var ReservoirTexture     : texture_storage_2d<rgba32float, write>;
+
+@group(0) @binding(14) var ReservoirTexture_A  : texture_2d<f32>;
+@group(0) @binding(15) var ReservoirTexture_B  : texture_storage_2d<rgba32float, write>;
+
 
 //==========================================================================
 // Helpers =================================================================
@@ -90,14 +92,14 @@ fn SampleLight(Value : f32) -> u32
 {
     var L : u32 = 0u;
     var R : u32 = UniformBuffer.LightSourceCount - 1u;
-    var M : u32 = (L + R) >> 1;
+    var M : u32 = (L + R) >> 1u;
 
     while (L < R)
     {
         if (Value < LightCDFBuffer[M]) { R = M; }
-        else { L = M + 1; }
+        else { L = M + 1u; }
 
-        M = (L + R) >> 1;
+        M = (L + R) >> 1u;
     }
 
     return M;
@@ -115,6 +117,7 @@ fn Random(pSeed : ptr<function, u32>) -> f32
     let Hash = GetHashValue(*pSeed); *pSeed++;
     return f32(Hash) / 4294967295.0;
 }
+
 
 //==========================================================================
 // Functions ===============================================================
@@ -143,7 +146,7 @@ fn Frensel(Dot : f32, F0: vec3<f32>) -> vec3<f32>
     return F0 + (1.0 - F0) * pow(1.0 - saturate(Dot), 5.0);
 }
 
-fn BRDF(N : vec3<f32>, L : vec3<f32>,V : vec3<f32>, ThreadID : vec2<u32>) -> vec3<f32>
+fn BRDF(N : vec3<f32>, L : vec3<f32>, V : vec3<f32>, ThreadID : vec2<u32>) -> vec3<f32>
 {
     let H : vec3<f32> = normalize(L + V);
 
@@ -152,10 +155,10 @@ fn BRDF(N : vec3<f32>, L : vec3<f32>,V : vec3<f32>, ThreadID : vec2<u32>) -> vec
     let NdotH : f32 = max(dot(N, H), 0.0);
     let VdotH : f32 = max(dot(V, H), 0.0);
 
-    let BaseColor       : vec3<f32> = textureLoad(G_AlbedoTexture, ThreadID, 0).xyz; // 일단 알베도값으로 넣었습니다
-    let Metalness       : f32       = textureLoad(G_EmissiveTexture, ThreadID, 0).w;
-    let Roughness       : f32       = textureLoad(G_AlbedoTexture, ThreadID, 0).w;
-    //let Transmission    : f32       = HitMaterial.Transmission;   사용되지 않아 일단 주석처리
+    // ← 여기들 전부 i32로
+    let BaseColor       : vec3<f32> = textureLoad(G_AlbedoTexture, vec2<i32>(ThreadID), 0).xyz;
+    let Metalness       : f32       = textureLoad(G_EmissiveTexture, vec2<i32>(ThreadID), 0).w;
+    let Roughness       : f32       = textureLoad(G_AlbedoTexture, vec2<i32>(ThreadID), 0).w;
 
     let F0  : vec3<f32> = mix(vec3f(0.04), BaseColor, Metalness);
     let D   : f32       = GGXDistribution(NdotH, Roughness);
@@ -173,12 +176,12 @@ fn BRDF(N : vec3<f32>, L : vec3<f32>,V : vec3<f32>, ThreadID : vec2<u32>) -> vec
 
 fn BTDF(N : vec3<f32>, L : vec3<f32>,V : vec3<f32>, ThreadID : vec2<u32>) -> vec3<f32>
 {
-    let Albedo      : vec3<f32> = textureLoad(G_AlbedoTexture, ThreadID, 0).xyz;
-    let Roughness   : f32       = textureLoad(G_AlbedoTexture, ThreadID, 0).w;
+    let Albedo      : vec3<f32> = textureLoad(G_AlbedoTexture, vec2<i32>(ThreadID), 0).xyz;
+    let Roughness   : f32       = textureLoad(G_AlbedoTexture, vec2<i32>(ThreadID), 0).w;
 
     let bViewNormalSameHemisphere : bool = (dot(V, N) > 0.0);
-    let n_in    : f32 = 1.0;  //select(1.0, HitMaterial.IOR, bViewNormalSameHemisphere);  일단 보류. IOR값이 넘어오지 않음
-    let n_out   : f32 = 1.0;  //select(HitMaterial.IOR, 1.0, bViewNormalSameHemisphere);  일단 보류. IOR값이 넘어오지 않음
+    let n_in    : f32 = 1.0;
+    let n_out   : f32 = 1.0;
     let H_norm  : f32 = length(n_in * L + n_out * V);
 
     let BTDF_N  = select(-N, N, bViewNormalSameHemisphere);
@@ -202,55 +205,26 @@ fn BTDF(N : vec3<f32>, L : vec3<f32>,V : vec3<f32>, ThreadID : vec2<u32>) -> vec
     return BTDFValue;
 }
 
-
-fn calculate_x0(ThreadID : vec2<u32>) -> vec3<f32>{
+fn calculate_x0(ThreadID : vec2<u32>) -> vec3<f32> {
     let PixelUV             : vec2<f32> = (vec2<f32>(ThreadID.xy) + 0.5) / vec2<f32>(UniformBuffer.Resolution);
     let PixelNDC            : vec3<f32> = vec3<f32>(2.0 * PixelUV - 1.0, 0.0);
 
     let PixelClip_NearPlane : vec3<f32> = vec3<f32>(PixelNDC.xy, 0.0);
 
     let TransformedVector: vec4<f32> = UniformBuffer.ViewProjectionMatrix_Inverse * vec4<f32>(PixelClip_NearPlane, 1.0);
-    return TransformedVector.xyz / TransformedVector.w;   
+    return TransformedVector.xyz / TransformedVector.w;
 }
 
 fn BSDF(x0 : vec3<f32>, x1 : vec3<f32>, x2 : vec3<f32>, ThreadID : vec2<u32>) -> vec3<f32>
 {
-    let L : vec3<f32> = x1-x2;  //x1->x2
-    let V : vec3<f32> = x0-x1; //x1->x0 
-    let T : f32 = 1.0;  //투명도. Transmission 값이 넘어오지 않음
-    let N : vec3<f32> = textureLoad(G_NormalTexture, ThreadID.xy, 0).xyz; //표면에서의 normal
+    let L : vec3<f32> = x1 - x2;  //x1->x2
+    let V : vec3<f32> = x0 - x1;  //x1->x0 
+    let T : f32 = 1.0;
+    let N : vec3<f32> = textureLoad(G_NormalTexture, vec2<i32>(ThreadID), 0).xyz;
 
     if (dot(L, N) * dot(V, N) > 0.0) { return (1.0 - T) * BRDF(N, L, V, ThreadID); }
     return T * BTDF(N, L, V, ThreadID);
 }
-
-/*
-DI만 반영하는 경우 V항은 제외
-
-fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
-{
-    var Transmittance   : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
-    var Distance        : f32       = length(End - Start);
-    let Direction       : vec3<f32> = (End - Start) / Distance;
-
-    var CurrentRay      : Ray       = Ray(Start, Direction);
-    var RemainDistance  : f32       = Distance;
-
-    for (var iter = 0u; iter < 5u; iter++)
-    {
-        let ClosestHit : HitResult = TraceRay(CurrentRay);
-        if (!ClosestHit.IsValidHit || ClosestHit.HitDistance > RemainDistance) { return Transmittance; }
-
-        let HitMaterial : Material = GetMaterialFromHit(ClosestHit);
-        if (HitMaterial.Transmission == 0.0) { return vec3<f32>(0.0, 0.0, 0.0); }
-
-        Transmittance   *= HitMaterial.Albedo.rgb;
-        RemainDistance  -= ClosestHit.HitDistance;
-        CurrentRay       = Ray(ClosestHit.HitPoint, CurrentRay.Direction);
-    }
-    return vec3<f32>(0.0, 0.0, 0.0);
-}
-*/
 
 fn CalculateP_hat(ThreadID: vec3<u32>, SampledLightID: u32) -> vec3<f32>
 {
@@ -265,60 +239,73 @@ fn CalculateP_hat(ThreadID: vec3<u32>, SampledLightID: u32) -> vec3<f32>
     var InvPDF              : f32;
 
     let x0 : vec3<f32> = calculate_x0(ThreadID.xy);
-    let x1 : vec3<f32> = textureLoad(G_PositionTexture, ThreadID.xy, 0).xyz;    //hit point
+    let x1 : vec3<f32> = textureLoad(G_PositionTexture, vec2<i32>(ThreadID.xy), 0).xyz;
+    let HitNormal : vec3<f32> = textureLoad(G_NormalTexture, vec2<i32>(ThreadID.xy), 0).xyz;
 
-    let HitNormal : vec3<f32> = textureLoad(G_NormalTexture, ThreadID.xy, 0).xyz;
-
-    if (LightSource.LightType == 0u) // Directional Light
+    if (LightSource.LightType == 0u)
     {
         let L   : vec3<f32> = -LightSource.Direction;
-        let x2 : vec3<f32> = x1 + L * 1e11;
-        BSDFValue           = BSDF(x0, x1, x2, ThreadID.xy); 
-        VisibilityFactor    = vec3<f32>(1.0); //Visibility(x1, x2);
-        Geometry            = max(dot(L, HitNormal), 0.0);
-        InvPDF              = 1.0; // Sampling을 하지 않는다는 의미의 항등원 1.0
+        let x2  : vec3<f32> = x1 + L * 1e11;
+        BSDFValue        = BSDF(x0, x1, x2, ThreadID.xy);
+        VisibilityFactor = vec3<f32>(1.0);
+        Geometry         = max(dot(L, HitNormal), 0.0);
+        InvPDF           = 1.0;
     }
-    else if (LightSource.LightType == 1u) // Point Light
+    else if (LightSource.LightType == 1u)
     {
         let x2 : vec3<f32>  = LightSource.Position;
-        let D : f32         = length(x2 - x1);
-        let L : vec3<f32>   = (x2 - x1) / D;
+        let D  : f32        = length(x2 - x1);
+        let L  : vec3<f32>  = (x2 - x1) / D;
         
-        BSDFValue           = BSDF(x0, x1, x2, ThreadID.xy);
-        VisibilityFactor    = vec3<f32>(1.0); //Visibility(x1, x2);
-        Geometry            = max(dot(L, HitNormal), 0.0) / (D * D);
-        InvPDF              = 1.0; // Sampling을 하지 않는다는 의미의 항등원 1.0
+        BSDFValue        = BSDF(x0, x1, x2, ThreadID.xy);
+        VisibilityFactor = vec3<f32>(1.0);
+        Geometry         = max(dot(L, HitNormal), 0.0) / (D * D);
+        InvPDF           = 1.0;
     }
-    else if (LightSource.LightType == 2u) // Rect Light
+    else
     {
         let Random_U : f32 = (Random(&RandomSeed) * 2.0) - 1.0;
         let Random_V : f32 = (Random(&RandomSeed) * 2.0) - 1.0;
         let x2 : vec3<f32> = LightSource.Position + (Random_U * LightSource.U) + (Random_V * LightSource.V);
-        let D : f32         = length(x2 - x1);
-        let L : vec3<f32>   = (x2 - x1) / D;
-        BSDFValue           = BSDF(x0, x1, x2, ThreadID.xy);
-        VisibilityFactor    = vec3<f32>(1.0); //Visibility(x1, x2);
-        Geometry            = max(dot(-L, LightSource.Direction), 0.0) * max(dot(L, HitNormal), 0.0) / (D * D);
-        InvPDF              = LightSource.Area;
+        let D  : f32       = length(x2 - x1);
+        let L  : vec3<f32> = (x2 - x1) / D;
+
+        BSDFValue        = BSDF(x0, x1, x2, ThreadID.xy);
+        VisibilityFactor = vec3<f32>(1.0);
+        Geometry         = max(dot(-L, LightSource.Direction), 0.0) * max(dot(L, HitNormal), 0.0) / (D * D);
+        InvPDF           = LightSource.Area;
     }
-    p_hat += BSDFValue *VisibilityFactor * Geometry * InvPDF * LightRadiance;
+    p_hat += BSDFValue * VisibilityFactor * Geometry * InvPDF * LightRadiance;
     
     return p_hat;
 }
 
-fn UpdateReservoir(LightSampleID: u32, RIS_Weight: f32, Confidence: u32, ThreadID: vec2<u32>){
-    //리졸버 버퍼가 텍스처 스토리지 버퍼라 vec4로 저장이 됨. SampleID랑 W_sum의 자료형이 달라 고민 필요 (일단 f32로 통일)
-    var RandomSeed : u32 = GetHashValue(ThreadID.x * 1342u + ThreadID.y * 4233u + UniformBuffer.FrameIndex * 21337u);
-    var SampleID : u32 = u32(textureLoad(ReservoirTexture, ThreadID).x);
-    var W_sum = textureLoad(ReservoirTexture, ThreadID).y;
+fn UpdateReservoir(
+    LightSampleID: u32,
+    RIS_Weight: f32,
+    Confidence: u32,
+    ThreadID: vec2<u32>
+) {
+    // A에서 읽고
+    let prev = textureLoad(ReservoirTexture_A, ThreadID, 0);
+    var SampleID : u32 = u32(prev.x);
+    var W_sum    : f32 = prev.y;
+
     let P_Change = RIS_Weight / (RIS_Weight + W_sum);
 
-    if(Random(&RandomSeed) < P_Change){
+    var RandomSeed : u32 = GetHashValue(ThreadID.x * 1342u + ThreadID.y * 4233u + UniformBuffer.FrameIndex * 21337u);
+    let r = Random(&RandomSeed);
+
+    if (r < P_Change) {
         SampleID = LightSampleID;
     }
-    textureStore(ReservoirTexture, ThreadID, vec4<f32>(f32(SampleID), W_sum+RIS_Weight, 0.0, 0.0));
 
+    W_sum = W_sum + RIS_Weight;
+
+    // B로 씀
+    textureStore(ReservoirTexture_B, ThreadID, vec4<f32>(f32(SampleID), W_sum, f32(Confidence), 0.0));
 }
+
 
 //==========================================================================
 // Shader Main =============================================================
@@ -327,7 +314,6 @@ fn UpdateReservoir(LightSampleID: u32, RIS_Weight: f32, Confidence: u32, ThreadI
 @compute @workgroup_size(8,8,1)
 fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 {
-
     // 0. 범위 밖 스레드는 계산 X
     {
         let bPixelInBoundary_X : bool = (ThreadID.x < UniformBuffer.Resolution.x);
@@ -338,36 +324,36 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 
     var RandomSeed : u32 = GetHashValue(ThreadID.x * 1342u + ThreadID.y * 4233u + UniformBuffer.FrameIndex * 21337u);
 
-    let MIS_Weight : f32 = 1.0 / LIGHT_SAMPLE;  //m_i, DI에서는 1/M으로 고정
+    let MIS_Weight : f32 = 1.0 / f32(LIGHT_SAMPLE);
+
     // 1. M개의 광원 추출
-    for (var iter : u32 = 0u; iter < LIGHT_SAMPLE; iter++)
+    for (var iter : u32 = 0u; iter < LIGHT_SAMPLE; iter = iter + 1u)
     {
         let SampledLightID  : u32   = SampleLight(Random(&RandomSeed));
         let LightSample     : Light = GetLight(SampledLightID);
-        let LightArea       : f32   = select(1.0, LightSample.Area, LightSample.LightType == 2u);
-        let P_Light         : f32   = LightCDFBuffer[SampledLightID] - select(LightCDFBuffer[SampledLightID-1], 0.0, SampledLightID == 0u);
 
-        // TODO : BSDF 등 캡슐화 완벽하게 한 후 P_hat 계산식 작성하기
+        let LightArea       : f32   = select(1.0, LightSample.Area, LightSample.LightType == 2u);
+        let P_Light         : f32   = LightCDFBuffer[SampledLightID]
+                                    - select(LightCDFBuffer[SampledLightID-1u], 0.0, SampledLightID == 0u);
+
         let P_hat : vec3<f32> = CalculateP_hat(ThreadID, SampledLightID);
         let P_hat_luminance = dot(P_hat, vec3<f32>(0.2126, 0.7152, 0.0722));
-        let RIS_Weight  : f32 = MIS_Weight * P_hat_luminance / P_Light;  //ω_i , W_X = 1/p(X)
+        let RIS_Weight  : f32 = MIS_Weight * P_hat_luminance / P_Light;
         let Confidence  : u32 = 1u;
 
-        UpdateReservoir(SampledLightID, RIS_Weight, Confidence);
+        UpdateReservoir(SampledLightID, RIS_Weight, Confidence, ThreadID.xy);
     }
 
     if (false)
     {
         let x1 = SceneBuffer[0];
         let x2 = LightCDFBuffer[0];
-        let x3 = textureLoad(G_PositionTexture, ThreadID.xy, 0);
-        let x4 = textureLoad(G_NormalTexture, ThreadID.xy, 0);
-        let x5 = textureLoad(G_AlbedoTexture, ThreadID.xy, 0);
-        let x6 = textureLoad(G_EmissiveTexture, ThreadID.xy, 0);
-        textureStore(ReservoirTexture, ThreadID.xy, vec4<f32>(0.0, 0.0, 0.0, 1.0));
+        let x3 = textureLoad(G_PositionTexture, vec2<i32>(ThreadID.xy), 0);
+        let x4 = textureLoad(G_NormalTexture, vec2<i32>(ThreadID.xy), 0);
+        let x5 = textureLoad(G_AlbedoTexture, vec2<i32>(ThreadID.xy), 0);
+        let x6 = textureLoad(G_EmissiveTexture, vec2<i32>(ThreadID.xy), 0);
+        textureStore(ReservoirTexture_B, vec2<i32>(ThreadID.xy), vec4<f32>(0.0, 0.0, 0.0, 1.0));
     }
-    // textureLoad(G_PositionTexture, ThreadID.xy, 0);
-
 
     return;
 }
