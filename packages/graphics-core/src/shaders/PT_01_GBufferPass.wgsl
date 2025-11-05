@@ -372,18 +372,18 @@ fn GetTriangleWorldSpace(InInstance : Instance, InTriangle : Triangle) -> Triang
 // Maths ===================================================================
 //==========================================================================
 
-fn DoesRangesOverlap(Range1: vec2<f32>, Range2: vec2<f32>) -> bool
+fn DoesRangesOverlap(Range1 : vec2<f32>, Range2 : vec2<f32>) -> bool
 {
     return (Range1.x <= Range2.y) && (Range2.x <= Range1.y);
 }
 
-fn TransformVec3WithMat4x4(InVector3: vec3<f32>, TransformMatrix: mat4x4<f32>) -> vec3<f32>
+fn TransformVec3WithMat4x4(InVector3 : vec3<f32>, TransformMatrix : mat4x4<f32>) -> vec3<f32>
 {
     let TransformedVector: vec4<f32> = TransformMatrix * vec4<f32>(InVector3, 1.0);
     return TransformedVector.xyz / TransformedVector.w;
 }
 
-fn TransformRayWithMat4x4(InRay: Ray, TransformMatrix: mat4x4<f32>, bNormalize: bool) -> Ray
+fn TransformRayWithMat4x4(InRay : Ray, TransformMatrix : mat4x4<f32>, bNormalize : bool) -> Ray
 {
     let TransformedRay_Start        : vec3<f32> = TransformVec3WithMat4x4(InRay.Start, TransformMatrix);
     let TransformedRay_End          : vec3<f32> = TransformVec3WithMat4x4(InRay.Start + InRay.Direction, TransformMatrix);
@@ -395,7 +395,7 @@ fn TransformRayWithMat4x4(InRay: Ray, TransformMatrix: mat4x4<f32>, bNormalize: 
     return Ray(TransformedRay_Start, TransformedRay_Direction);
 }
 
-fn GetRayTriangleHitDistance(InRay: Ray, InTriangle : Triangle) -> f32
+fn GetRayTriangleHitDistance(InRay : Ray, InTriangle : Triangle) -> f32
 {
     let P0 = InTriangle.Vertex_0.Position;
     let P1 = InTriangle.Vertex_1.Position;
@@ -429,7 +429,7 @@ fn GetRayTriangleHitDistance(InRay: Ray, InTriangle : Triangle) -> f32
     return t;
 }
 
-fn GetRayAABBIntersectionRange(InRay: Ray, InBlasNode: BlasNode) -> vec2<f32>
+fn GetRayAABBIntersectionRange(InRay : Ray, InBlasNode : BlasNode) -> vec2<f32>
 {
     let InvDirection = 1.0 / (InRay.Direction);
 
@@ -447,7 +447,7 @@ fn GetRayAABBIntersectionRange(InRay: Ray, InBlasNode: BlasNode) -> vec2<f32>
     return vec2<f32>(t_min, t_max);
 }
 
-fn GetBaryCentricWeights(Point: vec3<f32>, InTriangle: Triangle) -> vec3<f32>
+fn GetBaryCentricWeights(Point : vec3<f32>, InTriangle : Triangle) -> vec3<f32>
 {
     let A = InTriangle.Vertex_0.Position;
     let B = InTriangle.Vertex_1.Position;
@@ -506,7 +506,7 @@ fn GenerateRayFromThreadID(ThreadID: vec2<u32>) -> Ray
     return TransformRayWithMat4x4(Ray_Clip, UniformBuffer.ViewProjectionMatrix_Inverse, true);
 }
 
-fn TraceRay(InRay: Ray) -> HitResult
+fn TraceRay(InRay : Ray) -> HitResult
 {
     var BestHitResult : HitResult = HitResult();
     var RayValidRange : vec2<f32> = vec2<f32>(1e-4, 1e10);
@@ -514,7 +514,7 @@ fn TraceRay(InRay: Ray) -> HitResult
     BestHitResult.IsValidHit = false;
 
     // Trace Ray
-    for (var InstanceID: u32 = 0u; InstanceID < UniformBuffer.InstanceCount; InstanceID++)
+    for (var InstanceID : u32 = 0u; InstanceID < UniformBuffer.InstanceCount; InstanceID++)
     {
         // 현재 Instance 기준으로 정보 가져오기
         let CurrentInstance         : Instance          = GetInstance(InstanceID);
