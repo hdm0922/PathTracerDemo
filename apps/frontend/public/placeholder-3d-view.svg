@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <!-- Background -->
+  <rect width="800" height="600" fill="#f0f0f0"/>
+  
+  <!-- Floor grid pattern -->
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ddd" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="600" fill="url(#grid)"/>
+  
+  <!-- Perspective floor -->
+  <polygon points="0,300 800,300 750,600 50,600" fill="#e8e8e8" opacity="0.8"/>
+  
+  <!-- Room walls -->
+  <polygon points="0,0 800,0 750,600" fill="#e0e0e0" opacity="0.5"/>
+  
+  <!-- Text label -->
+  <text x="400" y="320" font-family="Arial, sans-serif" font-size="24" fill="#999" text-anchor="middle" font-weight="bold">3D View</text>
+  <text x="400" y="350" font-family="Arial, sans-serif" font-size="16" fill="#aaa" text-anchor="middle">Replace with actual 3D visualization</text>
+</svg>
+
