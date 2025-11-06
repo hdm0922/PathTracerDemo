@@ -154,7 +154,7 @@ const PI : f32 = 3.141592;
 @group(0) @binding(3) var<storage, read>    AccelBuffer     : array<u32>;
 
 @group(0) @binding(10) var SceneTexture : texture_2d<f32>;
-@group(1) @binding(10) var AccumTexture : texture_storage_2d<rgba32float, write>;
+@group(0) @binding(11) var AccumTexture : texture_storage_2d<rgba32float, write>;
 
 //==========================================================================
 // Helpers =================================================================

@@ -484,3 +484,73 @@ export class RectLight extends Light
         );
     }
 };
+
+// ==================== SCENE STRUCTURES ====================
+// Backend CRUD와 호환되는 Scene 데이터 구조
+
+// Asset 타입
+export type AssetType = 'object' | 'directional-light' | 'point-light' | 'rect-light';
+
+// Transform 정보 (Object용)
+export interface Transform {
+  position: [number, number, number];
+  rotation: [number, number, number, number]; // quaternion [x, y, z, w]
+  scale: [number, number, number];
+}
+
+// Light 파라미터들
+export interface DirectionalLightParams {
+  direction: [number, number, number];
+  color: [number, number, number];
+  intensity: number;
+}
+
+export interface PointLightParams {
+  position: [number, number, number];
+  color: [number, number, number];
+  intensity: number;
+}
+
+export interface RectLightParams {
+  position: [number, number, number];
+  u: [number, number, number];
+  v: [number, number, number];
+  color: [number, number, number];
+  intensity: number;
+}
+
+// Scene Asset (Object 또는 Light)
+export interface SceneAsset {
+  id: string; // 고유 식별자 (예: "chair_0", "light_1")
+  type: AssetType;
+
+  // Object용 필드
+  meshName?: string; // GLB 파일명 (예: "Chair", "TestScene")
+  transform?: Transform;
+
+  // Light용 필드
+  lightParams?: DirectionalLightParams | PointLightParams | RectLightParams;
+}
+
+// Scene 정의 (Backend CRUD 호환)
+export interface Scene {
+  id: string; // UUID 또는 auto-increment
+  name: string;
+  description?: string; // 선택적 설명
+  thumbnailUrl?: string; // 썸네일 이미지 URL
+  assets: SceneAsset[];
+  createdAt?: string; // ISO 8601 timestamp
+  updatedAt?: string; // ISO 8601 timestamp
+  userId?: string; // 소유자 ID (멀티유저 시)
+}
+
+// Scene 목록 조회용 (가벼운 버전)
+export interface SceneListItem {
+  id: string;
+  name: string;
+  description?: string;
+  thumbnailUrl?: string;
+  assetCount: number; // assets.length
+  createdAt?: string;
+  updatedAt?: string;
+}

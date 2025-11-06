@@ -304,6 +304,22 @@ export class Renderer {
     return [SceneBufferRawData, GeometryBufferRawData, AccelBufferRawData, []]; // TODO : Texture 채우기
   }
 
+  /**
+   * Renderer를 새로운 World로 재초기화
+   * Scene 전환 시 사용
+   * TODO: 차후 Backend API에서 Scene을 가져와서 동적으로 Scene을 전환할 때 사용
+   * @param World - 새로운 World 객체
+   */
+  async Reinitialize(World: World): Promise<void> {
+    // GPU 리소스 정리 (기존 버퍼/텍스처 제거)
+    this.SceneBuffer?.destroy();
+    this.GeometryBuffer?.destroy();
+    this.AccelBuffer?.destroy();
+
+    // 새로운 World로 초기화
+    await this.Initialize(World);
+  }
+
   async Initialize(World: World): Promise<void> {
     // Initialize Scene Stuffs
     {
