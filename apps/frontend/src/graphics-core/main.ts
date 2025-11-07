@@ -1,75 +1,75 @@
-import { ResourceManager }  from "./ResourceManager";
-import { World }            from "./World";
-import { RendererTEST } from "./Renderer_TEST";
+// import { ResourceManager }  from "./ResourceManager";
+// import { World }            from "./World";
+// import { RendererTEST } from "./Renderer_TEST";
 
-async function main()
-{
+// async function main()
+// {
 
-  // Create
-  let RoomRenderer  : RendererTEST;
-  let RoomScene     : World;
-  {
-    const Adapter   = await navigator.gpu?.requestAdapter()     as GPUAdapter;
-    const Device    = await Adapter?.requestDevice()            as GPUDevice;
-    const Canvas    = document.querySelector('canvas')          as HTMLCanvasElement;
+//   // Create
+//   let RoomRenderer  : RendererTEST;
+//   let RoomScene     : World;
+//   {
+//     const Adapter   = await navigator.gpu?.requestAdapter()     as GPUAdapter;
+//     const Device    = await Adapter?.requestDevice()            as GPUDevice;
+//     const Canvas    = document.querySelector('canvas')          as HTMLCanvasElement;
 
-    // TEMP : 바꾸고 싶으시면 언제든 바꾸셔도 좋습니다.
-    Canvas.width    = 600;
-    Canvas.height   = 450;
+//     // TEMP : 바꾸고 싶으시면 언제든 바꾸셔도 좋습니다.
+//     Canvas.width    = 600;
+//     Canvas.height   = 450;
 
-    //console.log(Device.limits);
+//     //console.log(Device.limits);
 
-    RoomScene       = new World();
-    RoomRenderer    = new RendererTEST(Adapter, Device, Canvas);
-  }
-
-
-
-
-
-  // Load
-  {
-    const FileNamesToLoad : string[] = 
-    [
-      "TestScene", 
-      "Lamp",
-      "PureWindow",
-      "Chair",
-    ];
-
-    await ResourceManager.LoadAssets(FileNamesToLoad);
-  }
+//     RoomScene       = new World();
+//     RoomRenderer    = new RendererTEST(Adapter, Device, Canvas);
+//   }
 
 
 
 
-  // Initialize
-  {
-    RoomScene.Initialize();
-    await RoomRenderer.Initialize(RoomScene);
-  }
+
+//   // Load
+//   {
+//     const FileNamesToLoad : string[] = 
+//     [
+//       "TestScene", 
+//       "Lamp",
+//       "PureWindow",
+//       "Chair",
+//     ];
+
+//     await ResourceManager.LoadAssets(FileNamesToLoad);
+//   }
 
 
 
 
-  // Loop
-  {
-    function frame()
-    {
+//   // Initialize
+//   {
+//     RoomScene.Initialize();
+//     await RoomRenderer.Initialize(RoomScene);
+//   }
 
-      RoomRenderer.Update();
-      RoomRenderer.Render();
 
-      requestAnimationFrame(frame);
-    }
 
-    frame();
-  }
+
+//   // Loop
+//   {
+//     function frame()
+//     {
+
+//       RoomRenderer.Update();
+//       RoomRenderer.Render();
+
+//       requestAnimationFrame(frame);
+//     }
+
+//     frame();
+//   }
 
 
 
   
-  return 0;
-}
+//   return 0;
+// }
 
-main().catch(err => console.log(err));
+// main().catch(err => console.log(err));

@@ -97,7 +97,33 @@ export class Camera
     {
         const InYaw : number = (InYawDegree * Math.PI) / 180.0;
 
-        this.Yaw = InYaw % 360;
+        this.Yaw = InYaw % (2 * Math.PI);
+
+        return;
+    }
+
+    public GetPitch() : number
+    {
+        return (this.Pitch * 180.0) / Math.PI;
+    }
+
+    public GetYaw() : number
+    {
+        return (this.Yaw * 180.0) / Math.PI;
+    }
+
+    public AddPitch(DeltaPitchDegree : number) : void
+    {
+        const DeltaPitch : number = (DeltaPitchDegree * Math.PI) / 180.0;
+        this.Pitch = Math.min(Math.PI / 2, Math.max(-Math.PI / 2, this.Pitch + DeltaPitch));
+
+        return;
+    }
+
+    public AddYaw(DeltaYawDegree : number) : void
+    {
+        const DeltaYaw : number = (DeltaYawDegree * Math.PI) / 180.0;
+        this.Yaw = (this.Yaw + DeltaYaw) % (2 * Math.PI);
 
         return;
     }
@@ -105,6 +131,15 @@ export class Camera
     public SetLocation(InLocation : Vec3) : void
     {
         this.Location = InLocation;
+
+        return;
+    }
+
+    public AddLocationOffset(Offset : Vec3) : void
+    {
+        this.Location[0] += Offset[0];
+        this.Location[1] += Offset[1];
+        this.Location[2] += Offset[2];
 
         return;
     }

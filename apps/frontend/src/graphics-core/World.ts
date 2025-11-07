@@ -3,6 +3,7 @@ import      { quat, vec3 }  from 'wgpu-matrix';
 
 import { ResourceManager } from './ResourceManager.ts';
 import { Instance, Mesh, SerializedMesh, Light, DirectionalLight, PointLight, RectLight } from './Structs.ts';
+import type { Scene, SceneAsset } from './Structs.ts';
 
 
 
@@ -73,84 +74,85 @@ export class World
         return;
     }
 
-    public Initialize(): void
+    /**
+     * World의 모든 데이터를 초기화
+     * Scene을 전환할 때 사용
+     */
+    public Clear(): void
     {
+        this.InstancesPool.clear();
+        this.Lights = [];
+    }
 
-        // ========== ADD INSTANCES ==========
+    /**
+     * Scene 객체로부터 World를 구성
+     * TODO: 차후 Backend API에서 받은 Scene 데이터를 이용하여 동적으로 Scene을 로드
+     * @param scene - Scene 객체 (Backend CRUD 호환 구조)
+     */
+    public LoadFromScene(scene: Scene): void
+    {
+        // 기존 데이터 초기화
+        this.Clear();
 
-        // Add TestScene Instance
+        // Scene의 모든 Asset을 순회하며 World에 추가
+        for (const asset of scene.assets)
         {
-            const Translation   : Vec3 = vec3.fromValues(0,0,0);
-            const Rotation      : Quat = quat.identity();
-            const Scale         : Vec3 = vec3.fromValues(1,1,1);
+            if (asset.type === 'object')
+            {
+                // Object Asset 처리
+                if (!asset.meshName || !asset.transform)
+                {
+                    console.warn(`Object asset ${asset.id} is missing meshName or transform`);
+                    continue;
+                }
 
-            this.AddInstance("SceneInstance_0", "TestScene", Translation, Rotation, Scale);
+                const position  : Vec3 = vec3.fromValues(...asset.transform.position);
+                const rotation  : Quat = quat.fromValues(...asset.transform.rotation);
+                const scale     : Vec3 = vec3.fromValues(...asset.transform.scale);
+
+                this.AddInstance(asset.id, asset.meshName, position, rotation, scale);
+            }
+            else if (asset.type === 'directional-light')
+            {
+                // Directional Light 처리
+                if (!asset.lightParams) continue;
+                const params = asset.lightParams as any;
+
+                const direction : Vec3 = vec3.normalize(vec3.fromValues(...params.direction));
+                const color     : Vec3 = vec3.fromValues(...params.color);
+                const intensity : number = params.intensity;
+
+                this.AddDirectionalLight(direction, color, intensity);
+            }
+            else if (asset.type === 'point-light')
+            {
+                // Point Light 처리
+                if (!asset.lightParams) continue;
+                const params = asset.lightParams as any;
+
+                const position  : Vec3 = vec3.fromValues(...params.position);
+                const color     : Vec3 = vec3.fromValues(...params.color);
+                const intensity : number = params.intensity;
+
+                this.AddPointLight(position, color, intensity);
+            }
+            else if (asset.type === 'rect-light')
+            {
+                // Rect Light 처리
+                if (!asset.lightParams) continue;
+                const params = asset.lightParams as any;
+
+                const position  : Vec3 = vec3.fromValues(...params.position);
+                const u         : Vec3 = vec3.fromValues(...params.u);
+                const v         : Vec3 = vec3.fromValues(...params.v);
+                const color     : Vec3 = vec3.fromValues(...params.color);
+                const intensity : number = params.intensity;
+
+                this.AddRectLight(position, u, v, color, intensity);
+            }
         }
 
-        // Add PureWindow Instance
-        {
-            const Translation   : Vec3 = vec3.fromValues(0,0,0);
-            const Rotation      : Quat = quat.rotateY(quat.identity(), 3.14/2);
-            const Scale         : Vec3 = vec3.fromValues(1,1,1);
-
-            //this.AddInstance("WindowInstance_0", "PureWindow", Translation, Rotation, Scale);
-        }
-
-        // Add Chair Instance
-        {
-            const Translation   : Vec3 = vec3.fromValues(0,-90,0);
-            const Rotation      : Quat = quat.identity();
-            const Scale         : Vec3 = vec3.fromValues(0.02,0.02,0.02);
-
-            //this.AddInstance("ChairInstance_0", "Chair", Translation, Rotation, Scale);
-        }
-
-        // Add Another Chair Instance
-        {
-            const Translation   : Vec3 = vec3.fromValues(200,0,0);
-            const Rotation      : Quat = quat.identity();
-            const Scale         : Vec3 = vec3.fromValues(0.02,0.02,0.02);
-
-            //this.AddInstance("ChairInstance_1", "Series3300_3303", Translation, Rotation, Scale);
-        }
-        // =========================================
-
-
-
-        // ========== ADD LIGHTS ==========
-
-        // Add Directional Light
-        {
-            const Direction : Vec3      = vec3.normalize( vec3.fromValues(0, 0, -1) );
-            const Color     : Vec3      = vec3.fromValues(1, 1, 1);
-            const Intensity : number    = 1.0;
-
-            this.AddDirectionalLight(Direction, Color, Intensity);
-        }
-
-        // Add point Light
-        {
-            const Position  : Vec3      = vec3.fromValues(0, 0, -2);
-            const Color     : Vec3      = vec3.fromValues(1, 1, 1);
-            const Intensity : number    = 10.0;
-
-            this.AddPointLight(Position, Color, Intensity);
-        }
-
-        // Add Rect Light
-        {
-            const Position  : Vec3      = vec3.fromValues(0, 1, 0);
-            const U         : Vec3      = vec3.fromValues(0.4, 0, 0);
-            const V         : Vec3      = vec3.fromValues(0, 0, 0.4);
-            const Color     : Vec3      = vec3.fromValues(1, 1, 1);
-            const Intensity : number    = 20;
-
-            this.AddRectLight(Position, U, V, Color, Intensity);
-        }
-
-        // =========================================
-
-        return;
+        console.log(`Loaded scene "${scene.name}" with ${scene.assets.length} assets`);
     }
 
     public PackWorldData() : [Array<Instance>, Array<SerializedMesh>, Map<string, number>]
