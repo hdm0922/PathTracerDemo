@@ -93,7 +93,7 @@ export class World
             const Rotation      : Quat = quat.rotateY(quat.identity(), 3.14/2);
             const Scale         : Vec3 = vec3.fromValues(1,1,1);
 
-            this.AddInstance("WindowInstance_0", "PureWindow", Translation, Rotation, Scale);
+            //this.AddInstance("WindowInstance_0", "PureWindow", Translation, Rotation, Scale);
         }
 
         // Add Chair Instance
@@ -123,7 +123,7 @@ export class World
         {
             const Direction : Vec3      = vec3.normalize( vec3.fromValues(0, 0, -1) );
             const Color     : Vec3      = vec3.fromValues(1, 1, 1);
-            const Intensity : number    = 2.0;
+            const Intensity : number    = 1.0;
 
             this.AddDirectionalLight(Direction, Color, Intensity);
         }
@@ -134,7 +134,7 @@ export class World
             const Color     : Vec3      = vec3.fromValues(1, 1, 1);
             const Intensity : number    = 10.0;
 
-            //this.AddPointLight(Position, Color, Intensity);
+            this.AddPointLight(Position, Color, Intensity);
         }
 
         // Add Rect Light
@@ -143,9 +143,9 @@ export class World
             const U         : Vec3      = vec3.fromValues(0.4, 0, 0);
             const V         : Vec3      = vec3.fromValues(0, 0, 0.4);
             const Color     : Vec3      = vec3.fromValues(1, 1, 1);
-            const Intensity : number    = 50;
+            const Intensity : number    = 20;
 
-            //this.AddRectLight(Position, U, V, Color, Intensity);
+            this.AddRectLight(Position, U, V, Color, Intensity);
         }
 
         // =========================================
@@ -188,6 +188,7 @@ export class World
         const LuminanceArray    : Float32Array  = new Float32Array(this.Lights.length);
         let LuminanceSum        : number        = 0.0;
         for (let i = 0; i < this.Lights.length; i++) { LuminanceArray[i] = this.Lights[i].GetLuminance(); }
+        for (let i = 0; i < this.Lights.length; i++) { LuminanceArray[i] = 1.0; }
         for (let i = 0; i < this.Lights.length; i++) { LuminanceSum += LuminanceArray[i]; }
         for (let i = 0; i < this.Lights.length; i++) { LuminanceArray[i] /= LuminanceSum; }
         for (let i = 1; i < this.Lights.length; i++) { LuminanceArray[i] += LuminanceArray[i-1]; }

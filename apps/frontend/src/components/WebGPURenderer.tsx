@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { ResourceManager } from '../graphics-core/ResourceManager';
 import { World } from '../graphics-core/World';
-// import { RendererTEST } from '../graphics-core/Renderer_TEST';
-import { Renderer } from '../graphics-core/Renderer';
+import { Renderer } from '../graphics-core/Renderer_TEST';
+//import { Renderer } from '../graphics-core/Renderer';
 
 interface WebGPURendererProps {
   className?: string;
