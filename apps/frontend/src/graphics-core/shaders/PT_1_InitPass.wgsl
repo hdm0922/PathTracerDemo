@@ -1387,7 +1387,7 @@ fn cs_main
             let PDF_BSDF    : f32 = PDF_BSDF(X1_Surface, L, V) * GeometryFactor_Light(XL, X1_Surface);
 
             let P           : f32 = PDF_BSDF;
-            let MIS         : f32 = P / (P + PDF_NEE);
+            let MIS         : f32 = 1.0; //P / (P + PDF_NEE);
 
             let P_hat       : f32 = Luminance( L_emit(XL) * Attenuation_Light(XL, X1_Surface, V) );
             let RIS         : f32 = MIS * P_hat / P;
@@ -1465,108 +1465,3 @@ fn cs_main
 
     return;
 }
-
-
-
-
-
-
-    // // 3. BSDF Sampling 으로 w2 결정
-    // var PathSample_2 : PathSample = PathSample();
-
-    // PathSample_2.rSeed_2 = RandomSeed;
-
-    // let w2              : BSDFSample    = SampleBSDF( &RandomSeed, X1_Surface, normalize(X0 - X1_Surface.Position) );
-    // let HitResult_X2    : HitResult     = TraceRay( Ray(X1_Surface.Position, w2.Direction) );
-
-    // // 4-1. 경로 [X0 -> X1 -> X_ENV] ( 1 Bounce BSDF Path )
-    // if ( !HitResult_X2.IsValidHit )
-    // {
-    //     let XL : LightSample = LightSample(0u, LIGHT_ENV, w2.Direction);
-
-    //     if ( IsSafeToReconnect_Light(X1_Surface , XL) )
-    //     {
-    //         PathSample_2.Lobe_k_1  = LOBE_NEE;
-    //         PathSample_2.Lobe_k    = LOBE_LIGHT;
-    //         PathSample_2.RcVertex  = GetRcVertex_Light(XL);
-
-    //         var RIS     : f32;
-    //         var P_hat   : f32;
-    //         {
-    //             let V   : vec3<f32> = normalize( X0 - X1_Surface.Position );
-    //             let L   : vec3<f32> = GetDirectionToLight(X1_Surface.Position, XL);
-
-    //             let P   : f32       = PDF_BSDF(X1_Surface, L, V) * GeometryFactor_Light(XL, X1_Surface);
-    //             let MIS : f32       = 1.0;
-
-    //             P_hat   = Luminance( L_emit(XL) * Attenuation_Light(XL, X1_Surface, V) );
-    //             RIS     = MIS * P_hat / P;
-    //         }
-
-    //         //UpdateReservoir(&RandomSeed, &Reservoir, PathSample_2, RIS, P_hat, 1u);
-    //     }
-    // }
-    // else // 4-2. 경로 [X0 -> X1 -> X2 -> XL] ( 1 Bounce BSDF + 1 Bounce NEE Path )
-    // {
-    //     let X2          : CompactSurface    = HitResult_X2.SurfaceInfo;
-    //     let X2_Surface  : Surface           = GetSurface(X2);
-    //     let XL          : LightSample       = SampleNEE(&RandomSeed);
-
-    //     if ( IsSafeToReconnect(X1_Surface, w2.Lobe, X2_Surface, LOBE_NEE) )
-    //     { // k = 2 Is Reconnection Vertex
-    //         PathSample_2.k          = 2u;
-    //         PathSample_2.Lobe_k_1   = w2.Lobe;
-    //         PathSample_2.Lobe_k     = LOBE_NEE;
-    //         PathSample_2.RcVertex   = GetRcVertex(X2);
-
-    //         let V1 : vec3<f32> = normalize( X0 - X1_Surface.Position );
-    //         let L1 : vec3<f32> = normalize( X2_Surface.Position - X1_Surface.Position );
-
-    //         let V2 : vec3<f32> = -L1;
-    //         let L2 : vec3<f32> = GetDirectionToLight(X2_Surface.Position, XL);
-
-    //         let PDF_NEE     : f32       = PDF_NEE(XL);
-    //         let PDF_BSDF    : f32       = PDF_BSDF(X1_Surface, L1, V1);
-    //         let r12         : vec3<f32> = X2_Surface.Position - X1_Surface.Position;
-
-    //         PathSample_2.w = GetDirectionToLight(X2_Surface.Position, XL);
-    //         PathSample_2.L = L_emit(XL);
-    //         PathSample_2.J = PDF_BSDF * PDF_NEE * abs( dot(X2_Surface.Normal, V2) ) / ( dot(r12, r12) );
-    //     }
-    //     else if ( IsSafeToReconnect_Light(X2_Surface , XL) )
-    //     { // k = 3 Is Reconnection Vertex
-    //         PathSample_2.k          = 3u;
-    //         PathSample_2.Lobe_k_1   = LOBE_NEE;
-    //         PathSample_2.Lobe_k     = LOBE_LIGHT;
-    //         PathSample_2.RcVertex   = GetRcVertex_Light(XL);
-    //     }
-
-    //     if ( bool(PathSample_2.k) )
-    //     {
-    //         var RIS     : f32;
-    //         var P_hat   : f32;
-    //         {
-    //             let V1 : vec3<f32> = normalize( X0 - X1_Surface.Position );
-    //             let L1 : vec3<f32> = normalize( X2_Surface.Position - X1_Surface.Position );
-
-    //             let V2 : vec3<f32> = -L1;
-    //             let L2 : vec3<f32> = GetDirectionToLight(X2_Surface.Position, XL);
-
-    //             let PDF_NEE     : f32 = PDF_NEE(XL);
-    //             let PDF_BSDF_1  : f32 = PDF_BSDF(X1_Surface, L1, V1) * GeometryFactor(X1_Surface, X2_Surface);
-    //             let PDF_BSDF_2  : f32 = PDF_BSDF(X2_Surface, L2, V2) * GeometryFactor_Light(XL, X2_Surface);
-
-    //             let P   : f32 = PDF_BSDF_1 * PDF_NEE;
-    //             let MIS : f32 = P / ( P + PDF_BSDF_1 * PDF_BSDF_2 );
-                
-    //             let Atteunation_1   : vec3<f32> = Attenuation(X2_Surface, X1_Surface, V1);
-    //             let Atteunation_2   : vec3<f32> = Attenuation_Light(XL, X2_Surface, V2);
-
-    //             P_hat = Luminance( L_emit(XL) * Atteunation_2 * Atteunation_1 );
-    //             RIS = MIS * P_hat / P;
-    //         }
-
-    //         //UpdateReservoir(&RandomSeed, &Reservoir, PathSample_2, RIS, P_hat, 1u);
-    //     }
-    // }
-

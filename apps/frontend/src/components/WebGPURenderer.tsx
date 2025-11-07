@@ -3,8 +3,8 @@ import { vec3 } from 'wgpu-matrix';
 import type { Vec3 } from 'wgpu-matrix';
 import { ResourceManager } from '../graphics-core/ResourceManager';
 import { World } from '../graphics-core/World';
-// import { RendererTEST } from '../graphics-core/Renderer_TEST';
-import { Renderer } from '../graphics-core/Renderer';
+import { Renderer } from '../graphics-core/Renderer_TEST';
+//import { Renderer } from '../graphics-core/Renderer';
 import { DUMMY_SCENE_1, AVAILABLE_SCENES } from '../graphics-core/test/DummyScenes';
 import type { Scene } from '../graphics-core/Structs';
 
@@ -222,7 +222,7 @@ export default function WebGPURenderer({
       worldRef.current!.LoadFromScene(newScene);
 
       // Renderer 재초기화
-      await rendererRef.current!.Reinitialize(worldRef.current!);
+      await rendererRef.current!.Initialize(worldRef.current!);
 
       console.log(`Scene switched successfully to: ${newScene.name}`);
     }

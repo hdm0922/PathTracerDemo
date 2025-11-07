@@ -1080,16 +1080,15 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         let V : vec3<f32> = -CurrentRay.Direction;
 
         // Surface Emit + All Direct Lights 가 만드는 색 계산
-        //ResultColor += Throughput * (HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor);
+        ResultColor += Throughput * (HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor);
         ResultColor += Throughput * DirectLightsColor(HitInfo, V, &RandomSeed);
 
         // 다음 경로를 샘플링하고, 해당 경로에서의 Attenuation 계산 & Ray 발사
         let L       : vec3<f32> = SampleBSDF(HitInfo, V, &RandomSeed);
         let BSDF    : vec3<f32> = BSDF(HitInfo, L, V);
         let Cosine  : f32       = max(dot(HitInfo.HitNormal, L), 0.0);
-        //let PDF     : f32       = PDF_BSDF(HitInfo, L, V);
 
-        Throughput *= Cosine * BSDF;// / PDF;
+        Throughput *= Cosine * BSDF;
         CurrentRay = Ray(HitInfo.HitPoint, L);
        
         // Russian Roulette 기법으로 수송량 낮은 경로는 조기 탈락

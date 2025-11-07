@@ -30,9 +30,9 @@ const EBufferIndex =
 const ETextureIndex =
 {
     G_Buffer    : 0,
-    Scene       : 2,
-    Result      : 3,
-    SIZE        : 4
+    Scene       : 1,
+    Result      : 2,
+    SIZE        : 3
 } as const;
 
 const EDataOffsetIndex =
@@ -58,7 +58,6 @@ const EComputePassIndex =
 
 export class Renderer
 {
-
     // GPU Device Stuff
     private readonly Adapter         : GPUAdapter;
     private readonly Device          : GPUDevice;
@@ -80,7 +79,6 @@ export class Renderer
     private World       : World;
     private Camera      : Camera;
     private FrameCount  : number;
-
 
 
     constructor
@@ -129,17 +127,33 @@ export class Renderer
     }
 
 
+    public GetCamera() : Camera 
+    { 
+        return this.Camera;
+    }
+
+    public ResetFrameCount() : void 
+    { 
+        this.FrameCount = 0; 
+    }
+
+
 
     public async Initialize(InWorld : World) : Promise<void>
     {
+
+        // Prevent VRAM Leak
+        this.DestroyGPUResources();
+
         // Initialize Scene Datas
         {
-            this.World      = InWorld;
-            this.FrameCount = 0;
-            this.Camera     = new Camera(this.Canvas.width, this.Canvas.height);
+            this.Camera = new Camera(this.Canvas.width, this.Canvas.height);
             this.Camera.SetLocationFromXYZ(0,0,6);
             this.Camera.SetYaw(0);
             this.Camera.SetPitch(0);
+
+            this.World = InWorld;
+            this.ResetFrameCount();
         }
 
         this.CreateGPUResources();
@@ -248,6 +262,8 @@ export class Renderer
     }
 
 
+
+    
 
     private SerializeWorldData() : [ArrayBuffer, ArrayBuffer, ArrayBuffer, ImageBitmap[]]
     {
@@ -440,6 +456,22 @@ export class Renderer
         this.GPUTextures[ETextureIndex.G_Buffer]    = this.CreateGPUTexture();
         this.GPUTextures[ETextureIndex.Scene]       = this.CreateGPUTexture();
         this.GPUTextures[ETextureIndex.Result]      = this.CreateGPUTexture();
+
+        return;
+    }
+
+    private DestroyGPUResources() : void
+    {
+
+        for (let iter = 0; iter < EBufferIndex.SIZE; iter++)
+        {
+            this.GPUBuffers[iter]?.destroy();
+        }
+
+        for (let iter = 0; iter < ETextureIndex.SIZE; iter++)
+        {
+            this.GPUTextures[iter]?.destroy();
+        }
 
         return;
     }
