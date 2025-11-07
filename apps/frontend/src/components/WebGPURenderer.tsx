@@ -13,6 +13,7 @@ interface WebGPURendererProps {
   width?: number;
   height?: number;
   sceneId?: string; // TODO: 차후 Backend API에서 Scene을 선택할 때 사용
+  onCameraUpdate?: (position: { x: number; y: number; z: number }) => void;
 }
 
 export default function WebGPURenderer({
@@ -20,6 +21,7 @@ export default function WebGPURenderer({
   width = 600,
   height = 450,
   sceneId,
+  onCameraUpdate,
 }: WebGPURendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<Renderer | null>(null);
@@ -145,6 +147,16 @@ export default function WebGPURenderer({
           // Reset FrameCount if camera moved
           if (cameraMoved) {
             rendererRef.current.ResetFrameCount();
+          }
+
+          // Update camera position callback
+          if (onCameraUpdate) {
+            const cameraLocation = camera.GetLocation();
+            onCameraUpdate({
+              x: cameraLocation[0],
+              y: cameraLocation[1],
+              z: cameraLocation[2],
+            });
           }
 
           rendererRef.current.Update();

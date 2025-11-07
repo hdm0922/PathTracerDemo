@@ -544,3 +544,41 @@
   color: #737373;
   margin: 0;
 }
+
+/* Camera Debug Info */
+.camera-debug-info {
+  background-color: #f5f5f6;
+  border: 2px solid #e5e6ec;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  font-family: monospace;
+}
+
+.debug-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #737373;
+  margin-bottom: 8px;
+}
+
+.debug-content {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.debug-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #262626;
+}
+
+.debug-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #262626;
+  background-color: #ffffff;
+  padding: 4px 8px;
+  border-radius: 6px;
+}

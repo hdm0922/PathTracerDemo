@@ -42,6 +42,9 @@ export default function LightingSimulator() {
   ]);
   const [selectedFurniture, setSelectedFurniture] = useState<string>('1');
 
+  // Camera position for debugging
+  const [cameraPosition, setCameraPosition] = useState<{ x: number; y: number; z: number } | null>(null);
+
   const furnitureOptions: FurnitureOption[] = [
     { type: 'table', name: '테이블', color: '#8b6f47' },
     { type: 'chair', name: '의자', color: '#6b5d4f' },
@@ -140,11 +143,18 @@ export default function LightingSimulator() {
       <div className="simulator-layout">
         {/* Left side - WebGPU Renderer */}
         <div className={`${activeTab}-image-wrapper`} style={{ opacity: activeTab === 'space' ? imageOpacity : 1 }}>
-          <WebGPURenderer className={`${activeTab}-image`} />
+          <WebGPURenderer
+            className={`${activeTab}-image`}
+            onCameraUpdate={setCameraPosition}
+          />
         </div>
 
         {/* Right side - Title, Tabs, and Controls */}
-        <RightPanel activeTab={activeTab} onTabChange={setActiveTab}>
+        <RightPanel
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          cameraPosition={cameraPosition}
+        >
           {activeTab === 'lighting' && (
             <LightingControls
               lightings={lightings}
