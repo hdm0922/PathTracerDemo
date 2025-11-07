@@ -8,6 +8,10 @@ import { MeshDescriptor }   from "./Structs";
 
 import ShaderCode_DEBUG             from './shaders/PT_00_DebugPass.wgsl?raw';
 import ShaderCode_GBufferCreation   from './shaders/PT_01_GBufferPass.wgsl?raw';
+
+import ShaderCode_Initialize        from './shaders/PT_1_InitPass.wgsl?raw';
+import ShaderCode_FinalShading      from './shaders/PT_4_FinalShadingPass.wgsl?raw';
+
 import ShaderCode_Vertex            from './shaders/VertexShader.wgsl?raw';
 import ShaderCode_Fragment          from './shaders/FragmentShader.wgsl?raw';
 
@@ -19,16 +23,16 @@ const EBufferIndex =
     Scene       : 1,
     Geometry    : 2,
     Accel       : 3,
-    SIZE        : 4
+    Reservoir   : 4,
+    SIZE        : 5
 } as const;
 
 const ETextureIndex =
 {
     G_Buffer    : 0,
-    Reservoir_R : 1,
-    Reservoir_W : 2,
+    Scene       : 2,
     Result      : 3,
-    SIZE        : 5
+    SIZE        : 4
 } as const;
 
 const EDataOffsetIndex =
@@ -52,7 +56,7 @@ const EComputePassIndex =
 
 
 
-export class RendererTEST
+export class Renderer
 {
 
     // GPU Device Stuff
@@ -201,6 +205,16 @@ export class RendererTEST
                 this.ComputePasses[iter].Dispatch(ComputePassEncoder, WorkgroupCount);
 
             ComputePassEncoder.end();
+        }
+
+        // Copy Texture : ResultTexture -> SceneTexture
+        {
+            CommandEncoder.copyTextureToTexture
+            ( 
+                { texture : this.GPUTextures[ETextureIndex.Result] },
+                { texture : this.GPUTextures[ETextureIndex.Scene] },
+                { width : this.Canvas.width, height : this.Canvas.height }
+            );
         }
 
         // RenderPass (Draw ResultTexture)
@@ -401,13 +415,13 @@ export class RendererTEST
         return GPUBufferCreated;
     }
 
-    private CreateGPUTexture(InGPUTextureUsageFlags : GPUTextureUsageFlags) : GPUTexture
+    private CreateGPUTexture() : GPUTexture
     {
         const TextureDescriptor : GPUTextureDescriptor =
         {
             size    : { width : this.Canvas.width, height : this.Canvas.height },
             format  : "rgba32float",
-            usage   : InGPUTextureUsageFlags,
+            usage   : GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST,
         };
 
         return this.Device.createTexture(TextureDescriptor);
@@ -421,11 +435,11 @@ export class RendererTEST
         this.GPUBuffers[EBufferIndex.Scene]         = this.CreateGPUStorageBuffer(SceneBufferData);
         this.GPUBuffers[EBufferIndex.Geometry]      = this.CreateGPUStorageBuffer(GeometryBufferData);
         this.GPUBuffers[EBufferIndex.Accel]         = this.CreateGPUStorageBuffer(AccelBufferData);
+        this.GPUBuffers[EBufferIndex.Reservoir]     = this.CreateGPUStorageBuffer(new ArrayBuffer(80 * this.Canvas.width * this.Canvas.height));
 
-        this.GPUTextures[ETextureIndex.G_Buffer]    = this.CreateGPUTexture(GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST);
-        this.GPUTextures[ETextureIndex.Reservoir_R] = this.CreateGPUTexture(GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST);
-        this.GPUTextures[ETextureIndex.Reservoir_W] = this.CreateGPUTexture(GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST);
-        this.GPUTextures[ETextureIndex.Result]      = this.CreateGPUTexture(GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST);
+        this.GPUTextures[ETextureIndex.G_Buffer]    = this.CreateGPUTexture();
+        this.GPUTextures[ETextureIndex.Scene]       = this.CreateGPUTexture();
+        this.GPUTextures[ETextureIndex.Result]      = this.CreateGPUTexture();
 
         return;
     }
@@ -459,23 +473,47 @@ export class RendererTEST
             ComputePass.Create
             (
                 this.Device, 
-                ShaderCode_DEBUG, 
+                ShaderCode_Initialize, 
                 [   // Input, GPUBuffer
                     this.GPUBuffers[EBufferIndex.Uniform],
                     this.GPUBuffers[EBufferIndex.Scene],
                     this.GPUBuffers[EBufferIndex.Geometry],
-                    //this.GPUBuffers[EBufferIndex.Accel],
+                    this.GPUBuffers[EBufferIndex.Accel],
                 ],
                 [   // Input, GPUTextureView
                     this.GPUTextures[ETextureIndex.G_Buffer].createView(),
                 ],
                 [   // Output, GPUBuffer
+                    this.GPUBuffers[EBufferIndex.Reservoir],
+                ],
+                [   // Output, GPUTextureView
 
+                ]
+            ),
+
+            ComputePass.Create
+            (
+                this.Device, 
+                ShaderCode_FinalShading, 
+                [   // Input, GPUBuffer
+                    this.GPUBuffers[EBufferIndex.Uniform],
+                    this.GPUBuffers[EBufferIndex.Scene],
+                    this.GPUBuffers[EBufferIndex.Geometry],
+                    this.GPUBuffers[EBufferIndex.Accel],
+                    this.GPUBuffers[EBufferIndex.Reservoir],
+                ],
+                [   // Input, GPUTextureView
+                    this.GPUTextures[ETextureIndex.G_Buffer].createView(),
+                    this.GPUTextures[ETextureIndex.Scene].createView(),
+                ],
+                [   // Output, GPUBuffer
+                    
                 ],
                 [   // Output, GPUTextureView
                     this.GPUTextures[ETextureIndex.Result].createView(),
                 ]
             ),
+
 
         ];
 
@@ -513,7 +551,7 @@ export class RendererTEST
                 layout  : this.RenderPipeline.getBindGroupLayout(0),
                 entries : 
                 [
-                    { binding : 0, resource : this.GPUTextures[ETextureIndex.Result].createView() }
+                    { binding : 0, resource : this.GPUTextures[ETextureIndex.Scene].createView() }
                 ],
             };
 

@@ -244,6 +244,7 @@ fn GetMaterial(InMeshDescriptor : MeshDescriptor, MaterialID : u32) -> Material
     let YELLOW : vec4<f32> = vec4<f32>(1.0, 1.0, 0.0, OutMaterial.Albedo.a);
 
     OutMaterial.Albedo      = select(OutMaterial.Albedo, YELLOW, OutMaterial.Transmission > 0.0 );
+    //OutMaterial.Albedo      = vec4f(1.0);
     OutMaterial.Roughness   = max(OutMaterial.Roughness, 0.01);
 
     return OutMaterial;
@@ -1067,7 +1068,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     let EnvironmentColor    : vec3<f32> = vec3<f32>(0.5, 0.5, 0.5);
 
     // 2. Path Tracing 수행
-    for (var BounceDepth : u32 = 0u; BounceDepth < 10u; BounceDepth++)
+    for (var BounceDepth : u32 = 0u; BounceDepth < 4u; BounceDepth++)
     {
         // 가장 가까운 충돌점 검색
         let HitInfo     : HitResult = TraceRay(CurrentRay);
@@ -1079,16 +1080,16 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         let V : vec3<f32> = -CurrentRay.Direction;
 
         // Surface Emit + All Direct Lights 가 만드는 색 계산
-        ResultColor += Throughput * (HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor);
+        //ResultColor += Throughput * (HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor);
         ResultColor += Throughput * DirectLightsColor(HitInfo, V, &RandomSeed);
 
         // 다음 경로를 샘플링하고, 해당 경로에서의 Attenuation 계산 & Ray 발사
         let L       : vec3<f32> = SampleBSDF(HitInfo, V, &RandomSeed);
         let BSDF    : vec3<f32> = BSDF(HitInfo, L, V);
-        let Cosine  : f32       = abs(dot(HitInfo.HitNormal, L));
-        let PDF     : f32       = PDF_BSDF(HitInfo, L, V);
+        let Cosine  : f32       = max(dot(HitInfo.HitNormal, L), 0.0);
+        //let PDF     : f32       = PDF_BSDF(HitInfo, L, V);
 
-        Throughput *= Cosine * BSDF / PDF;
+        Throughput *= Cosine * BSDF;// / PDF;
         CurrentRay = Ray(HitInfo.HitPoint, L);
        
         // Russian Roulette 기법으로 수송량 낮은 경로는 조기 탈락
@@ -1099,6 +1100,8 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 
     // 3. 최종 색을 AccumTexture에 작성
     {
+        //if ( max(ResultColor.r, max(ResultColor.g, ResultColor.b)) > 1.0 ) { ResultColor = vec3<f32>(1.0, 0.0, 0.0); }
+
         let ColorUsed       : vec4<f32> = textureLoad(SceneTexture, ThreadID.xy, 0);
         let ColorToWrite    : vec3<f32> = mix(ColorUsed.rgb, ResultColor, 1.0 / f32(UniformBuffer.FrameIndex + 1));
         textureStore(AccumTexture, ThreadID.xy, vec4<f32>(ColorToWrite, 1.0));

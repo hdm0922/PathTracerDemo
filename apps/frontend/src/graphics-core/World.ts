@@ -190,6 +190,7 @@ export class World
         const LuminanceArray    : Float32Array  = new Float32Array(this.Lights.length);
         let LuminanceSum        : number        = 0.0;
         for (let i = 0; i < this.Lights.length; i++) { LuminanceArray[i] = this.Lights[i].GetLuminance(); }
+        for (let i = 0; i < this.Lights.length; i++) { LuminanceArray[i] = 1.0; }
         for (let i = 0; i < this.Lights.length; i++) { LuminanceSum += LuminanceArray[i]; }
         for (let i = 0; i < this.Lights.length; i++) { LuminanceArray[i] /= LuminanceSum; }
         for (let i = 1; i < this.Lights.length; i++) { LuminanceArray[i] += LuminanceArray[i-1]; }
