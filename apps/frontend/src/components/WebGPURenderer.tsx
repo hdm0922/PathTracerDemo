@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import { vec3 } from 'wgpu-matrix';
+import type { Vec3 } from 'wgpu-matrix';
 import { ResourceManager } from '../graphics-core/ResourceManager';
 import { World } from '../graphics-core/World';
 // import { RendererTEST } from '../graphics-core/Renderer_TEST';
@@ -23,6 +25,12 @@ export default function WebGPURenderer({
   const rendererRef = useRef<Renderer | null>(null);
   const worldRef = useRef<World | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+
+  // Camera control state
+  const pressedKeysRef = useRef<Set<string>>(new Set());
+  const isMouseDownRef = useRef<boolean>(false);
+  const lastMouseXRef = useRef<number>(0);
+  const lastMouseYRef = useRef<number>(0);
 
   // 초기 렌더러 설정
   useEffect(() => {
@@ -99,6 +107,46 @@ export default function WebGPURenderer({
         function frame() {
           if (!isMounted || !rendererRef.current) return;
 
+          // Handle camera movement based on pressed keys
+          const camera = rendererRef.current.GetCamera();
+          let cameraMoved = false;
+
+          const moveSpeed = 0.1; // 이동 속도
+          const pressedKeys = pressedKeysRef.current;
+
+          if (pressedKeys.size > 0) {
+            const forwardVector: Vec3 = camera.GetForwardVector();
+            const rightVector: Vec3 = camera.GetRightVector();
+            const moveOffset: Vec3 = vec3.create(0, 0, 0);
+
+            if (pressedKeys.has('w') || pressedKeys.has('W')) {
+              // Forward
+              vec3.addScaled(moveOffset, forwardVector, moveSpeed, moveOffset);
+            }
+            if (pressedKeys.has('s') || pressedKeys.has('S')) {
+              // Backward
+              vec3.addScaled(moveOffset, forwardVector, -moveSpeed, moveOffset);
+            }
+            if (pressedKeys.has('a') || pressedKeys.has('A')) {
+              // Left
+              vec3.addScaled(moveOffset, rightVector, -moveSpeed, moveOffset);
+            }
+            if (pressedKeys.has('d') || pressedKeys.has('D')) {
+              // Right
+              vec3.addScaled(moveOffset, rightVector, moveSpeed, moveOffset);
+            }
+
+            if (vec3.length(moveOffset) > 0) {
+              camera.AddLocationOffset(moveOffset);
+              cameraMoved = true;
+            }
+          }
+
+          // Reset FrameCount if camera moved
+          if (cameraMoved) {
+            rendererRef.current.ResetFrameCount();
+          }
+
           rendererRef.current.Update();
           rendererRef.current.Render();
 
@@ -172,11 +220,84 @@ export default function WebGPURenderer({
     });
   }, [sceneId]);
 
+  // Keyboard and Mouse input handlers
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if (['w', 'a', 's', 'd'].includes(key)) {
+        pressedKeysRef.current.add(key);
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      pressedKeysRef.current.delete(key);
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (!canvasRef.current) return;
+
+      isMouseDownRef.current = true;
+      lastMouseXRef.current = event.clientX;
+      lastMouseYRef.current = event.clientY;
+
+      // Lock pointer for better camera control
+      canvasRef.current.requestPointerLock();
+    };
+
+    const handleMouseUp = () => {
+      isMouseDownRef.current = false;
+      document.exitPointerLock();
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!isMouseDownRef.current || !rendererRef.current) return;
+
+      const camera = rendererRef.current.GetCamera();
+
+      // Use movementX/Y for smoother rotation when pointer is locked
+      const deltaX = event.movementX;
+      const deltaY = event.movementY;
+
+      const mouseSensitivity = 0.1; // 마우스 감도
+
+      // Update camera rotation
+      camera.AddYaw(-deltaX * mouseSensitivity);
+      camera.AddPitch(-deltaY * mouseSensitivity);
+
+      // Reset FrameCount when camera rotates
+      rendererRef.current.ResetFrameCount();
+    };
+
+    // Add event listeners
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.addEventListener('mousedown', handleMouseDown);
+      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('mousemove', handleMouseMove);
+    }
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      if (canvas) {
+        canvas.removeEventListener('mousedown', handleMouseDown);
+      }
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', handleMouseMove);
+      document.exitPointerLock();
+    };
+  }, []);
+
   return (
     <div className={className} style={{ width: '100%', height: '100%' }}>
       <canvas
         ref={canvasRef}
-        style={{ display: 'block', width: '100%', height: '100%' }}
+        style={{ display: 'block', width: '100%', height: '100%', cursor: 'pointer' }}
       />
     </div>
   );

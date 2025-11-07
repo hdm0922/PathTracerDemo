@@ -517,6 +517,14 @@ export class Renderer {
     return;
   }
 
+  GetCamera(): Camera {
+    return this.Camera;
+  }
+
+  ResetFrameCount(): void {
+    this.FrameCount = 0;
+  }
+
   Update(): void {
     this.FrameCount++;
 
