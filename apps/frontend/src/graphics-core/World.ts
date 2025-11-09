@@ -199,6 +199,8 @@ export class World
         const Float32View : Float32Array = new Float32Array(LightCDFArrayBuffer);
         Float32View.set(LuminanceArray, 0);
 
+        console.log("CDF: ", Float32View);
+
         return LightCDFArrayBuffer;
     }
 }

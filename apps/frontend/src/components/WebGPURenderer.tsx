@@ -3,10 +3,11 @@ import { vec3 } from 'wgpu-matrix';
 import type { Vec3 } from 'wgpu-matrix';
 import { ResourceManager } from '../graphics-core/ResourceManager';
 import { World } from '../graphics-core/World';
-import { Renderer } from '../graphics-core/Renderer_TEST';
-//import { Renderer } from '../graphics-core/Renderer';
 import { DUMMY_SCENE_1, AVAILABLE_SCENES } from '../graphics-core/test/DummyScenes';
 import type { Scene } from '../graphics-core/Structs';
+
+import { Renderer } from '../graphics-core/Renderer_TEST';
+//import { Renderer } from '../graphics-core/Renderer';
 
 interface WebGPURendererProps {
   className?: string;

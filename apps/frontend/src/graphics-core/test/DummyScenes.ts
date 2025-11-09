@@ -37,7 +37,8 @@ export const DUMMY_SCENE_1: Scene = {
         scale: [1, 1, 1],
       },
     },
-    // Directional Light
+
+    //Directional Light
     {
       id: 'sun_light',
       type: 'directional-light',
@@ -47,6 +48,31 @@ export const DUMMY_SCENE_1: Scene = {
         intensity: 2.0,
       },
     },
+
+    // Point Light
+    {
+      id: 'bulb',
+      type: 'point-light',
+      lightParams: {
+        position: [0, 0, -1],
+        color: [1, 1, 1],
+        intensity: 20.0,
+      },
+    },
+
+    // Rect Light
+    // {
+    //   id: 'rect',
+    //   type: 'rect-light',
+    //   lightParams: {
+    //     position: [0, 1, -2],
+    //     u: [0.4, 0, 0],
+    //     v: [0, 0, 0.4],
+    //     color: [1, 1, 1],
+    //     intensity: 10.0,
+    //   }
+    // },
+
   ],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),

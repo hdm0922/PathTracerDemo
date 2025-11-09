@@ -143,6 +143,7 @@ const STRIDE_VERTEX     : u32 =  8u;
 const STRIDE_BLAS       : u32 =  8u;
 
 const PI : f32 = 3.141592;
+const ENV_COLOR : vec3<f32> = vec3<f32>(0.5, 0.5, 0.5);
 
 //==========================================================================
 // GPU Bindings ============================================================
@@ -779,11 +780,10 @@ fn PDF_BTDF(HitInfo : HitResult, L : vec3<f32>, V : vec3<f32>) -> f32
 
 fn PDF_BSDF(Surface : HitResult, L : vec3<f32>, V : vec3<f32>) -> f32
 {
-    return mix(
-        PDF_BRDF(Surface, L, V), 
-        PDF_BTDF(Surface, L, V), 
-        GetMaterialFromHit(Surface).Transmission
-    );
+    let N : vec3<f32> = Surface.HitNormal;
+
+    if (dot(L, N) * dot(V, N) > 0.0) { return PDF_BRDF(Surface, L, V); }
+    return PDF_BTDF(Surface, L, V);
 }
 
 fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
@@ -891,7 +891,7 @@ fn TraceRay(InRay: Ray) -> HitResult
             ////////////////////////////
 
             // Blas Tree 순회
-            var Stack           : array<u32, 96>;
+            var Stack           : array<u32, 64>;
             var StackPointer    : i32 = -1;
             StackPointer++; Stack[StackPointer] = 0;
         
@@ -951,7 +951,9 @@ fn TraceRay(InRay: Ray) -> HitResult
                 {
                     let CurrentTriangle : Triangle = GetTriangle(CurrentMeshDescriptor, PrimitiveID);
                     let PrimitiveHitDistance : f32 = GetRayTriangleHitDistance(LocalRay, CurrentTriangle);
-                    if (RayValidRange.y < PrimitiveHitDistance) { continue; }
+
+                    let bIsClosestHit : bool = RayValidRange.y > PrimitiveHitDistance;
+                    if (!bIsClosestHit) { continue; }
                     
                     // 최종 살아남은 Primitive를 선택
                     RayValidRange.y = PrimitiveHitDistance;
@@ -1065,10 +1067,11 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     var CurrentRay          : Ray       = GenerateRayFromThreadID(ThreadID.xy);
     var ResultColor         : vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
     var Throughput          : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
-    let EnvironmentColor    : vec3<f32> = vec3<f32>(0.5, 0.5, 0.5);
+    let EnvironmentColor    : vec3<f32> = ENV_COLOR;
+
 
     // 2. Path Tracing 수행
-    for (var BounceDepth : u32 = 0u; BounceDepth < 4u; BounceDepth++)
+    for (var BounceDepth : u32 = 0u; BounceDepth < 3u; BounceDepth++)
     {
         // 가장 가까운 충돌점 검색
         let HitInfo     : HitResult = TraceRay(CurrentRay);
@@ -1080,15 +1083,20 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         let V : vec3<f32> = -CurrentRay.Direction;
 
         // Surface Emit + All Direct Lights 가 만드는 색 계산
-        ResultColor += Throughput * (HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor);
-        ResultColor += Throughput * DirectLightsColor(HitInfo, V, &RandomSeed);
+        //if (BounceDepth == 1u)
+        {
+            ResultColor += Throughput * (HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor);
+            ResultColor += Throughput * DirectLightsColor(HitInfo, V, &RandomSeed);
+            //break;
+        }
 
         // 다음 경로를 샘플링하고, 해당 경로에서의 Attenuation 계산 & Ray 발사
         let L       : vec3<f32> = SampleBSDF(HitInfo, V, &RandomSeed);
         let BSDF    : vec3<f32> = BSDF(HitInfo, L, V);
-        let Cosine  : f32       = max(dot(HitInfo.HitNormal, L), 0.0);
+        let Cosine  : f32       = abs(dot(HitInfo.HitNormal, L));
+        let PDF     : f32       = PDF_BSDF(HitInfo, L, V);
 
-        Throughput *= Cosine * BSDF;
+        Throughput *= Cosine * BSDF / PDF;
         CurrentRay = Ray(HitInfo.HitPoint, L);
        
         // Russian Roulette 기법으로 수송량 낮은 경로는 조기 탈락

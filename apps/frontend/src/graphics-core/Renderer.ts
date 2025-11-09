@@ -321,6 +321,13 @@ export class Renderer {
   }
 
   async Initialize(World: World): Promise<void> {
+    
+    // if ( this.SceneBuffer ) this.SceneBuffer.destroy();
+    // if ( this.GeometryBuffer ) this.GeometryBuffer.destroy();
+    // if ( this.AccelBuffer ) this.AccelBuffer.destroy();
+
+
+
     // Initialize Scene Stuffs
     {
       this.World = World;

@@ -162,40 +162,63 @@ struct LightSample
 {
     SamplePoint : vec3<f32>,
     Type        : u32,
-    LightID     : u32,
+
+    Emittance   : vec3<f32>,
+    LightID     : i32,
 };
 
 
 
-struct PathSample
+struct CompactPath
 {
+    rSeed       : array<u32, 4u>,
+    XL          : LightSample,    
     RcVertex    : vec4<f32>,
-    LightVertex : vec4<f32>,
 
     k           : u32,
     Lobe_k_1    : u32,
     Lobe_k      : u32,
-    rSeed_2     : u32,
-
-    Padding     : vec3<u32>,
     J           : f32,
+};
+
+
+
+struct Path
+{
+    CSurface    : array<CompactSurface, 8u>,
+    Lobe        : array<u32, 8u>,
+    rSeed       : array<u32, 8u>,
+
+    X0_Position : vec3<f32>,
+    length      : u32,
+    XL          : LightSample,
+};
+
+
+
+struct PathReservoir
+{
+    Sample  : Path,
+    UCW     : f32,
+    C       : u32,
+    P_hat   : f32,
+    w_sum   : f32,
 };
 
 
 
 struct Reservoir
 {
-    Sample  : PathSample,
+    Sample  : CompactPath,
     UCW     : f32,
     C       : u32,
-
-    P_hat   : f32,
-    w_sum   : f32,
 };
 
 //==========================================================================
 // Constants ===============================================================
 //==========================================================================
+
+const WORKGROUP_SIZE    : vec3<u32> = vec3<u32>(8u, 8u, 1u);
 
 const STRIDE_INSTANCE   : u32 = 33u;
 const STRIDE_LIGHT      : u32 = 18u;
@@ -366,7 +389,7 @@ fn TraceRay(InRay : Ray) -> HitResult
             if (!DoRangesOverlap(RayValidRange, IntersectionRange)) { continue; }
 
             // Blas Tree 순회
-            var Stack           : array<u32, 96>;
+            var Stack           : array<u32, 64>;
             var StackPointer    : i32 = -1;
             StackPointer++; Stack[StackPointer] = 0;
         
@@ -430,10 +453,11 @@ fn TraceRay(InRay : Ray) -> HitResult
                     // 최종 살아남은 Primitive를 선택
                     RayValidRange.y = PrimitiveHitDistance;
 
-                    BestHitResult.IsValidHit    = true;
-                    BestHitResult.SurfaceInfo.InstanceID    = InstanceID;
-                    BestHitResult.SurfaceInfo.MaterialID    = SubMeshID;
-                    BestHitResult.SurfaceInfo.PrimitiveID   = PrimitiveID;
+                    BestHitResult.IsValidHit                    = true;
+                    BestHitResult.SurfaceInfo.IsValidSurface    = true;
+                    BestHitResult.SurfaceInfo.InstanceID        = InstanceID;
+                    BestHitResult.SurfaceInfo.MaterialID        = SubMeshID;
+                    BestHitResult.SurfaceInfo.PrimitiveID       = PrimitiveID;
                 }
             }
         }
@@ -519,7 +543,7 @@ fn GeometryFactor_Light(XL : LightSample, X : Surface) -> f32
     {
         case LIGHT_DIRECTION :
         { 
-            return abs( dot(X.Normal, XL.SamplePoint) );//max( dot(X.Normal, -XL.SamplePoint), 0.0 );
+            return abs( dot(X.Normal, XL.SamplePoint) ); 
         }
         case LIGHT_POINT :
         {
@@ -527,20 +551,19 @@ fn GeometryFactor_Light(XL : LightSample, X : Surface) -> f32
             let dir : vec3<f32> = normalize(r);
             let Cos : f32 = abs( dot(X.Normal, dir) );
 
-            return Cos / dot(r, r);
+            return Cos / max(dot(r, r), 1e-6);
         }
         case LIGHT_RECT :
         {
-            var R : Surface = Surface();
-            R.Position = XL.SamplePoint;
-            R.Normal = GetLight(XL.LightID).Direction;
-
-            return GeometryFactor(X, R);
+            let r   : vec3<f32> = XL.SamplePoint - X.Position;
+            let dir : vec3<f32> = normalize(r);
+            return abs( dot(X.Normal, dir) );
         }
-        case LIGHT_ENV : { return 1.0; }
+        case LIGHT_ENV : { return abs( dot(X.Normal, XL.SamplePoint) );  }
         default : { return 0.0; }
     }
 }
+
 
 //==========================================================================
 // Helpers =================================================================
@@ -770,28 +793,30 @@ fn Random(pSeed : ptr<function, u32>) -> f32
 
 fn UpdateReservoir(
     pRandomSeed : ptr<function, u32>, 
-    pReservoir  : ptr<function, Reservoir>, 
-    Sample      : PathSample, 
+    pReservoir  : ptr<function, PathReservoir>, 
+    Sample      : Path, 
     RIS         : f32,
     P_hat       : f32,
     Confidence  : u32
 )
 {
-    if ( RIS < 1e-2 ) { return; }
+    //(*pReservoir).DEBUG = 1u;
+
+    if (RIS <= 0.0 || RIS != RIS) { return; }
+
+
+    let Pr_Change       : f32   = RIS / ((*pReservoir).w_sum + RIS);
+    let bChangeSample   : bool  = Random(pRandomSeed) < Pr_Change;
+
+    if ( !bChangeSample ) { return; }
+
+
 
     (*pReservoir).w_sum += RIS;
     (*pReservoir).C += Confidence;
 
-    let Pr_Change       : f32   = RIS / (*pReservoir).w_sum;
-    let bChangeSample   : bool  = Random(pRandomSeed) < Pr_Change;
-
-    if ( bChangeSample ) 
-    { 
-        (*pReservoir).Sample = Sample;
-        (*pReservoir).P_hat = P_hat;
-    }
-
-    (*pReservoir).UCW = (*pReservoir).w_sum / (*pReservoir).P_hat;
+    (*pReservoir).Sample = Sample;
+    (*pReservoir).P_hat = P_hat;
 
     return;
 }
@@ -948,12 +973,14 @@ fn SampleNEE(pRandomSeed : ptr<function, u32>) -> LightSample
             M = (L + R) >> 1;
         }
 
-        OutNEESample.LightID = M;
+        OutNEESample.LightID = i32(M);
     }
 
     // Rect Light 의 경우 위치 샘플링이 필요
-    let LightSource : Light = GetLight(OutNEESample.LightID);
-    OutNEESample.Type = LightSource.LightType;
+    let LightSource : Light = GetLight(u32(OutNEESample.LightID));
+
+    OutNEESample.Type       = LightSource.LightType;
+    OutNEESample.Emittance  = L_emit(OutNEESample);
 
     switch ( OutNEESample.Type )
     {
@@ -1011,8 +1038,6 @@ fn SampleBRDF(pRandomSeed : ptr<function, u32>, X : Surface, V : vec3<f32>) -> B
 
 fn SampleBTDF(pRandomSeed : ptr<function, u32>, X : Surface, V : vec3<f32>) -> BSDFSample
 {
-    let Roughness   : f32 = X.Material.Roughness;
-
     let bViewNormalSameHemisphere : bool = (dot(V, X.Normal) > 0.0);
     let n_in        : f32       = select(X.Material.IOR, 1.0, bViewNormalSameHemisphere);
     let n_out       : f32       = select(1.0, X.Material.IOR, bViewNormalSameHemisphere);
@@ -1037,7 +1062,7 @@ fn SampleBTDF(pRandomSeed : ptr<function, u32>, X : Surface, V : vec3<f32>) -> B
     let bTreatAsReflection : bool = (Random(pRandomSeed) < P_reflection);
 
     let TBN : mat3x3<f32>   = TBNMatrix(N);
-    let H   : vec3<f32>     = TBN * SampleGGX(pRandomSeed, Roughness);
+    let H   : vec3<f32>     = TBN * SampleGGX(pRandomSeed, X.Material.Roughness);
     let L   : vec3<f32>     = normalize(select(refract(-V, H, IORRatio), reflect(-V, H), bTreatAsReflection));
     
     var OutBSDFSample : BSDFSample = BSDFSample();
@@ -1060,29 +1085,42 @@ fn SampleBSDF(pRandomSeed : ptr<function, u32>, X : Surface, V : vec3<f32>) -> B
 // Probability Density Functions ===========================================
 //==========================================================================
 
-fn PDF_NEE(XL : LightSample) -> f32
+fn PDF_NEE(XL : LightSample, X : Surface) -> f32
 {
-    let LightSource : Light = GetLight(XL.LightID);
+    let LightSource : Light = GetLight(u32(XL.LightID));
 
-    let Pr_Before : f32 = select(GetLightsCDF(XL.LightID-1), 0.0, XL.LightID == 0u);
-    let Pr_Choose : f32 = GetLightsCDF(XL.LightID) - Pr_Before;
-    let PDF_Point : f32 = select(1.0, 1.0 / LightSource.Area, LightSource.LightType == LIGHT_RECT);
+    let Pr_Before : f32 = select(GetLightsCDF(u32(XL.LightID)-1), 0.0, XL.LightID == 0);
+    let Pr_Choose : f32 = GetLightsCDF(u32(XL.LightID)) - Pr_Before;
+    //Pr_Choose = 1.0 / f32(UniformBuffer.LightSourceCount);
+
+    var PDF_Point : f32 = 1.0;
+    if (XL.Type == LIGHT_RECT)
+    {
+        let N   : vec3<f32> = LightSource.Direction;
+        let r   : vec3<f32> = XL.SamplePoint - X.Position;
+        let cos : f32       = abs(dot(normalize(r), N));
+
+        let Jacobian : f32 = dot(r,r) / max(cos, 1e-6);
+        PDF_Point = Jacobian / LightSource.Area;
+    }
 
     return Pr_Choose * PDF_Point;
 }
 
-fn PDF_BRDF(X : Surface, L : vec3<f32>, V : vec3<f32>) -> f32
+fn PDF_BRDF(X_Next : Surface, X : Surface, X_Prev : Surface) -> f32
 {
     // 1. HitInfo 해석
     let Albedo      : vec3<f32> = X.Material.Albedo.rgb;
     let Metalness   : f32       = X.Material.Metalness;
     let Roughness   : f32       = X.Material.Roughness;
- 
+
     // 2. 정반사 확률 P_specular 계산
     let F0          : vec3<f32> = mix(vec3f(0.04), Albedo, Metalness);
     let P_specular  : f32       = mix(Luminance(F0), 1.0, Metalness);
 
     // 3. PDF_BRDF 계산
+    let L       : vec3<f32> = normalize( X_Next.Position - X.Position );
+    let V       : vec3<f32> = normalize( X_Prev.Position - X.Position );
     let N       : vec3<f32> = X.Normal;
     let H       : vec3<f32> = normalize(L + V);
     let LdotN   : f32       = max(dot(L, N), 0.0);
@@ -1096,11 +1134,14 @@ fn PDF_BRDF(X : Surface, L : vec3<f32>, V : vec3<f32>) -> f32
     return PDF_BRDF;
 }
 
-fn PDF_BTDF(X : Surface, L : vec3<f32>, V : vec3<f32>) -> f32
+fn PDF_BTDF(X_Next : Surface, X : Surface, X_Prev : Surface) -> f32
 {
     // --- 1. 기본 정보 및 IOR 설정 ---
     let Roughness   : f32      = X.Material.Roughness;
     let Alpha       : f32      = Roughness * Roughness; // PDF 계산에 필요
+
+    let L : vec3<f32> = normalize( X_Next.Position - X.Position );
+    let V : vec3<f32> = normalize( X_Prev.Position - X.Position );
 
     let bViewNormalSameHemisphere : bool = (dot(V, X.Normal) > 0.0);
     let n_in   : f32 = select(X.Material.IOR, 1.0, bViewNormalSameHemisphere);
@@ -1163,17 +1204,29 @@ fn PDF_BTDF(X : Surface, L : vec3<f32>, V : vec3<f32>) -> f32
 
     // --- 4. 최종 결합 PDF 반환 ---
     // PDF = (반사 선택 확률 * 반사 PDF) + (굴절 선택 확률 * 굴절 PDF)
-    return P_reflection * pdf_reflect + P_transmission * pdf_transmit;
+    let PDF_BTDF : f32 = P_reflection * pdf_reflect + P_transmission * pdf_transmit;
+
+    return PDF_BTDF;
 }
 
-fn PDF_BSDF(X : Surface, L : vec3<f32>, V : vec3<f32>) -> f32
+fn PDF_BSDF(X_Next : Surface, X : Surface, X_Prev : Surface) -> f32
 {
-    return mix(PDF_BRDF(X, L, V), PDF_BTDF(X, L, V), X.Material.Transmission);
+    let L : vec3<f32> = normalize( X_Next.Position - X.Position );
+    let V : vec3<f32> = normalize( X_Prev.Position - X.Position );
+    let N : vec3<f32> = X.Normal;
+
+    if (dot(L, N) * dot(V, N) > 0.0) { return PDF_BRDF(X_Next, X, X_Prev); }
+    return PDF_BTDF(X_Next, X, X_Prev);
 }
 
 //==========================================================================
 // Functions ===============================================================
 //==========================================================================
+
+fn InitializeRandomSeed(ThreadID : vec2<u32>) -> u32
+{
+    return GetHashValue(ThreadID.x * 1973u + ThreadID.y * 9277u + UniformBuffer.FrameIndex * 26699u);
+}
 
 fn Get_X0(ThreadID : vec2<u32>) -> vec3<f32>
 {
@@ -1193,18 +1246,19 @@ fn IsSafeToReconnect(A : Surface, Lobe_A : u32, B : Surface, Lobe_B : u32) -> bo
 {
     let Roughness_A     : f32 = select(A.Material.Roughness, 1.0, Lobe_A == LOBE_LAMBERT);
     let Roughness_B     : f32 = select(B.Material.Roughness, 1.0, Lobe_B == LOBE_LAMBERT);
+    let bRoughEnough    : bool = ( min(Roughness_A, Roughness_B) >= RECONNECTION_ROUGHNESS );
 
     let bFarEnough      : bool = ( length(A.Position - B.Position) >= RECONNECTION_DISTANCE );
-    let bRoughEnough    : bool = ( min(Roughness_A, Roughness_B) >= RECONNECTION_ROUGHNESS );
 
     return bFarEnough && bRoughEnough;
 }
 
 fn IsSafeToReconnect_Light(X : Surface, XL : LightSample) -> bool
 {
+    let bRoughEnough        : bool  = ( X.Material.Roughness >= RECONNECTION_ROUGHNESS );
+
     let bIsDirectionalLight : bool  = ( XL.Type == LIGHT_DIRECTION ) || ( XL.Type == LIGHT_ENV );
     let bFarEnough          : bool  = bIsDirectionalLight || ( length(X.Position - XL.SamplePoint) >= RECONNECTION_DISTANCE );
-    let bRoughEnough        : bool  = ( X.Material.Roughness >= RECONNECTION_ROUGHNESS );
 
     return bFarEnough && bRoughEnough;
 }
@@ -1224,25 +1278,6 @@ fn GetRcVertex(X : CompactSurface) -> vec4<f32>
     return OutRcVertex;
 }
 
-fn GetRcVertex_Light(XL : LightSample) -> vec4<f32>
-{
-    let Type_ID : u32 = ( XL.Type << 16 ) + XL.LightID;
-    return vec4<f32>( XL.SamplePoint, bitcast<f32>(Type_ID) );
-}
-
-fn GetLightSampleFromRcVertex(RcVertex : vec4<f32>) -> LightSample
-{
-    var OutLightSample : LightSample = LightSample();
-
-    OutLightSample.SamplePoint = RcVertex.rgb;
-
-    let Type_ID : u32       = bitcast<u32>(RcVertex.a);
-    OutLightSample.Type     = (Type_ID & 0xffff0000u) >> 16;
-    OutLightSample.LightID  = (Type_ID & 0x0000ffffu);
-
-    return OutLightSample;
-}
-
 fn GetDirectionToLight(Position : vec3<f32>, XL : LightSample) -> vec3<f32>
 {
     switch ( XL.Type )
@@ -1256,21 +1291,25 @@ fn GetDirectionToLight(Position : vec3<f32>, XL : LightSample) -> vec3<f32>
     }
 }
 
-fn Attenuation(X2 : Surface, X1 : Surface, V : vec3<f32>) -> vec3<f32>
+fn Attenuation(X_Next : Surface, X : Surface, X_Prev : Surface) -> vec3<f32>
 {
-    let L           : vec3<f32> = normalize( X2.Position - X1.Position );
-    let BSDF        : vec3<f32> = BSDF(X1, L, V);
-    let Geometry    : f32       = GeometryFactor(X2, X1);
-    let Visibility  : vec3<f32> = Visibility(X2.Position, X1.Position);
+    let L           : vec3<f32> = normalize( X_Next.Position - X.Position );
+    let V           : vec3<f32> = normalize( X_Prev.Position - X.Position );
 
-    return BSDF * Geometry * Visibility;
+    let BSDF        : vec3<f32> = BSDF(X, L, V);
+    let cos         : f32       = abs(dot(L, X.Normal));
+    let Visibility  : vec3<f32> = Visibility(X_Next.Position, X.Position);
+
+    return BSDF * cos * Visibility;
 }
 
-fn Attenuation_Light(XL : LightSample, X : Surface, V : vec3<f32>) -> vec3<f32>
+fn Attenuation_Light(XL : LightSample, X : Surface, X_Prev : Surface) -> vec3<f32>
 {
-    let L           : vec3<f32> = GetDirectionToLight(X.Position, XL);
-    let BSDF        : vec3<f32> = BSDF(X, L, V);
-    let Geometry    : f32       = GeometryFactor_Light(XL, X);
+    let L : vec3<f32> = GetDirectionToLight(X.Position, XL);
+    let V : vec3<f32> = normalize( X_Prev.Position - X.Position );
+
+    let BSDF : vec3<f32> = BSDF(X, L, V);
+    let G : f32 = GeometryFactor_Light(XL, X);
 
     let LightPosition_Directional   : vec3<f32> = X.Position - XL.SamplePoint * 1e10;
     let bTreatAsDirectionalLight    : bool      = (XL.Type == LIGHT_DIRECTION) || (XL.Type == LIGHT_ENV);
@@ -1278,15 +1317,175 @@ fn Attenuation_Light(XL : LightSample, X : Surface, V : vec3<f32>) -> vec3<f32>
 
     let Visibility : vec3<f32> = Visibility(X.Position, LightPosition);
 
-    return BSDF * Geometry * Visibility;
+    return BSDF * G * Visibility;
 }
 
 fn L_emit(XL : LightSample) -> vec3<f32>
 {
     if ( XL.Type == LIGHT_ENV ) { return ENV_COLOR; }
 
-    let LightSource : Light = GetLight(XL.LightID);
-    return LightSource.Intensity * LightSource.Color;
+    let LightSource : Light = GetLight(u32(XL.LightID));
+    let LightColor : vec3<f32> = LightSource.Intensity * LightSource.Color;
+    return select(vec3<f32>(0.0, 0.0, 0.0), LightColor, XL.LightID >= 0);
+}
+
+
+fn SubmitPathToReservoir(
+    pRandomSeed     : ptr<function, u32>,
+    pReservoir      : ptr<function, PathReservoir>,
+    CandidatePath   : Path
+)
+{
+    var X_Prev  : Surface;
+    var X       : Surface;
+    var X_Next  : Surface;
+
+    var f : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+    {
+        X_Prev.Position = CandidatePath.X0_Position;
+        X = GetSurface( CandidatePath.CSurface[1] );
+        
+        for (var i = 2u; i < CandidatePath.length; i++)
+        {
+            X_Next  = GetSurface( CandidatePath.CSurface[i] );
+            f       = f * Attenuation(X_Next, X, X_Prev);
+            X_Prev  = X;
+            X       = X_Next;
+        }
+
+        f *= L_emit(CandidatePath.XL) * Attenuation_Light(CandidatePath.XL, X, X_Prev);
+    }
+
+    var P : f32 = 1.0;
+    {
+        X_Prev.Position = CandidatePath.X0_Position;
+        X = GetSurface( CandidatePath.CSurface[1] );
+        
+        for (var i = 2u; i < CandidatePath.length; i++)
+        {
+            X_Next  = GetSurface( CandidatePath.CSurface[i] );
+            P       = P * PDF_BSDF(X_Next, X, X_Prev);
+            X_Prev  = X;
+            X       = X_Next;
+        }
+
+        let bIsEnvLight : bool = CandidatePath.XL.Type == LIGHT_ENV;
+        if ( bIsEnvLight )
+        {
+            X_Next.Position = X.Position - CandidatePath.XL.SamplePoint * 1e10;
+            P *= PDF_BSDF(X_Next, X, X_Prev);
+        }
+        else
+        {
+            P *= PDF_NEE(CandidatePath.XL, X);
+        }
+        
+    }
+
+    let P_hat : f32 = Luminance(f);
+
+    let MIS : f32 = 1.0;
+    let RIS : f32 = MIS * P_hat / P;
+
+    UpdateReservoir(pRandomSeed, pReservoir, CandidatePath, RIS, P_hat, 1u);
+
+    return;
+}
+
+fn GetCompactPath(InPath : Path) -> CompactPath
+{
+    var OutCompactPath : CompactPath = CompactPath();
+    {
+        OutCompactPath.k        = 0u;
+        OutCompactPath.RcVertex = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        OutCompactPath.rSeed[0] = InPath.rSeed[2];
+        OutCompactPath.rSeed[1] = InPath.rSeed[3];
+        OutCompactPath.rSeed[2] = InPath.rSeed[4];
+        OutCompactPath.XL       = InPath.XL;
+    }
+
+    // Find Reconnection Index k
+    for (var k = 2u; k < InPath.length; k++)
+    {
+        //if (true) { break; }
+
+        let X       : Surface = GetSurface( InPath.CSurface[k] );
+        let X_Prev  : Surface = GetSurface( InPath.CSurface[k-1] );
+
+        if ( !IsSafeToReconnect(X_Prev, InPath.Lobe[k-1], X, InPath.Lobe[k]) ) { continue; }
+
+        OutCompactPath.k        = k;
+        OutCompactPath.Lobe_k   = InPath.Lobe[k];
+        OutCompactPath.Lobe_k_1 = InPath.Lobe[k-1];
+        OutCompactPath.RcVertex = GetRcVertex( InPath.CSurface[k] );
+
+        break;
+    }
+
+    let X : Surface = GetSurface(InPath.CSurface[InPath.length - 1]);
+    if ( !bool(OutCompactPath.k) && IsSafeToReconnect_Light( X, InPath.XL ))
+    {
+        OutCompactPath.k        = InPath.length;
+        OutCompactPath.Lobe_k   = LOBE_LIGHT;
+        OutCompactPath.Lobe_k_1 = InPath.Lobe[InPath.length-1];
+
+        return OutCompactPath;
+    }
+
+    if ( !bool(OutCompactPath.k) ) 
+    {
+        // UnShiftable Flag In highest-bit
+        OutCompactPath.k        = 0x80000000u | InPath.length;
+        OutCompactPath.Lobe_k   = LOBE_LIGHT;
+        OutCompactPath.Lobe_k_1 = InPath.Lobe[InPath.length-1];
+
+        return OutCompactPath; 
+    }
+
+    // TODO : Jacobian 계산하기 ...
+    {
+
+    }
+
+    // [ x0 -> ... -> x_k -> XL] 의 경우 : Jacobian 계산은 필요하지만 Light 최적화는 쓸 수 없다.
+    if ( OutCompactPath.k == InPath.length - 1u ) { return OutCompactPath; }
+
+
+    // x_{k+1} 이 Surface 인 경로들만 남긴다.
+
+
+
+    var f : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+    {
+        var X_Prev  : Surface;
+        var X_Curr  : Surface;
+        var X_Next  : Surface;
+
+        X_Prev = GetSurface( InPath.CSurface[OutCompactPath.k] );
+        X_Curr = GetSurface( InPath.CSurface[OutCompactPath.k + 1] );
+        
+        for (var i = OutCompactPath.k + 2u; i < InPath.length; i++)
+        {
+            X_Next  = GetSurface( InPath.CSurface[i] );
+            f       = f * Attenuation(X_Next, X, X_Prev);
+            X_Prev  = X;
+            X_Curr  = X_Next;
+        }
+
+        f *= L_emit(InPath.XL) * Attenuation_Light(InPath.XL, X, X_Prev);
+    }
+
+    var NewLightSample : LightSample = LightSample();
+    {
+        NewLightSample.Type         = LIGHT_POINT;
+        NewLightSample.SamplePoint  = GetSurface( InPath.CSurface[OutCompactPath.k + 1] ).Position;
+        NewLightSample.Emittance    = f;
+        NewLightSample.LightID      = -1;
+    }
+
+    OutCompactPath.XL = NewLightSample;
+
+    return OutCompactPath;
 }
 
 //==========================================================================
@@ -1294,11 +1493,7 @@ fn L_emit(XL : LightSample) -> vec3<f32>
 //==========================================================================
 
 @compute @workgroup_size(8,8,1)
-fn cs_main
-(
-    @builtin(global_invocation_id) ThreadID : vec3<u32>,
-    @builtin(num_workgroups) WorkGroupCount : vec3<u32>
-)
+fn cs_main(@builtin(global_invocation_id) ThreadID : vec3<u32>)
 {
 
     // 0. 범위 밖 스레드는 계산 X
@@ -1309,159 +1504,106 @@ fn cs_main
         if (!bPixelInBoundary_X || !bPixelInBoundary_Y) { return; }
     }
 
+    // 1. 초기화
+    var rSeed : u32 = InitializeRandomSeed(ThreadID.xy);
 
-    // 1. 상태 초기화
-    var RandomSeed  : u32       = GetHashValue(ThreadID.x * 1973u + ThreadID.y * 9277u + UniformBuffer.FrameIndex * 26699u);
-    var Reservoir   : Reservoir = Reservoir();
+    var PathTreeReservoir : PathReservoir = PathReservoir();
     {
-        Reservoir.C     = 0u;
-        Reservoir.w_sum = 0.0;
+        PathTreeReservoir.w_sum = 0.0;
+        PathTreeReservoir.C     = 0u;
     }
 
-    let X0          : vec3<f32>         = Get_X0(ThreadID.xy);
-    let X1          : CompactSurface    = Get_X1(ThreadID.xy);
-    let X1_Surface  : Surface           = GetSurface(X1);
-
-
-
-    // 2. 경로 [X0 -> X1 -> XL] ( 1 Bounce NEE Path )
-    var PathSample_1 : PathSample = PathSample();
-    PathSample_1.k = 0u;
-
-    var XL : LightSample = SampleNEE(&RandomSeed);
-    if ( IsSafeToReconnect_Light(X1_Surface , XL) )
+    var PathTree : Path = Path();
     {
-        // Path Sample 데이터 채우기
-        PathSample_1.k              = 2u;
-        PathSample_1.Lobe_k_1       = LOBE_NEE;
-        PathSample_1.Lobe_k         = LOBE_LIGHT;
-        PathSample_1.RcVertex       = GetRcVertex_Light(XL);
-        PathSample_1.LightVertex    = GetRcVertex_Light(XL);
-
-        // RIS Weight 계산하기
-        let V           : vec3<f32> = normalize( X0 - X1_Surface.Position );
-        let L           : vec3<f32> = GetDirectionToLight(X1_Surface.Position, XL);
-
-        let PDF_NEE     : f32 = PDF_NEE(XL);
-        let PDF_BSDF    : f32 = PDF_BSDF(X1_Surface, L, V) * GeometryFactor_Light(XL, X1_Surface);
-
-        let P           : f32 = PDF_NEE;
-        let MIS         : f32 = P / (P + PDF_BSDF);
-
-        let P_hat       : f32 = Luminance( L_emit(XL) * Attenuation_Light(XL, X1_Surface, V) );
-        let RIS         : f32 = MIS * P_hat / P;
-
-        UpdateReservoir(&RandomSeed, &Reservoir, PathSample_1, RIS, P_hat, 1u);
+        PathTree.X0_Position    = Get_X0(ThreadID.xy);
+        PathTree.CSurface[1]    = Get_X1(ThreadID.xy);
+        PathTree.length         = 2u;
     }
 
 
 
-    // 3. BSDF Sampling 으로 w2 결정
-    var PathSample_2 : PathSample = PathSample();
-    PathSample_2.rSeed_2 = RandomSeed;
-
-    let w2 : BSDFSample = SampleBSDF( &RandomSeed, X1_Surface, normalize(X0 - X1_Surface.Position) );
-    let HitResult_X2 : HitResult = TraceRay( Ray(X1_Surface.Position, w2.Direction) );
-
-
-
-    // 3-1. 경로 [X0 -> X1 -> X_ENV] ( 1 Bounce BSDF Path )
-    if (!HitResult_X2.IsValidHit)
+    // 2. [XL] 경로
     {
-        XL = LightSample(w2.Direction, LIGHT_ENV, 0u);
+        PathTree.rSeed[2] = rSeed;
+        PathTree.XL = SampleNEE(&rSeed);
 
-        if ( IsSafeToReconnect_Light(X1_Surface , XL) )
+        SubmitPathToReservoir(&rSeed, &PathTreeReservoir, PathTree);
+    }
+
+    // 3. [XE] 혹은 [X2 -> XL] 경로
+    {
+        var X : Surface     = GetSurface( PathTree.CSurface[1] );
+        var V : vec3<f32>   = normalize( PathTree.X0_Position - X.Position );
+
+        PathTree.rSeed[2]   = rSeed;
+        var W : BSDFSample  = SampleBSDF(&rSeed, X, V);
+
+        var HitInfo : HitResult = TraceRay( Ray(X.Position, W.Direction) );
+
+        if ( HitInfo.IsValidHit ) // [X2 -> XL] 경로
         {
-            // Path Sample 데이터 채우기
-            PathSample_2.k              = 2u;
-            PathSample_2.Lobe_k_1       = w2.Lobe;
-            PathSample_2.Lobe_k         = LOBE_LIGHT;
-            PathSample_2.RcVertex       = GetRcVertex_Light(XL);
-            PathSample_2.LightVertex    = GetRcVertex_Light(XL);
+            PathTree.CSurface[2]    = HitInfo.SurfaceInfo;
+            PathTree.Lobe[1]        = W.Lobe;
+            PathTree.length         = 3u;
 
-            // RIS Weight 계산하기
-            let V           : vec3<f32> = normalize( X0 - X1_Surface.Position );
-            let L           : vec3<f32> = GetDirectionToLight(X1_Surface.Position, XL);
-
-            let PDF_NEE     : f32 = PDF_NEE(XL);
-            let PDF_BSDF    : f32 = PDF_BSDF(X1_Surface, L, V) * GeometryFactor_Light(XL, X1_Surface);
-
-            let P           : f32 = PDF_BSDF;
-            let MIS         : f32 = 1.0; //P / (P + PDF_NEE);
-
-            let P_hat       : f32 = Luminance( L_emit(XL) * Attenuation_Light(XL, X1_Surface, V) );
-            let RIS         : f32 = MIS * P_hat / P;
-
-            UpdateReservoir(&RandomSeed, &Reservoir, PathSample_2, RIS, P_hat, 1u);
+            PathTree.rSeed[3]       = rSeed;
+            PathTree.XL             = SampleNEE(&rSeed);
         }
-    }
-    else // 4-2. 경로 [X0 -> X1 -> X2 -> XL] ( 1 Bounce BSDF + 1 Bounce NEE Path )
-    {
-        let X2          : CompactSurface    = HitResult_X2.SurfaceInfo;
-        let X2_Surface  : Surface           = GetSurface(X2);
-
-        XL = SampleNEE(&RandomSeed);
-
-        if ( IsSafeToReconnect(X1_Surface, w2.Lobe, X2_Surface, LOBE_NEE) )
-        { // k = 2 Is Reconnection Vertex
-
-            PathSample_2.k              = 2u;
-            PathSample_2.Lobe_k_1       = w2.Lobe;
-            PathSample_2.Lobe_k         = LOBE_NEE;
-            PathSample_2.RcVertex       = GetRcVertex(X2);
-            PathSample_2.LightVertex    = GetRcVertex_Light(XL);
-
-            // Compute Jacobian
-            let V1 : vec3<f32> = normalize( X0 - X1_Surface.Position );
-            let L1 : vec3<f32> = normalize( X2_Surface.Position - X1_Surface.Position );
-            let V2 : vec3<f32> = -L1;
-
-            let PDF_NEE     : f32       = PDF_NEE(XL);
-            let PDF_BSDF    : f32       = PDF_BSDF(X1_Surface, L1, V1);
-            let r12         : vec3<f32> = X2_Surface.Position - X1_Surface.Position;
-
-            PathSample_2.J = PDF_BSDF * PDF_NEE * abs( dot(X2_Surface.Normal, V2) ) / ( dot(r12, r12) );
-        }
-        else if ( IsSafeToReconnect_Light(X2_Surface , XL) )
-        { // k = 3 Is Reconnection Vertex
-
-            PathSample_2.k              = 3u;
-            PathSample_2.Lobe_k_1       = LOBE_NEE;
-            PathSample_2.Lobe_k         = LOBE_LIGHT;
-            PathSample_2.RcVertex       = GetRcVertex_Light(XL);
-            PathSample_2.LightVertex    = GetRcVertex_Light(XL);
-
-        }
-
-        if ( bool(PathSample_2.k) )
+        else // [XE] 경로
         {
-            let V1 : vec3<f32> = normalize( X0 - X1_Surface.Position );
-            let L1 : vec3<f32> = normalize( X2_Surface.Position - X1_Surface.Position );
-
-            let V2 : vec3<f32> = -L1;
-            let L2 : vec3<f32> = GetDirectionToLight(X2_Surface.Position, XL);
-
-            let PDF_NEE     : f32 = PDF_NEE(XL);
-            let PDF_BSDF_1  : f32 = PDF_BSDF(X1_Surface, L1, V1) * GeometryFactor(X1_Surface, X2_Surface);
-            let PDF_BSDF_2  : f32 = PDF_BSDF(X2_Surface, L2, V2) * GeometryFactor_Light(XL, X2_Surface);
-
-            let P   : f32 = PDF_BSDF_1 * PDF_NEE;
-            let MIS : f32 = P / ( P + PDF_BSDF_1 * PDF_BSDF_2 );
-            
-            let Atteunation_1   : vec3<f32> = Attenuation(X2_Surface, X1_Surface, V1);
-            let Atteunation_2   : vec3<f32> = Attenuation_Light(XL, X2_Surface, V2);
-
-            let P_hat : f32 = Luminance( L_emit(XL) * Atteunation_2 * Atteunation_1 );
-            let RIS : f32 = MIS * P_hat / P;
-
-            UpdateReservoir(&RandomSeed, &Reservoir, PathSample_2, RIS, P_hat, 1u);
+            PathTree.XL                 = LightSample();
+            PathTree.XL.SamplePoint     = -W.Direction;
+            PathTree.XL.Type            = LIGHT_ENV;
+            PathTree.XL.Emittance       = ENV_COLOR;
         }
+
+        SubmitPathToReservoir(&rSeed, &PathTreeReservoir, PathTree);
+    }
+
+    // 4. [X2 -> XE] 혹은 [X2 -> X3 -> XL] 경로
+    if ( true && PathTree.length == 3u )
+    {
+        var X : Surface     = GetSurface( PathTree.CSurface[2] );
+        var V : vec3<f32>   = normalize( GetSurface( PathTree.CSurface[1] ).Position - X.Position );
+
+        PathTree.rSeed[3]   = rSeed;
+        var W : BSDFSample  = SampleBSDF(&rSeed, X, V);
+
+        var HitInfo : HitResult = TraceRay( Ray(X.Position, W.Direction) );
+
+        if ( HitInfo.IsValidHit ) // [X2 -> X3 -> XL] 경로
+        {
+            PathTree.CSurface[3]    = HitInfo.SurfaceInfo;
+            PathTree.Lobe[2]        = W.Lobe;
+            PathTree.length         = 4u;
+
+            PathTree.rSeed[4]       = rSeed;
+            PathTree.XL             = SampleNEE(&rSeed);
+        }
+        else // [X2 -> XE] 경로
+        {
+            PathTree.XL                 = LightSample();
+            PathTree.XL.SamplePoint     = -W.Direction;
+            PathTree.XL.Type            = LIGHT_ENV;
+            PathTree.XL.Emittance       = ENV_COLOR;
+        }
+
+        SubmitPathToReservoir(&rSeed, &PathTreeReservoir, PathTree);
     }
 
 
-    // 5. 최종 Reservoir 저장하기
-    let idx : u32 = ThreadID.y * ( WorkGroupCount.x * 8u ) + ThreadID.x;
-    ReservoirBuffer[idx] = Reservoir;
+
+    // 5. 최종 살아남은 경로를 Reservoir 에 저장
+    {
+        var ResultReservoir : Reservoir = Reservoir();
+
+        ResultReservoir.Sample  = GetCompactPath(PathTreeReservoir.Sample);
+        ResultReservoir.UCW     = PathTreeReservoir.w_sum / max(PathTreeReservoir.P_hat, 1e-4);
+        ResultReservoir.C       = PathTreeReservoir.C;
+
+        let idx : u32 = ThreadID.y * UniformBuffer.Resolution.x + ThreadID.x;
+        ReservoirBuffer[idx] = ResultReservoir;
+    }
 
     return;
 }
