@@ -219,6 +219,7 @@ const STRIDE_BLAS       : u32 =  8u;
 const RECONNECTION_DISTANCE     : f32 = 0.1;
 const RECONNECTION_ROUGHNESS    : f32 = 0.5;
 
+const EPS       : f32       = 1e-4;
 const PI        : f32       = 3.141592;
 const ENV_COLOR : vec3<f32> = vec3<f32>(0.5, 0.5, 0.5);
 
@@ -307,7 +308,6 @@ fn GetRayTriangleHitDistance(InRay : Ray, InTriangle : Triangle) -> f32
 
     let pvec = cross(InRay.Direction, Edge_2);
     let det = dot(Edge_1, pvec);
-    let EPS  : f32 = 1e-8;
 
     if (abs(det) < EPS) { return 1e11; }
 
@@ -324,7 +324,7 @@ fn GetRayTriangleHitDistance(InRay : Ray, InTriangle : Triangle) -> f32
     let t = dot(Edge_2, qvec) * invDet;
 
     //★ 추가: 앞쪽 히트만 유효(자기교차 방지용 최소값 포함)
-    let tMin: f32 = 1e-4;          // 필요에 따라 조정/파라미터화
+    let tMin: f32 = EPS;          // 필요에 따라 조정/파라미터화
     if (t <= tMin) { return 1e11; }
 
     return t;
@@ -348,7 +348,7 @@ fn GetBaryCentricWeights(Point : vec3<f32>, InTriangle : Triangle) -> vec3<f32>
 
     let denom = d00 * d11 - d01 * d01;
 
-    if (abs(denom) < 1e-6) { return vec3<f32>(1.0, 0.0, 0.0); }
+    if (abs(denom) < EPS) { return vec3<f32>(1.0, 0.0, 0.0); }
 
     let invDenom = 1.0 / denom;
     let u = (d11 * d20 - d01 * d21) * invDenom;
@@ -361,7 +361,7 @@ fn GetBaryCentricWeights(Point : vec3<f32>, InTriangle : Triangle) -> vec3<f32>
 fn TraceRay(InRay : Ray) -> HitResult
 {
     var BestHitResult : HitResult = HitResult();
-    var RayValidRange : vec2<f32> = vec2<f32>(1e-4, 1e10);
+    var RayValidRange : vec2<f32> = vec2<f32>(EPS, 1e10);
     
     BestHitResult.IsValidHit = false;
 
@@ -541,7 +541,7 @@ fn GeometryFactor_Light(XL : LightSample, X : Surface) -> f32
             let dir : vec3<f32> = normalize(r);
             let Cos : f32 = abs( dot(X.Normal, dir) );
 
-            return Cos / max(dot(r, r), 1e-6);
+            return Cos / max(dot(r, r), EPS);
         }
         case LIGHT_RECT :
         {
@@ -549,7 +549,7 @@ fn GeometryFactor_Light(XL : LightSample, X : Surface) -> f32
             let dir : vec3<f32> = normalize(r);
             return abs( dot(X.Normal, dir) );
         }
-        case LIGHT_ENV : { return abs( dot(X.Normal, XL.SamplePoint) );  }
+        case LIGHT_ENV : { return /*abs( dot(X.Normal, XL.SamplePoint) );*/ 1.0;  }
         default : { return 0.0; }
     }
 }
@@ -797,7 +797,7 @@ fn GGXDistribution(NdotH : f32, Roughness : f32) -> f32
     let X       : f32 = NdotH * NdotH * (Alpha2 - 1.0) + 1.0;
     let Denom   : f32 = PI * X * X;
 
-    return Alpha2 / max(Denom, 1e-4);
+    return Alpha2 / max(Denom, EPS);
 }
 
 fn GeometryShadow_Optimized(NdotV : f32, NdotL : f32, Roughness : f32) -> f32
@@ -868,7 +868,7 @@ fn BTDF(X : Surface, L : vec3<f32>, V : vec3<f32>) -> vec3<f32>
     let F   : vec3<f32> = Frensel(LdotH, F0);
 
     let Numerator : vec3<f32> = n_out * n_out * (1.0 - F) * LdotH * VdotH * G0 * D * Albedo;
-    let BTDFValue : vec3<f32> = Numerator / max(H_norm * H_norm, 1e-4);
+    let BTDFValue : vec3<f32> = Numerator / max(H_norm * H_norm, EPS);
 
     return BTDFValue;
 }
@@ -1063,7 +1063,7 @@ fn PDF_NEE(XL : LightSample, X : Surface) -> f32
         let r   : vec3<f32> = XL.SamplePoint - X.Position;
         let cos : f32       = abs(dot(normalize(r), N));
 
-        let Jacobian : f32 = dot(r,r) / max(cos, 1e-6);
+        let Jacobian : f32 = dot(r,r) / max(cos, EPS);
         PDF_Point = Jacobian / LightSource.Area;
     }
     
@@ -1148,6 +1148,7 @@ fn PDF_BTDF(X_Next : Surface, X : Surface, X_Prev : Surface) -> f32
     if (P_transmission > 0.0) {
         // 굴절 중간 벡터 H_refract 계산
         let H_refract = normalize(V * n_out + L * n_in); // (스넬의 법칙에서 유도됨)
+        //let H_refract = normalize(V * n_in + L * n_out);
         
         let NdotH_t = max(0.0, dot(N, H_refract));
         let VdotH_t = max(0.0, dot(V, H_refract));
@@ -1261,21 +1262,21 @@ fn Attenuation(X_Next : Surface, X : Surface, X_Prev : Surface) -> vec3<f32>
 
     let BSDF        : vec3<f32> = BSDF(X, L, V);
     let cos         : f32       = abs(dot(L, X.Normal));
-    let Visibility  : vec3<f32> = Visibility(X_Next.Position, X.Position);
+    //let Visibility  : vec3<f32> = Visibility(X_Next.Position, X.Position);
 
-    return BSDF * cos * Visibility;
+    return BSDF * cos;// * Visibility;
 }
 
 fn Attenuation_Light(XL : LightSample, X : Surface, X_Prev : Surface) -> vec3<f32>
 {
-    let L : vec3<f32> = GetDirectionToLight(X.Position, XL);
-    let V : vec3<f32> = normalize( X_Prev.Position - X.Position );
+    let L : vec3<f32>   = GetDirectionToLight(X.Position, XL);
+    let V : vec3<f32>   = normalize( X_Prev.Position - X.Position );
+    let G : f32         = GeometryFactor_Light(XL, X);
 
     let BSDF : vec3<f32> = BSDF(X, L, V);
-    let G : f32 = GeometryFactor_Light(XL, X);
 
     let LightPosition_Directional   : vec3<f32> = X.Position - XL.SamplePoint * 1e10;
-    let bTreatAsDirectionalLight    : bool      = (XL.Type == LIGHT_DIRECTION) || (XL.Type == LIGHT_ENV);
+    let bTreatAsDirectionalLight    : bool      = (XL.Type == LIGHT_DIRECTION);
     let LightPosition               : vec3<f32> = select( XL.SamplePoint, LightPosition_Directional, bTreatAsDirectionalLight );
 
     let Visibility : vec3<f32> = Visibility(X.Position, LightPosition);
@@ -1357,11 +1358,11 @@ fn cs_main(@builtin(global_invocation_id) ThreadID : vec3<u32>)
 
     // 저장
     {
-        let FrameColor : vec3<f32> = CompactPath.XL.Emittance * Throughput * Reservoir.UCW;
+        let FrameColor : vec3<f32> = CompactPath.XL.Emittance * Reservoir.UCW * Throughput;
         let SceneColor : vec4<f32> = textureLoad(SceneTexture, ThreadID.xy, 0);
         let WriteColor : vec3<f32> = mix(SceneColor.rgb, FrameColor, 1.0 / f32(UniformBuffer.FrameIndex + 1));
 
-        textureStore(ResultTexture, ThreadID.xy, vec4<f32>(FrameColor, 1.0));
+        textureStore(ResultTexture, ThreadID.xy, vec4<f32>(WriteColor, 1.0));
     }
 
     return;

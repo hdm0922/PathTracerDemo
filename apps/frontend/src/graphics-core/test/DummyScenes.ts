@@ -27,27 +27,38 @@ export const DUMMY_SCENE_1: Scene = {
       },
     },
     // PureWindow Instance
-    {
-      id: 'window_instance_0',
-      type: 'object',
-      meshName: 'PureWindow',
-      transform: {
-        position: [0, 0, 0],
-        rotation: [0, 0.7071068, 0, 0.7071068], // 90도 회전 (Y축, 3.14/2 radians)
-        scale: [1, 1, 1],
-      },
-    },
+    // {
+    //   id: 'glass_instance_0',
+    //   type: 'object',
+    //   meshName: 'Glass',
+    //   transform: {
+    //     position: [0, 0, 0],
+    //     rotation: [0, 0, 0, 1],
+    //     scale: [1, 1, 1],
+    //   },
+    // },
+
+    // {
+    //   id: 'window_instance_0',
+    //   type: 'object',
+    //   meshName: 'PureWindow',
+    //   transform: {
+    //     position: [0, 0, 0],
+    //     rotation: [0, 0.7071068, 0, 0.7071068], // 90도 회전 (Y축, 3.14/2 radians)
+    //     scale: [1, 1, 1],
+    //   },
+    // },
 
     //Directional Light
-    {
-      id: 'sun_light',
-      type: 'directional-light',
-      lightParams: {
-        direction: [0, 0, -1],
-        color: [1, 1, 1],
-        intensity: 2.0,
-      },
-    },
+    // {
+    //   id: 'sun_light',
+    //   type: 'directional-light',
+    //   lightParams: {
+    //     direction: [0, 0, -1],
+    //     color: [1, 1, 1],
+    //     intensity: 2.0,
+    //   },
+    // },
 
     // Point Light
     {
