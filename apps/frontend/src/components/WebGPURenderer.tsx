@@ -120,6 +120,7 @@ export default function WebGPURenderer({
           if (pressedKeys.size > 0) {
             const forwardVector: Vec3 = camera.GetForwardVector();
             const rightVector: Vec3 = camera.GetRightVector();
+            const upVector: Vec3 = vec3.fromValues(0, 1, 0);
             const moveOffset: Vec3 = vec3.create(0, 0, 0);
 
             if (pressedKeys.has('w') || pressedKeys.has('W')) {
@@ -137,6 +138,14 @@ export default function WebGPURenderer({
             if (pressedKeys.has('d') || pressedKeys.has('D')) {
               // Right
               vec3.addScaled(moveOffset, rightVector, moveSpeed, moveOffset);
+            }
+            if (pressedKeys.has('q') || pressedKeys.has('Q')) {
+              // Up (Unreal Engine style)
+              vec3.addScaled(moveOffset, upVector, moveSpeed, moveOffset);
+            }
+            if (pressedKeys.has('e') || pressedKeys.has('E')) {
+              // Down (Unreal Engine style)
+              vec3.addScaled(moveOffset, upVector, -moveSpeed, moveOffset);
             }
 
             if (vec3.length(moveOffset) > 0) {
@@ -237,7 +246,7 @@ export default function WebGPURenderer({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      if (['w', 'a', 's', 'd'].includes(key)) {
+      if (['w', 'a', 's', 'd', 'q', 'e'].includes(key)) {
         pressedKeysRef.current.add(key);
       }
     };

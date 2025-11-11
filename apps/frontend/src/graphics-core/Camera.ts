@@ -18,25 +18,26 @@ export class Camera
 
     constructor
     (
-        Width       : number, 
-        Height      : number, 
-        InLocation  : Vec3      = vec3.fromValues(0,0,1),
-        InRoll      : number    = 0,
-        InPitch     : number    = 0,
-        InYaw       : number    = 0,
-        InFOV       : number    = (60 * Math.PI) / 180.0,
-        InNear      : number    = 0.1,
-        InFar       : number    = 1000
+        Width           : number,
+        Height          : number,
+        InLocation      : Vec3      = vec3.fromValues(0,0,1),
+        InRollDegree    : number    = 0,
+        InPitchDegree   : number    = 0,
+        InYawDegree     : number    = 0,
+        InFOVDegree     : number    = 60,
+        InNear          : number    = 0.1,
+        InFar           : number    = 1000
     )
     {
         this.Location = InLocation;
 
-        this.Roll   = InRoll;
-        this.Pitch  = InPitch;
-        this.Yaw    = InYaw;
+        // Convert degrees to radians
+        this.Roll   = (InRollDegree * Math.PI) / 180.0;
+        this.Pitch  = (InPitchDegree * Math.PI) / 180.0;
+        this.Yaw    = (InYawDegree * Math.PI) / 180.0;
 
         this.AspectRatio    = Width / Height;
-        this.FOV            = InFOV;
+        this.FOV            = (InFOVDegree * Math.PI) / 180.0;
         this.Near           = InNear;
         this.Far            = InFar;
 
