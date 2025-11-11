@@ -141,11 +141,11 @@ export default function WebGPURenderer({
             }
             if (pressedKeys.has('q') || pressedKeys.has('Q')) {
               // Up (Unreal Engine style)
-              vec3.addScaled(moveOffset, upVector, moveSpeed, moveOffset);
+              vec3.addScaled(moveOffset, upVector, -moveSpeed, moveOffset);
             }
             if (pressedKeys.has('e') || pressedKeys.has('E')) {
               // Down (Unreal Engine style)
-              vec3.addScaled(moveOffset, upVector, -moveSpeed, moveOffset);
+              vec3.addScaled(moveOffset, upVector, moveSpeed, moveOffset);
             }
 
             if (vec3.length(moveOffset) > 0) {

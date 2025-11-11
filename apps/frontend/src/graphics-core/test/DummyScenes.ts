@@ -27,6 +27,7 @@ export const DUMMY_SCENE_1: Scene = {
       },
     },
     // PureWindow Instance
+    
     // {
     //   id: 'glass_instance_0',
     //   type: 'object',
@@ -38,51 +39,51 @@ export const DUMMY_SCENE_1: Scene = {
     //   },
     // },
 
-    // {
-    //   id: 'window_instance_0',
-    //   type: 'object',
-    //   meshName: 'PureWindow',
-    //   transform: {
-    //     position: [0, 0, 0],
-    //     rotation: [0, 0.7071068, 0, 0.7071068], // 90도 회전 (Y축, 3.14/2 radians)
-    //     scale: [1, 1, 1],
-    //   },
-    // },
-
-    //Directional Light
-    // {
-    //   id: 'sun_light',
-    //   type: 'directional-light',
-    //   lightParams: {
-    //     direction: [0, 0, -1],
-    //     color: [1, 1, 1],
-    //     intensity: 2.0,
-    //   },
-    // },
-
-    // Point Light
     {
-      id: 'bulb',
-      type: 'point-light',
-      lightParams: {
-        position: [0, 0, -1],
-        color: [1, 1, 1],
-        intensity: 20.0,
+      id: 'window_instance_0',
+      type: 'object',
+      meshName: 'PureWindow',
+      transform: {
+        position: [0, 0, 0],
+        rotation: [0, 0.7071068, 0, 0.7071068], // 90도 회전 (Y축, 3.14/2 radians)
+        scale: [1, 1, 1],
       },
     },
 
-    // Rect Light
+    //Directional Light
+    {
+      id: 'sun_light',
+      type: 'directional-light',
+      lightParams: {
+        direction: [0, 0, -1],
+        color: [1, 1, 1],
+        intensity: 2.0,
+      },
+    },
+
+    // Point Light
     // {
-    //   id: 'rect',
-    //   type: 'rect-light',
+    //   id: 'bulb',
+    //   type: 'point-light',
     //   lightParams: {
-    //     position: [0, 1, -2],
-    //     u: [0.4, 0, 0],
-    //     v: [0, 0, 0.4],
+    //     position: [0, 0, -1],
     //     color: [1, 1, 1],
-    //     intensity: 10.0,
-    //   }
+    //     intensity: 20.0,
+    //   },
     // },
+
+    // Rect Light
+    {
+      id: 'rect',
+      type: 'rect-light',
+      lightParams: {
+        position: [0, 1, -2],
+        u: [0.4, 0, 0],
+        v: [0, 0, 0.4],
+        color: [1, 1, 1],
+        intensity: 10.0,
+      }
+    },
 
   ],
   createdAt: new Date().toISOString(),
