@@ -756,7 +756,6 @@ fn PDF_BTDF(HitInfo : HitResult, L : vec3<f32>, V : vec3<f32>) -> f32
     if (P_transmission > 0.0) {
         // 굴절 중간 벡터 H_refract 계산
         let H_refract = normalize(V * n_out + L * n_in); // (스넬의 법칙에서 유도됨)
-        //let H_refract = normalize(V * n_in + L * n_out);
         
         let NdotH_t = max(0.0, dot(N, H_refract));
         let VdotH_t = max(0.0, dot(V, H_refract));
@@ -1079,18 +1078,14 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         let HitMaterial : Material  = GetMaterialFromHit(HitInfo);
 
         // 부딪히지 않았다면 -> 환경광 히트 처리 후 바운스 종료
-        if (!HitInfo.IsValidHit) 
-        { 
-            if (BounceDepth != 2u) { ResultColor += Throughput * EnvironmentColor; }
-            break; 
-        }
+        if (!HitInfo.IsValidHit) { ResultColor += Throughput * EnvironmentColor; break; }
 
         let V : vec3<f32> = -CurrentRay.Direction;
 
         // Surface Emit + All Direct Lights 가 만드는 색 계산
-        //if (BounceDepth == 2u)
+        //if (BounceDepth == 1u)
         {
-            //ResultColor += Throughput * (HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor);
+            ResultColor += Throughput * (HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor);
             ResultColor += Throughput * DirectLightsColor(HitInfo, V, &RandomSeed);
             //break;
         }
