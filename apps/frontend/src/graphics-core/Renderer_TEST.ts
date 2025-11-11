@@ -10,6 +10,7 @@ import ShaderCode_DEBUG             from './shaders/PT_00_DebugPass.wgsl?raw';
 import ShaderCode_GBufferCreation   from './shaders/PT_01_GBufferPass.wgsl?raw';
 
 import ShaderCode_Initialize        from './shaders/PT_1_InitPass.wgsl?raw';
+import ShaderCode_Temporal          from './shaders/PT_2_TemporalReuse.wgsl?raw'
 import ShaderCode_FinalShading      from './shaders/PT_4_FinalShadingPass.wgsl?raw';
 
 import ShaderCode_Vertex            from './shaders/VertexShader.wgsl?raw';
@@ -19,12 +20,13 @@ import ShaderCode_Fragment          from './shaders/FragmentShader.wgsl?raw';
 
 const EBufferIndex =
 {
-    Uniform     : 0,
-    Scene       : 1,
-    Geometry    : 2,
-    Accel       : 3,
-    Reservoir   : 4,
-    SIZE        : 5
+    Uniform         : 0,
+    Scene           : 1,
+    Geometry        : 2,
+    Accel           : 3,
+    Reservoir       : 4,
+    PrevReservoir   : 5,
+    SIZE            : 6
 } as const;
 
 const ETextureIndex =
@@ -163,6 +165,7 @@ export class Renderer
         return;
     }
 
+    private PrevViewProjectionMatrix: Mat4 | null = null;
     public Update() : void
     {
         this.FrameCount++;
@@ -172,7 +175,9 @@ export class Renderer
         const ViewProjection            = this.Camera.GetViewProjectionMatrix();
         const ViewProjection_Inverse    = mat4.invert(ViewProjection);
 
-        const ELEMENT_COUNT = 33;
+        const prevVP = this.PrevViewProjectionMatrix ?? ViewProjection;
+
+        const ELEMENT_COUNT = 52;
         const UniformData = new ArrayBuffer(4 * ELEMENT_COUNT);
         {
             const Float32View = new Float32Array(UniformData);
@@ -200,9 +205,12 @@ export class Renderer
             Uint32View[30] = this.Offsets[EDataOffsetIndex.Blas];
             Uint32View[31] = this.World.InstancesPool.size;
             Uint32View[32] = this.World.Lights.length;
+
+            for(let iter=0; iter<16; iter++) Float32View[36 + iter] = prevVP[iter]!;
         }
 
         this.Device.queue.writeBuffer(this.GPUBuffers[EBufferIndex.Uniform], 0, UniformData);
+        this.PrevViewProjectionMatrix = ViewProjection;
 
     }
 
@@ -231,6 +239,15 @@ export class Renderer
             );
         }
 
+        CommandEncoder.copyBufferToBuffer(
+            this.GPUBuffers[EBufferIndex.Reservoir],
+            0,
+            this.GPUBuffers[EBufferIndex.PrevReservoir],
+            0,
+            4 * 32 * this.Canvas.width * this.Canvas.height
+        );
+        console.log(this.GPUBuffers[EBufferIndex.Reservoir]);
+
         // RenderPass (Draw ResultTexture)
         {
             const RenderPassDescriptor : GPURenderPassDescriptor =
@@ -254,6 +271,7 @@ export class Renderer
 
             RenderPass.end();
         }
+
 
         // Submit Encoder
         this.Device.queue.submit( [ CommandEncoder.finish() ] );
@@ -422,7 +440,7 @@ export class Renderer
 
     private CreateGPUStorageBuffer(InArrayBuffer : ArrayBuffer) : GPUBuffer
     {
-        const StorageBufferUsageFlags   : GPUBufferUsageFlags   = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
+        const StorageBufferUsageFlags   : GPUBufferUsageFlags   = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
         const BufferDescriptor          : GPUBufferDescriptor   = { size : InArrayBuffer.byteLength, usage : StorageBufferUsageFlags };
         const GPUBufferCreated          : GPUBuffer             = this.Device.createBuffer(BufferDescriptor);
 
@@ -451,7 +469,8 @@ export class Renderer
         this.GPUBuffers[EBufferIndex.Scene]         = this.CreateGPUStorageBuffer(SceneBufferData);
         this.GPUBuffers[EBufferIndex.Geometry]      = this.CreateGPUStorageBuffer(GeometryBufferData);
         this.GPUBuffers[EBufferIndex.Accel]         = this.CreateGPUStorageBuffer(AccelBufferData);
-        this.GPUBuffers[EBufferIndex.Reservoir]     = this.CreateGPUStorageBuffer(new ArrayBuffer(4 * 24 * this.Canvas.width * this.Canvas.height));
+        this.GPUBuffers[EBufferIndex.Reservoir]     = this.CreateGPUStorageBuffer(new ArrayBuffer(4 * 32 * this.Canvas.width * this.Canvas.height));
+        this.GPUBuffers[EBufferIndex.PrevReservoir]     = this.CreateGPUStorageBuffer(new ArrayBuffer(4 * 32 * this.Canvas.width * this.Canvas.height));
 
         this.GPUTextures[ETextureIndex.G_Buffer]    = this.CreateGPUTexture();
         this.GPUTextures[ETextureIndex.Scene]       = this.CreateGPUTexture();
@@ -511,6 +530,27 @@ export class Renderer
                     this.GPUBuffers[EBufferIndex.Scene],
                     this.GPUBuffers[EBufferIndex.Geometry],
                     this.GPUBuffers[EBufferIndex.Accel],
+                ],
+                [   // Input, GPUTextureView
+                    this.GPUTextures[ETextureIndex.G_Buffer].createView(),
+                ],
+                [   // Output, GPUBuffer
+                    this.GPUBuffers[EBufferIndex.Reservoir],
+                ],
+                [   // Output, GPUTextureView
+
+                ]
+            ),
+            
+            ComputePass.Create
+            (
+                this.Device, 
+                ShaderCode_Temporal, 
+                [   // Input, GPUBuffer
+                    this.GPUBuffers[EBufferIndex.Uniform],
+                    this.GPUBuffers[EBufferIndex.Scene],
+                    this.GPUBuffers[EBufferIndex.Geometry],
+                    this.GPUBuffers[EBufferIndex.PrevReservoir],
                 ],
                 [   // Input, GPUTextureView
                     this.GPUTextures[ETextureIndex.G_Buffer].createView(),
