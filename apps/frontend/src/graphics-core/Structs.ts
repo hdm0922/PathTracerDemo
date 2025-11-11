@@ -494,7 +494,7 @@ export type AssetType = 'object' | 'directional-light' | 'point-light' | 'rect-l
 // Transform 정보 (Object용)
 export interface Transform {
   position: [number, number, number];
-  rotation: [number, number, number, number]; // quaternion [x, y, z, w]
+  rotation: [number, number, number]; // Euler angles in degrees [x, y, z]
   scale: [number, number, number];
 }
 

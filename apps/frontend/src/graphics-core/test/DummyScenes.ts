@@ -22,19 +22,19 @@ export const DUMMY_SCENE_1: Scene = {
       meshName: 'TestScene',
       transform: {
         position: [0, 0, 0],
-        rotation: [0, 0, 0, 1], // identity quaternion
+        rotation: [0, 0, 0], // Euler angles in degrees [x, y, z]
         scale: [1, 1, 1],
       },
     },
     // PureWindow Instance
-    
+
     // {
     //   id: 'glass_instance_0',
     //   type: 'object',
     //   meshName: 'Glass',
     //   transform: {
     //     position: [0, 0, 0],
-    //     rotation: [0, 0, 0, 1],
+    //     rotation: [0, 0, 0], // Euler angles in degrees [x, y, z]
     //     scale: [1, 1, 1],
     //   },
     // },
@@ -45,7 +45,7 @@ export const DUMMY_SCENE_1: Scene = {
       meshName: 'PureWindow',
       transform: {
         position: [0, 0, 0],
-        rotation: [0, 0.7071068, 0, 0.7071068], // 90도 회전 (Y축, 3.14/2 radians)
+        rotation: [0, 90, 0], // 90 degrees rotation around Y axis
         scale: [1, 1, 1],
       },
     },
@@ -105,7 +105,7 @@ export const DUMMY_SCENE_2: Scene = {
       meshName: 'TestScene',
       transform: {
         position: [0, 0, 0],
-        rotation: [0, 0, 0, 1],
+        rotation: [0, 0, 0], // Euler angles in degrees [x, y, z]
         scale: [1, 1, 1],
       },
     },
@@ -116,7 +116,7 @@ export const DUMMY_SCENE_2: Scene = {
       meshName: 'PureWindow',
       transform: {
         position: [0, 0, 0],
-        rotation: [0, 0.7071068, 0, 0.7071068],
+        rotation: [0, 90, 0], // 90 degrees rotation around Y axis
         scale: [1, 1, 1],
       },
     },
@@ -127,7 +127,7 @@ export const DUMMY_SCENE_2: Scene = {
       meshName: 'Chair',
       transform: {
         position: [0, -90, 0],
-        rotation: [0, 0, 0, 1],
+        rotation: [0, 0, 0], // Euler angles in degrees [x, y, z]
         scale: [0.02, 0.02, 0.02],
       },
     },

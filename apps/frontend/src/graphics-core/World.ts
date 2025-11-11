@@ -5,6 +5,32 @@ import { ResourceManager } from './ResourceManager.ts';
 import { Instance, Mesh, SerializedMesh, Light, DirectionalLight, PointLight, RectLight } from './Structs.ts';
 import type { Scene, SceneAsset } from './Structs.ts';
 
+/**
+ * Converts Euler angles in degrees to a quaternion
+ * Uses ZYX rotation order (Yaw-Pitch-Roll)
+ * @param eulerDegrees - Euler angles in degrees [x, y, z]
+ * @returns Quaternion [x, y, z, w]
+ */
+function eulerDegreesToQuat(eulerDegrees: [number, number, number]): Quat
+{
+    const DEG_TO_RAD = Math.PI / 180.0;
+
+    // Convert degrees to radians
+    const x = eulerDegrees[0] * DEG_TO_RAD;
+    const y = eulerDegrees[1] * DEG_TO_RAD;
+    const z = eulerDegrees[2] * DEG_TO_RAD;
+
+    // Create quaternions for each axis rotation
+    const qx = quat.fromAxisAngle(vec3.fromValues(1, 0, 0), x);
+    const qy = quat.fromAxisAngle(vec3.fromValues(0, 1, 0), y);
+    const qz = quat.fromAxisAngle(vec3.fromValues(0, 0, 1), z);
+
+    // Combine rotations: Z * Y * X (applied in reverse order)
+    let result = quat.multiply(qy, qx);
+    result = quat.multiply(qz, result);
+
+    return result;
+}
 
 
 export class World 
@@ -107,7 +133,7 @@ export class World
                 }
 
                 const position  : Vec3 = vec3.fromValues(...asset.transform.position);
-                const rotation  : Quat = quat.fromValues(...asset.transform.rotation);
+                const rotation  : Quat = eulerDegreesToQuat(asset.transform.rotation);
                 const scale     : Vec3 = vec3.fromValues(...asset.transform.scale);
 
                 this.AddInstance(asset.id, asset.meshName, position, rotation, scale);
