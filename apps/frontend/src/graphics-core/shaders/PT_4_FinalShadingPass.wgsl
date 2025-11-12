@@ -219,7 +219,7 @@ const STRIDE_BLAS       : u32 =  8u;
 const RECONNECTION_DISTANCE     : f32 = 0.1;
 const RECONNECTION_ROUGHNESS    : f32 = 0.5;
 
-const EPS       : f32       = 1e-4;
+const EPS       : f32       = 1e-5;
 const PI        : f32       = 3.141592;
 const ENV_COLOR : vec3<f32> = vec3<f32>(0.5, 0.5, 0.5);
 
@@ -361,7 +361,7 @@ fn GetBaryCentricWeights(Point : vec3<f32>, InTriangle : Triangle) -> vec3<f32>
 fn TraceRay(InRay : Ray) -> HitResult
 {
     var BestHitResult : HitResult = HitResult();
-    var RayValidRange : vec2<f32> = vec2<f32>(EPS, 1e10);
+    var RayValidRange : vec2<f32> = vec2<f32>(1e-4, 1e10);
     
     BestHitResult.IsValidHit = false;
 
@@ -489,9 +489,9 @@ fn TBNMatrix(N : vec3<f32>) -> mat3x3<f32>
     return mat3x3<f32>(T, B, N);
 }
 
-fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
+fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> f32
 {
-    var Transmittance   : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+    var Transmittance   : f32 = 1.0;
     var Distance        : f32       = length(End - Start);
     let Direction       : vec3<f32> = (End - Start) / Distance;
 
@@ -504,17 +504,44 @@ fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
         if (!ClosestHit.IsValidHit || ClosestHit.HitDistance > RemainDistance) { return Transmittance; }
 
         let HitMaterial : Material = GetMaterialFromHit(ClosestHit);
-        if (HitMaterial.Transmission == 0.0) { return vec3<f32>(0.0, 0.0, 0.0); }
+        if (HitMaterial.Transmission == 0.0) { return 0.0; }
 
-        Transmittance   *= HitMaterial.Albedo.rgb;
+        Transmittance   *= HitMaterial.Transmission;
         RemainDistance  -= ClosestHit.HitDistance;
-
         let RayStart : vec3<f32> = CurrentRay.Start + CurrentRay.Direction * ClosestHit.HitDistance;
         CurrentRay = Ray(RayStart, CurrentRay.Direction);
     }
 
-    return vec3<f32>(0.0, 0.0, 0.0);
+    return 0.0;
 }
+
+
+// fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
+// {
+//     var Transmittance   : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+//     var Distance        : f32       = length(End - Start);
+//     let Direction       : vec3<f32> = (End - Start) / Distance;
+
+//     var CurrentRay      : Ray       = Ray(Start, Direction);
+//     var RemainDistance  : f32       = Distance;
+
+//     for (var iter = 0u; iter < 5u; iter++)
+//     {
+//         let ClosestHit : HitResult = TraceRay(CurrentRay);
+//         if (!ClosestHit.IsValidHit || ClosestHit.HitDistance > RemainDistance) { return Transmittance; }
+
+//         let HitMaterial : Material = GetMaterialFromHit(ClosestHit);
+//         if (HitMaterial.Transmission == 0.0) { return vec3<f32>(0.0, 0.0, 0.0); }
+
+//         Transmittance   *= HitMaterial.Albedo.rgb;
+//         RemainDistance  -= ClosestHit.HitDistance;
+
+//         let RayStart : vec3<f32> = CurrentRay.Start + CurrentRay.Direction * ClosestHit.HitDistance;
+//         CurrentRay = Ray(RayStart, CurrentRay.Direction);
+//     }
+
+//     return vec3<f32>(0.0, 0.0, 0.0);
+// }
 
 fn GeometryFactor(A : Surface, B : Surface) -> f32
 {
@@ -625,6 +652,7 @@ fn GetMaterial(InMeshDescriptor : MeshDescriptor, MaterialID : u32) -> Material
     OutMaterial.Albedo      = select(OutMaterial.Albedo, YELLOW, OutMaterial.Transmission > 0.0 );
     //OutMaterial.Albedo      = vec4f(1.0);
     OutMaterial.Roughness   = max(OutMaterial.Roughness, 0.01);
+    //OutMaterial.Transmission = min(OutMaterial.Transmission, 0.95);
 
     return OutMaterial;
 }
@@ -853,7 +881,7 @@ fn BTDF(X : Surface, L : vec3<f32>, V : vec3<f32>) -> vec3<f32>
     let H_norm  : f32 = length(n_in * L + n_out * V);
 
     let N : vec3<f32> = select(-X.Normal, X.Normal, bViewNormalSameHemisphere);
-    let H : vec3<f32> = (n_in * L + n_out * V) / H_norm;
+    let H : vec3<f32> = normalize(n_in * L + n_out * V);
 
     let NdotL : f32 = abs(dot(N,L));
     let NdotV : f32 = abs(dot(N,V));
@@ -1090,7 +1118,7 @@ fn PDF_BRDF(X_Next : Surface, X : Surface, X_Prev : Surface) -> f32
     let NdotH   : f32       = max(dot(N, H), 0.0);
     let VdotH   : f32       = max(dot(V, H), 0.0);
 
-    let PDF_Specular    : f32 = GGXDistribution(NdotH, Roughness) / (4.0 * VdotH);
+    let PDF_Specular    : f32 = GGXDistribution(NdotH, Roughness) / max(4.0 * VdotH, EPS);
     let PDF_Diffuse     : f32 = LdotN / PI;
     let PDF_BRDF        : f32 = mix(PDF_Diffuse, PDF_Specular, P_specular);
 
@@ -1139,7 +1167,7 @@ fn PDF_BTDF(X_Next : Surface, X : Surface, X_Prev : Surface) -> f32
 
         // p(L) = D(h_r) * |J_r| = D(h_r) / (4 * V.h_r)
         if (VdotH_r > 0.0) {
-            pdf_reflect = GGXDistribution(NdotH_r, Roughness) / (4.0 * VdotH_r);
+            pdf_reflect = GGXDistribution(NdotH_r, Roughness) / max(4.0 * VdotH_r, EPS);
         }
     }
 
@@ -1159,7 +1187,7 @@ fn PDF_BTDF(X_Next : Surface, X : Surface, X_Prev : Surface) -> f32
         // |J_t| = (n_out^2 * VdotH_t) / (n_in * LdotH_t + n_out * VdotH_t)^2
         let denom = (n_in * LdotH_t + n_out * VdotH_t);
         if (denom > 0.0) {
-            let J_transmit = (n_out * n_out * VdotH_t) / (denom * denom);
+            let J_transmit = (n_out * n_out * VdotH_t) / max(denom * denom, EPS);
             
             // p(L) = D(h_t) * |J_t|
             pdf_transmit = GGXDistribution(NdotH_t, Roughness) * abs(J_transmit);
@@ -1279,10 +1307,11 @@ fn Attenuation_Light(XL : LightSample, X : Surface, X_Prev : Surface) -> vec3<f3
     let bTreatAsDirectionalLight    : bool      = (XL.Type == LIGHT_DIRECTION);
     let LightPosition               : vec3<f32> = select( XL.SamplePoint, LightPosition_Directional, bTreatAsDirectionalLight );
 
-    let Visibility : vec3<f32> = Visibility(X.Position, LightPosition);
+    let Visibility : f32 = Visibility(X.Position, LightPosition);
 
     return BSDF * G * Visibility;
 }
+
 
 fn L_emit(XL : LightSample) -> vec3<f32>
 {
@@ -1356,9 +1385,54 @@ fn cs_main(@builtin(global_invocation_id) ThreadID : vec3<u32>)
     
     Throughput *= Attenuation_Light(CompactPath.XL, X_Curr, X_Prev);
 
+    // if (CompactPath.XL.Type != LIGHT_ENV)
+    // {
+    //     let V : vec3<f32> = normalize( X_Prev.Position - X_Curr.Position );
+    //     let L : vec3<f32> = GetDirectionToLight(X_Curr.Position, CompactPath.XL);
+
+    //     var BSDFValue           : vec3<f32>;
+    //     var VisibilityFactor    : f32;
+    //     var Geometry            : f32;
+    //     var InvPDF              : f32;
+
+    //     if (CompactPath.XL.Type == LIGHT_DIRECTION) // Directional Light
+    //     {
+    //         let End : vec3<f32> = X_Curr.Position + L * 1e11;
+
+    //         BSDFValue           = BSDF(X_Curr, L, V);
+    //         VisibilityFactor    = Visibility(X_Curr.Position, End);
+    //         Geometry            = GeometryFactor_Light(CompactPath.XL, X_Curr);
+    //         InvPDF              = 1.0;
+    //     }
+
+    //     else if (CompactPath.XL.Type == LIGHT_POINT) // Point Light
+    //     {
+    //         BSDFValue           = BSDF(X_Curr, L, V);
+    //         VisibilityFactor    = Visibility(X_Curr.Position, CompactPath.XL.SamplePoint);
+    //         Geometry            = GeometryFactor_Light(CompactPath.XL, X_Curr);
+    //         InvPDF              = 1.0;
+    //     }
+
+    //     else if (CompactPath.XL.Type == LIGHT_RECT) // Rect Light
+    //     {
+    //         let L : vec3<f32>   = normalize(CompactPath.XL.SamplePoint - X_Curr.Position);
+
+    //         BSDFValue           = BSDF(X_Curr, L, V);
+    //         VisibilityFactor    = Visibility(X_Curr.Position, CompactPath.XL.SamplePoint);
+    //         Geometry            = GeometryFactor_Light(CompactPath.XL, X_Curr);
+    //         InvPDF              = 1.0;
+    //     }
+
+    //     Throughput *= BSDFValue * VisibilityFactor * Geometry * InvPDF;
+    // }
+
     // 저장
     {
-        let FrameColor : vec3<f32> = CompactPath.XL.Emittance * Reservoir.UCW * Throughput;
+        // CompactPath.XL.Emittance * Reservoir.UCW * Throughput
+        var FrameColor : vec3<f32> = CompactPath.XL.Emittance * Reservoir.UCW * Throughput;
+
+        //if ( Reservoir.C == 0u ) { FrameColor = vec3<f32>(1.0, 0.0, 1.0); }
+
         let SceneColor : vec4<f32> = textureLoad(SceneTexture, ThreadID.xy, 0);
         let WriteColor : vec3<f32> = mix(SceneColor.rgb, FrameColor, 1.0 / f32(UniformBuffer.FrameIndex + 1));
 

@@ -73,17 +73,17 @@ export const DUMMY_SCENE_1: Scene = {
     // },
 
     // Rect Light
-    {
-      id: 'rect',
-      type: 'rect-light',
-      lightParams: {
-        position: [0, 1, -2],
-        u: [0.4, 0, 0],
-        v: [0, 0, 0.4],
-        color: [1, 1, 1],
-        intensity: 10.0,
-      }
-    },
+    // {
+    //   id: 'rect',
+    //   type: 'rect-light',
+    //   lightParams: {
+    //     position: [0, 1, -2],
+    //     u: [0.4, 0, 0],
+    //     v: [0, 0, 0.4],
+    //     color: [1, 1, 1],
+    //     intensity: 10.0,
+    //   }
+    // },
 
   ],
   createdAt: new Date().toISOString(),

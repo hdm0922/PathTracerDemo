@@ -787,9 +787,9 @@ fn PDF_BSDF(Surface : HitResult, L : vec3<f32>, V : vec3<f32>) -> f32
     return PDF_BTDF(Surface, L, V);
 }
 
-fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
+fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> f32
 {
-    var Transmittance   : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+    var Transmittance   : f32 = 1.0;
     var Distance        : f32       = length(End - Start);
     let Direction       : vec3<f32> = (End - Start) / Distance;
 
@@ -802,14 +802,14 @@ fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
         if (!ClosestHit.IsValidHit || ClosestHit.HitDistance > RemainDistance) { return Transmittance; }
 
         let HitMaterial : Material = GetMaterialFromHit(ClosestHit);
-        if (HitMaterial.Transmission == 0.0) { return vec3<f32>(0.0, 0.0, 0.0); }
+        if (HitMaterial.Transmission == 0.0) { return 0.0; }
 
-        Transmittance   *= HitMaterial.Albedo.rgb;
+        Transmittance   *= HitMaterial.Transmission;
         RemainDistance  -= ClosestHit.HitDistance;
         CurrentRay       = Ray(ClosestHit.HitPoint, CurrentRay.Direction);
     }
 
-    return vec3<f32>(0.0, 0.0, 0.0);
+    return 0.0;
 }
 
 fn GeometryFactor(A : HitResult, B : HitResult) -> f32
@@ -996,7 +996,7 @@ fn DirectLightsColor(Surface : HitResult, V : vec3<f32>, pRandomSeed : ptr<funct
         let LightRadiance   : vec3<f32> = LightSource.Intensity * LightSource.Color;
 
         var BSDFValue           : vec3<f32>;
-        var VisibilityFactor    : vec3<f32>;
+        var VisibilityFactor    : f32;
         var Geometry            : f32;
         var InvPDF              : f32;
 
@@ -1088,12 +1088,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         let V : vec3<f32> = -CurrentRay.Direction;
 
         // Surface Emit + All Direct Lights 가 만드는 색 계산
-        //if (BounceDepth == 2u)
-        {
-            //ResultColor += Throughput * (HitMaterial.EmissiveIntensity * HitMaterial.EmissiveColor);
-            ResultColor += Throughput * DirectLightsColor(HitInfo, V, &RandomSeed);
-            //break;
-        }
+        ResultColor += Throughput * DirectLightsColor(HitInfo, V, &RandomSeed);
 
         // 다음 경로를 샘플링하고, 해당 경로에서의 Attenuation 계산 & Ray 발사
         let L       : vec3<f32> = SampleBSDF(HitInfo, V, &RandomSeed);
