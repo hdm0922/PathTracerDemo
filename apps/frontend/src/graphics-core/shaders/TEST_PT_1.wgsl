@@ -180,6 +180,8 @@ struct Reservoir
     Sample  : CompactPath,
     UCW     : f32,
     C       : u32,
+
+    Padding : vec2<f32>,
 };
 
 
@@ -1465,7 +1467,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID : vec3<u32>)
     }
 
 
-    for (var i = 1u; i < 4u; i++)
+    for (var i = 1u; i < 3u; i++)
     {
         let X_Prev  : Surface   = PathTree.Surface[i - 1];
         let X_Curr  : Surface   = PathTree.Surface[i    ];
@@ -1478,8 +1480,6 @@ fn cs_main(@builtin(global_invocation_id) ThreadID : vec3<u32>)
         SubmitPathToReservoir(&rSeed, &PathTreeReservoir, PathTree);
 
         if (i == 3u) { break; }
-
-
 
         PathTree.rSeed[i + 1]   = rSeed;
         let W : BSDFSample      = SampleBSDF(&rSeed, X_Curr, V);

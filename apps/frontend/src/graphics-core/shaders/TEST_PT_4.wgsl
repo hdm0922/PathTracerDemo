@@ -180,6 +180,8 @@ struct Reservoir
     Sample  : CompactPath,
     UCW     : f32,
     C       : u32,
+
+    Padding : vec2<f32>,
 };
 
 
@@ -1293,6 +1295,8 @@ fn SafeReconnectionIndex(InPath : Path) -> u32
 
 fn PathContribution(InPath : Path) -> vec3<f32>
 {
+    if ( InPath.length < 2u ) { return vec3f(0.0); }
+
     var f : vec3<f32> = vec3f(1.0);
 
     for (var i = 1u; i < InPath.length - 1; i++)
@@ -1397,7 +1401,9 @@ fn RegeneratePath(ThreadID : vec2<u32>, InCompactPath : CompactPath) -> Path
         OutPath.XL                  = InCompactPath.XL;
     }
 
-    for (var i = 1u; i < InCompactPath.length - 1; i++)
+    //if (true) { return OutPath; }
+
+    for (var i = 1u; i < 1; i++)
     {
         let X_Prev  : Surface       = OutPath.Surface[i - 1];
         let X_Curr  : Surface       = OutPath.Surface[i    ];
@@ -1434,6 +1440,8 @@ fn cs_main(@builtin(global_invocation_id) ThreadID : vec3<u32>)
         if (!bPixelInBoundary_X || !bPixelInBoundary_Y) { return; }
     }
 
+
+
     if (false)
     {
         let x = SceneBuffer[0];
@@ -1443,12 +1451,25 @@ fn cs_main(@builtin(global_invocation_id) ThreadID : vec3<u32>)
         let g = textureLoad(G_Buffer, ThreadID.xy, 0);
     }
 
+    if ( !Get_X1(ThreadID.xy).IsValidSurface )
+    {
+        textureStore(ResultTexture, ThreadID.xy, vec4<f32>(ENV_COLOR, 1.0));
+        return;
+    }
+
+
     // 1. Load Path
     let Reservoir   : Reservoir = LoadReservoir(ThreadID.xy);
     let PathSample  : Path      = RegeneratePath( ThreadID.xy, Reservoir.Sample );
 
+    // if ( PathSample.length < 2u )
+    // {
+    //     textureStore(ResultTexture, ThreadID.xy, vec4<f32>(1.0, 0.0, 0.0, 1.0));
+    //     return;
+    // }
+
     // 2. 색 저장
-    var FrameColor : vec3<f32> = Reservoir.UCW * PathContribution( PathSample );
+    var FrameColor : vec3<f32> = vec3f(Reservoir.UCW) * PathContribution( PathSample );
     let SceneColor : vec4<f32> = textureLoad(SceneTexture, ThreadID.xy, 0);
     let WriteColor : vec3<f32> = mix(SceneColor.rgb, FrameColor, 1.0 / f32(UniformBuffer.FrameIndex + 1));
 

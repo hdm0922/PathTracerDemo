@@ -453,7 +453,7 @@ export class Renderer
         this.GPUBuffers[EBufferIndex.Scene]         = this.CreateGPUStorageBuffer(SceneBufferData);
         this.GPUBuffers[EBufferIndex.Geometry]      = this.CreateGPUStorageBuffer(GeometryBufferData);
         this.GPUBuffers[EBufferIndex.Accel]         = this.CreateGPUStorageBuffer(AccelBufferData);
-        this.GPUBuffers[EBufferIndex.Reservoir]     = this.CreateGPUStorageBuffer(new ArrayBuffer(4 * 24 * this.Canvas.width * this.Canvas.height));
+        this.GPUBuffers[EBufferIndex.Reservoir]     = this.CreateGPUStorageBuffer(new ArrayBuffer(4 * 32 * this.Canvas.width * this.Canvas.height));
 
         this.GPUTextures[ETextureIndex.G_Buffer]    = this.CreateGPUTexture();
         this.GPUTextures[ETextureIndex.Scene]       = this.CreateGPUTexture();
@@ -504,26 +504,26 @@ export class Renderer
                 ]
             ),
 
-            // ComputePass.Create
-            // (
-            //     this.Device, 
-            //     ShaderCode_Initialize_TEST, 
-            //     [   // Input, GPUBuffer
-            //         this.GPUBuffers[EBufferIndex.Uniform],
-            //         this.GPUBuffers[EBufferIndex.Scene],
-            //         this.GPUBuffers[EBufferIndex.Geometry],
-            //         this.GPUBuffers[EBufferIndex.Accel],
-            //     ],
-            //     [   // Input, GPUTextureView
-            //         this.GPUTextures[ETextureIndex.G_Buffer].createView(),
-            //     ],
-            //     [   // Output, GPUBuffer
-            //         this.GPUBuffers[EBufferIndex.Reservoir],
-            //     ],
-            //     [   // Output, GPUTextureView
+            ComputePass.Create
+            (
+                this.Device, 
+                ShaderCode_Initialize_TEST, 
+                [   // Input, GPUBuffer
+                    this.GPUBuffers[EBufferIndex.Uniform],
+                    this.GPUBuffers[EBufferIndex.Scene],
+                    this.GPUBuffers[EBufferIndex.Geometry],
+                    this.GPUBuffers[EBufferIndex.Accel],
+                ],
+                [   // Input, GPUTextureView
+                    this.GPUTextures[ETextureIndex.G_Buffer].createView(),
+                ],
+                [   // Output, GPUBuffer
+                    this.GPUBuffers[EBufferIndex.Reservoir],
+                ],
+                [   // Output, GPUTextureView
 
-            //     ]
-            // ),
+                ]
+            ),
 
             ComputePass.Create
             (
