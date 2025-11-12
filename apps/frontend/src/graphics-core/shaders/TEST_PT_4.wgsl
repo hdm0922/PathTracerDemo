@@ -228,10 +228,12 @@ const LOBE_LIGHT    : u32 = 3u;
 @group(0) @binding(1) var<storage, read>    SceneBuffer     : array<u32>;
 @group(0) @binding(2) var<storage, read>    GeometryBuffer  : array<u32>;
 @group(0) @binding(3) var<storage, read>    AccelBuffer     : array<u32>;
+@group(0) @binding(4) var<storage, read>    ReservoirBuffer : array<Reservoir>;
 
-@group(0) @binding(10) var G_Buffer : texture_2d<f32>;
+@group(0) @binding(10) var G_Buffer         : texture_2d<f32>;
+@group(0) @binding(11) var SceneTexture     : texture_2d<f32>;
 
-@group(1) @binding(0) var<storage, read_write> ReservoirBuffer  : array<Reservoir>;
+@group(1) @binding(10) var ResultTexture    : texture_storage_2d<rgba32float, write>;
 
 
 
@@ -592,12 +594,10 @@ fn TBNMatrix(N : vec3<f32>) -> mat3x3<f32>
 // Utils
 //==========================================================================
 
-fn StoreReservoir(ThreadID : vec2<u32>, pReservoir : ptr<function, Reservoir>)
+fn LoadReservoir(ThreadID : vec2<u32>) -> Reservoir
 {
     let idx : u32 = ThreadID.y * UniformBuffer.Resolution.x + ThreadID.x;
-    ReservoirBuffer[idx] = (*pReservoir);
-
-    return;
+    return ReservoirBuffer[idx];
 }
 
 fn TraceRay(InRay : Ray) -> HitResult
@@ -1354,44 +1354,6 @@ fn PathPDF(InPath : Path) -> f32
     return PDF;
 }
 
-fn UpdateReservoir(
-    pRandomSeed : ptr<function, u32>, 
-    pReservoir  : ptr<function, PathReservoir>, 
-    Sample      : Path, 
-    RIS         : f32,
-    P_hat       : f32,
-    Confidence  : u32
-)
-{
-    let Pr_Change       : f32   = RIS / ((*pReservoir).w_sum + RIS);
-    let bChangeSample   : bool  = Random(pRandomSeed) < Pr_Change;
-
-    if ( !bChangeSample ) { return; }
-
-    (*pReservoir).w_sum     += RIS;
-    (*pReservoir).C         += Confidence;
-
-    (*pReservoir).Sample    = Sample;
-    (*pReservoir).P_hat     = P_hat;
-
-    return;
-}
-
-fn SubmitPathToReservoir(
-    pRandomSeed     : ptr<function, u32>,
-    pReservoir      : ptr<function, PathReservoir>,
-    CandidatePath   : Path
-)
-{
-    let P_hat   : f32 = Luminance( PathContribution( CandidatePath ) );
-    let MIS     : f32 = 1.0;
-    let RIS     : f32 = MIS * P_hat / max( PathPDF( CandidatePath ), EPS );
-
-    UpdateReservoir(pRandomSeed, pReservoir, CandidatePath, RIS, P_hat, 1u);
-
-    return;
-}
-
 fn CompressPath(InPath : Path, CSurface : array<CompactSurface, 8u>) -> CompactPath
 {
     var OutCompactPath : CompactPath;
@@ -1425,6 +1387,35 @@ fn CompressPath(InPath : Path, CSurface : array<CompactSurface, 8u>) -> CompactP
     return OutCompactPath;
 }
 
+fn RegeneratePath(ThreadID : vec2<u32>, InCompactPath : CompactPath) -> Path
+{
+    var OutPath : Path;
+    {
+        OutPath.Surface[0].Position = Get_X0(ThreadID);
+        OutPath.Surface[1]          = GetSurface( Get_X1(ThreadID) );
+        OutPath.length              = InCompactPath.length;
+        OutPath.XL                  = InCompactPath.XL;
+    }
+
+    for (var i = 1u; i < InCompactPath.length - 1; i++)
+    {
+        let X_Prev  : Surface       = OutPath.Surface[i - 1];
+        let X_Curr  : Surface       = OutPath.Surface[i    ];
+
+        let V       : vec3<f32>     = normalize( X_Prev.Position - X_Curr.Position );
+
+        var rSeed   : u32           = InCompactPath.rSeed[i - 1];
+        let W       : BSDFSample    = SampleBSDF(&rSeed, X_Curr, V);
+
+        OutPath.Lobe[i]             = W.Lobe;
+        let HitInfo : HitResult     = TraceRay( Ray(X_Curr.Position, W.Direction) );
+
+        OutPath.Surface[i + 1]      = GetSurface( HitInfo.SurfaceInfo );
+    }
+
+    return OutPath;
+}
+
 
 
 //==========================================================================
@@ -1443,77 +1434,25 @@ fn cs_main(@builtin(global_invocation_id) ThreadID : vec3<u32>)
         if (!bPixelInBoundary_X || !bPixelInBoundary_Y) { return; }
     }
 
-    // 1. 초기화
-    var rSeed       : u32 = InitializeRandomSeed(ThreadID.xy);
-
-    var CSurface    : array<CompactSurface, 8u>;
+    if (false)
     {
-        CSurface[1] = Get_X1(ThreadID.xy);
+        let x = SceneBuffer[0];
+        let x1 = GeometryBuffer[0];
+        let x2 = AccelBuffer[0];
+        let r = ReservoirBuffer[0];
+        let g = textureLoad(G_Buffer, ThreadID.xy, 0);
     }
 
-    var PathTreeReservoir : PathReservoir = PathReservoir();
-    {
-        PathTreeReservoir.w_sum = 0.0;
-        PathTreeReservoir.C     = 0u;
-    }
+    // 1. Load Path
+    let Reservoir   : Reservoir = LoadReservoir(ThreadID.xy);
+    let PathSample  : Path      = RegeneratePath( ThreadID.xy, Reservoir.Sample );
 
-    var PathTree : Path = Path();
-    {
-        PathTree.Surface[0].Position    = Get_X0(ThreadID.xy);
-        PathTree.Surface[1]             = GetSurface( CSurface[1] );
-        PathTree.length                 = 2u;
-    }
+    // 2. 색 저장
+    var FrameColor : vec3<f32> = Reservoir.UCW * PathContribution( PathSample );
+    let SceneColor : vec4<f32> = textureLoad(SceneTexture, ThreadID.xy, 0);
+    let WriteColor : vec3<f32> = mix(SceneColor.rgb, FrameColor, 1.0 / f32(UniformBuffer.FrameIndex + 1));
 
-
-    for (var i = 1u; i < 4u; i++)
-    {
-        let X_Prev  : Surface   = PathTree.Surface[i - 1];
-        let X_Curr  : Surface   = PathTree.Surface[i    ];
-
-        let V   : vec3<f32> = normalize( X_Prev.Position - X_Curr.Position );
-
-        PathTree.rSeed[i + 1]   = rSeed;
-        PathTree.XL             = SampleNEE(&rSeed, X_Curr, V);
-
-        SubmitPathToReservoir(&rSeed, &PathTreeReservoir, PathTree);
-
-        if (i == 3u) { break; }
-
-
-
-        PathTree.rSeed[i + 1]   = rSeed;
-        let W : BSDFSample      = SampleBSDF(&rSeed, X_Curr, V);
-        PathTree.Lobe[i]        = W.Lobe;
-        let HitInfo : HitResult = TraceRay( Ray(X_Curr.Position, W.Direction) );
-
-        if ( HitInfo.IsValidHit )
-        {
-            CSurface[i + 1]         = HitInfo.SurfaceInfo;
-            PathTree.Surface[i + 1] = GetSurface( CSurface[i + 1] );
-
-            PathTree.length++;
-        }
-        else
-        {
-            PathTree.XL = CreateEnvLight(X_Curr, V, W.Direction);
-
-            SubmitPathToReservoir(&rSeed, &PathTreeReservoir, PathTree);
-
-            break;
-        }
-    }
-
-
-    // 4. 최종 살아남은 경로를 Reservoir 에 저장
-    {
-        var ResultReservoir : Reservoir;
-
-        ResultReservoir.Sample  = CompressPath(PathTreeReservoir.Sample, CSurface);
-        ResultReservoir.UCW     = PathTreeReservoir.w_sum / max(PathTreeReservoir.P_hat, EPS);
-        ResultReservoir.C       = PathTreeReservoir.C;
-
-        StoreReservoir(ThreadID.xy, &ResultReservoir);
-    }
+    textureStore(ResultTexture, ThreadID.xy, vec4<f32>(WriteColor, 1.0));
 
     return;
 }
