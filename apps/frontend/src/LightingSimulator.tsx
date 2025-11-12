@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import './LightingSimulator.css';
+import Header from './components/Header';
 import WebGPURenderer from './components/WebGPURenderer';
 import RightPanel from './components/RightPanel';
 import LightingControls from './components/LightingControls';
@@ -139,15 +140,17 @@ export default function LightingSimulator() {
   };
 
   return (
-    <div className="simulator-container">
-      <div className="simulator-layout">
-        {/* Left side - WebGPU Renderer */}
-        <div className={`${activeTab}-image-wrapper`} style={{ opacity: activeTab === 'space' ? imageOpacity : 1 }}>
-          <WebGPURenderer
-            className={`${activeTab}-image`}
-            onCameraUpdate={setCameraPosition}
-          />
-        </div>
+    <>
+      <Header />
+      <div className="simulator-container">
+        <div className="simulator-layout">
+          {/* Left side - WebGPU Renderer */}
+          <div className={`${activeTab}-image-wrapper`} style={{ opacity: activeTab === 'space' ? imageOpacity : 1 }}>
+            <WebGPURenderer
+              className={`${activeTab}-image`}
+              onCameraUpdate={setCameraPosition}
+            />
+          </div>
 
         {/* Right side - Title, Tabs, and Controls */}
         <RightPanel
@@ -207,5 +210,6 @@ export default function LightingSimulator() {
         </RightPanel>
       </div>
     </div>
+    </>
   );
 }
