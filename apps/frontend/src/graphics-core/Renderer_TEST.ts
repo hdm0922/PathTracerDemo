@@ -16,7 +16,6 @@ import ShaderCode_Vertex            from './shaders/VertexShader.wgsl?raw';
 import ShaderCode_Fragment          from './shaders/FragmentShader.wgsl?raw';
 
 
-
 const EBufferIndex =
 {
     Uniform     : 0,
@@ -451,7 +450,7 @@ export class Renderer
         this.GPUBuffers[EBufferIndex.Scene]         = this.CreateGPUStorageBuffer(SceneBufferData);
         this.GPUBuffers[EBufferIndex.Geometry]      = this.CreateGPUStorageBuffer(GeometryBufferData);
         this.GPUBuffers[EBufferIndex.Accel]         = this.CreateGPUStorageBuffer(AccelBufferData);
-        this.GPUBuffers[EBufferIndex.Reservoir]     = this.CreateGPUStorageBuffer(new ArrayBuffer(4 * 24 * this.Canvas.width * this.Canvas.height));
+        this.GPUBuffers[EBufferIndex.Reservoir]     = this.CreateGPUStorageBuffer(new ArrayBuffer(4 * 32 * this.Canvas.width * this.Canvas.height));
 
         this.GPUTextures[ETextureIndex.G_Buffer]    = this.CreateGPUTexture();
         this.GPUTextures[ETextureIndex.Scene]       = this.CreateGPUTexture();

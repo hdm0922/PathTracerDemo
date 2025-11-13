@@ -6,8 +6,8 @@ import { World } from '../graphics-core/World';
 import { DUMMY_SCENE_1, AVAILABLE_SCENES } from '../graphics-core/test/DummyScenes';
 import type { Scene } from '../graphics-core/Structs';
 
+// Renderer_TEST   Renderer
 import { Renderer } from '../graphics-core/Renderer_TEST';
-//import { Renderer } from '../graphics-core/Renderer';
 
 interface WebGPURendererProps {
   className?: string;

@@ -62,15 +62,15 @@ export const DUMMY_SCENE_1: Scene = {
     },
 
     // Point Light
-    // {
-    //   id: 'bulb',
-    //   type: 'point-light',
-    //   lightParams: {
-    //     position: [0, 0, -1],
-    //     color: [1, 1, 1],
-    //     intensity: 20.0,
-    //   },
-    // },
+    {
+      id: 'bulb',
+      type: 'point-light',
+      lightParams: {
+        position: [0, 0, -1],
+        color: [1, 1, 1],
+        intensity: 20.0,
+      },
+    },
 
     // Rect Light
     {
