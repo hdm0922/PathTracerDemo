@@ -26,8 +26,6 @@ struct Uniform
     LightSourceCount                : u32,
 };
 
-
-
 struct Instance
 {
     ModelMatrix         : mat4x4<f32>,
@@ -808,8 +806,11 @@ fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> f32
         RemainDistance  -= ClosestHit.HitDistance;
         CurrentRay       = Ray(ClosestHit.HitPoint, CurrentRay.Direction);
     }
-
     return 0.0;
+
+    // let RayResult : HitResult = TraceRay(CurrentRay);
+    // let bIsVisible : bool = ( !RayResult.IsValidHit || RayResult.HitDistance > Distance );
+    // return f32(bIsVisible);
 }
 
 fn GeometryFactor(A : HitResult, B : HitResult) -> f32
@@ -1066,6 +1067,7 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
     // 1. 상태 초기화
     var RandomSeed          : u32       = GetHashValue(ThreadID.x * 1973u + ThreadID.y * 9277u + UniformBuffer.FrameIndex * 26699u);
     var CurrentRay          : Ray       = GenerateRayFromThreadID(ThreadID.xy);
+    var LastHitResult       : HitResult;
     var ResultColor         : vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
     var Throughput          : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
     let EnvironmentColor    : vec3<f32> = ENV_COLOR;
@@ -1081,9 +1083,11 @@ fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
         // 부딪히지 않았다면 -> 환경광 히트 처리 후 바운스 종료
         if (!HitInfo.IsValidHit) 
         { 
-            if (BounceDepth != 2u) { ResultColor += Throughput * EnvironmentColor; }
+            ResultColor += Throughput * EnvironmentColor;
             break; 
         }
+
+        LastHitResult = HitInfo;
 
         let V : vec3<f32> = -CurrentRay.Direction;
 

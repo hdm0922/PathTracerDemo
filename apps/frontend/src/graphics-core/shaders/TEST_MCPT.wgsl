@@ -201,7 +201,7 @@ const RECONNECTION_DISTANCE     : f32 = 0.1;
 const RECONNECTION_ROUGHNESS    : f32 = 0.5;
 
 const INF       : f32       = 1e11;
-const EPS       : f32       = 4e-3;
+const EPS       : f32       = 1e-4;
 const PI        : f32       = 3.141592;
 const ENV_COLOR : vec3<f32> = vec3<f32>(0.5, 0.5, 0.5);
 
@@ -231,9 +231,8 @@ const LOBE_LIGHT    : u32 = 3u;
 @group(0) @binding(2) var<storage, read>    GeometryBuffer  : array<u32>;
 @group(0) @binding(3) var<storage, read>    AccelBuffer     : array<u32>;
 
-@group(0) @binding(10) var G_Buffer : texture_2d<f32>;
-
-@group(1) @binding(0) var<storage, read_write> ReservoirBuffer  : array<Reservoir>;
+@group(0) @binding(10) var SceneTexture : texture_2d<f32>;
+@group(0) @binding(11) var AccumTexture : texture_storage_2d<rgba32float, write>;
 
 
 
@@ -564,7 +563,7 @@ fn GetBaryCentricWeights(Point : vec3<f32>, InTriangle : Triangle) -> vec3<f32>
 
     let denom = d00 * d11 - d01 * d01;
 
-    if (abs(denom) < EPS) { return vec3<f32>(1.0, 0.0, 0.0); }
+    if (abs(denom) < 1e-8) { return vec3<f32>(1.0, 0.0, 0.0); }
 
     let invDenom = 1.0 / denom;
     let u = (d11 * d20 - d01 * d21) * invDenom;
@@ -594,11 +593,12 @@ fn TBNMatrix(N : vec3<f32>) -> mat3x3<f32>
 // Utils
 //==========================================================================
 
-fn StoreReservoir(ThreadID : vec2<u32>, pReservoir : ptr<function, Reservoir>)
+fn WriteColor(ThreadID : vec2<u32>, FrameColor : vec3<f32>)
 {
-    let idx : u32 = ThreadID.y * UniformBuffer.Resolution.x + ThreadID.x;
-    ReservoirBuffer[idx] = (*pReservoir);
+    let SceneColor : vec4<f32> = textureLoad(SceneTexture, ThreadID.xy, 0);
+    let WriteColor : vec3<f32> = mix(SceneColor.rgb, FrameColor, 1.0 / f32(UniformBuffer.FrameIndex + 1));
 
+    textureStore(AccumTexture, ThreadID.xy, vec4<f32>(WriteColor, 1.0));
     return;
 }
 
@@ -729,20 +729,6 @@ fn CreateEnvLight(X : Surface, V : vec3<f32>, L : vec3<f32>) -> LightSample
     return OutLightSample;
 }
 
-fn Get_X0(ThreadID : vec2<u32>) -> vec3<f32>
-{
-    let PixelUV     : vec2<f32> = (vec2<f32>(ThreadID.xy) + 0.5) / vec2<f32>(UniformBuffer.Resolution);
-    let PixelNDC    : vec3<f32> = vec3<f32>(2.0 * PixelUV - 1.0, 0.0);
-
-    return TransformVec3WithMat4x4(PixelNDC, UniformBuffer.ViewProjectionMatrix_Inverse);
-}
-
-fn Get_X1(ThreadID : vec2<u32>) -> CompactSurface
-{
-    let GBufferData : vec4<f32> = textureLoad(G_Buffer, ThreadID, 0);
-    return GetCompactSurface(GBufferData);
-}
-
 fn DirectionToLight(X : Surface, XL : LightSample) -> vec3<f32>
 {
     switch ( XL.Type )
@@ -771,9 +757,9 @@ fn DirectionToLight(X : Surface, XL : LightSample) -> vec3<f32>
     }
 }
 
-fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
+fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> f32
 {
-    var Transmittance   : vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+    var Transmittance   : f32 = 1.0;
     var Distance        : f32       = length(End - Start);
     let Direction       : vec3<f32> = (End - Start) / Distance;
 
@@ -786,17 +772,21 @@ fn Visibility(Start : vec3<f32>, End : vec3<f32>) -> vec3<f32>
         if (!ClosestHit.IsValidHit || ClosestHit.HitDistance > RemainDistance) { return Transmittance; }
 
         let HitMaterial : Material = GetMaterialFromHit(ClosestHit);
-        if (HitMaterial.Transmission == 0.0) { return vec3<f32>(0.0, 0.0, 0.0); }
+        if (HitMaterial.Transmission == 0.0) { return 0.0; }
 
-        Transmittance   *= HitMaterial.Albedo.rgb;
+        Transmittance   *= HitMaterial.Transmission;
         RemainDistance  -= ClosestHit.HitDistance;
 
-        let RayStart : vec3<f32> = CurrentRay.Start + CurrentRay.Direction * ClosestHit.HitDistance;
-        CurrentRay = Ray(RayStart, CurrentRay.Direction);
+        let HitSurface : Surface = GetSurface( ClosestHit.SurfaceInfo );
+        CurrentRay = Ray(HitSurface.Position, CurrentRay.Direction);
     }
+    return 0.0;
 
-    return vec3<f32>(0.0, 0.0, 0.0);
+    // let RayResult : HitResult = TraceRay(CurrentRay);
+    // let bIsVisible : bool = ( !RayResult.IsValidHit || RayResult.HitDistance > Distance );
+    // return f32(bIsVisible);
 }
+
 
 
 //==========================================================================
@@ -920,8 +910,8 @@ fn BSDF(X : Surface, V : vec3<f32>, L : vec3<f32>) -> vec3<f32>
     let T : f32 = X.Material.Transmission;
     let N : vec3<f32> = X.Normal;
 
-    if (dot(L, N) * dot(V, N) > 0.0) { return (1.0 - T) * BRDF(X, L, V); }
-    return T * BTDF(X, L, V);
+    if (dot(L, N) * dot(V, N) > 0.0) { return (1.0 - T) * BRDF(X, V, L); }
+    return T * BTDF(X, V, L);
 }
 
 
@@ -1000,8 +990,6 @@ fn SampleNEE(pRandomSeed : ptr<function, u32>, X : Surface, V : vec3<f32>) -> Li
         {
             OutNEESample.Position   = LightSource.Position;
             OutNEESample.Direction  = normalize(X.Position - LightSource.Position);
-            // let r : vec3<f32> = X.Position - LightSource.Position;
-            // OutNEESample.Emittance  = LightSource.Intensity * LightSource.Color / max(dot(r, r), EPS);
         }
 
         case LIGHT_RECT :
@@ -1063,8 +1051,8 @@ fn SampleBTDF(pRandomSeed : ptr<function, u32>, X : Surface, V : vec3<f32>) -> B
     let bViewNormalSameHemisphere : bool = (dot(V, X.Normal) > 0.0);
     let n_in        : f32       = select(X.Material.IOR, 1.0, bViewNormalSameHemisphere);
     let n_out       : f32       = select(1.0, X.Material.IOR, bViewNormalSameHemisphere);
-    let IORRatio    : f32       = n_in / n_out;
     let N           : vec3<f32> = select(-X.Normal, X.Normal, bViewNormalSameHemisphere);
+    let IORRatio    : f32       = n_in / n_out;
 
     // 2. Frensel's Equation 으로부터 Reflection 확률 계산 (Schlik's Approximation)
     var P_reflection : f32;
@@ -1173,7 +1161,7 @@ fn PDF_BTDF(X : Surface, V : vec3<f32>, L : vec3<f32>) -> f32
 
         // p(L) = D(h_r) * |J_r| = D(h_r) / (4 * V.h_r)
         if (VdotH_r > 0.0) {
-            pdf_reflect = GGXDistribution(NdotH_r, Roughness) / max(4.0 * VdotH_r, EPS);
+            pdf_reflect = GGXDistribution(NdotH_r, Roughness) / (4.0 * VdotH_r);
         }
     }
 
@@ -1193,7 +1181,7 @@ fn PDF_BTDF(X : Surface, V : vec3<f32>, L : vec3<f32>) -> f32
         // |J_t| = (n_out^2 * VdotH_t) / (n_in * LdotH_t + n_out * VdotH_t)^2
         let denom = (n_in * LdotH_t + n_out * VdotH_t);
         if (denom > 0.0) {
-            let J_transmit = (n_out * n_out * VdotH_t) / max(denom * denom, EPS);
+            let J_transmit = (n_out * n_out * VdotH_t) / (denom * denom);
             
             // p(L) = D(h_t) * |J_t|
             pdf_transmit = GGXDistribution(NdotH_t, Roughness) * abs(J_transmit);
@@ -1221,7 +1209,7 @@ fn PDF_LIGHT(X : Surface, V : vec3<f32>, XL : LightSample) -> f32
     let bIsEnvLight     : bool = ( XL.Type == LIGHT_ENV );
     let bIsVirtualLight : bool = ( XL.LightID < 0 );
 
-    if ( bIsEnvLight || bIsVirtualLight ) { return PDF_BSDF(X, V, DirectionToLight(X, XL)); }
+    if ( bIsEnvLight ) { return PDF_BSDF(X, V, DirectionToLight(X, XL)); }
 
     let LightSource : Light = GetLight(u32(XL.LightID));
     let Pr_Before   : f32   = select(GetLightsCDF(u32(XL.LightID)-1), 0.0, XL.LightID == 0);
@@ -1257,184 +1245,75 @@ fn L_emit(XL : LightSample, X : Surface) -> vec3<f32>
     return XL.Emittance * Attenuation;
 }
 
-fn IsSafeToReconnect(A : Surface, Lobe_A : u32, B : Surface, Lobe_B : u32) -> bool
+fn GenerateRayFromThreadID(ThreadID: vec2<u32>) -> Ray
 {
-    let Roughness_A     : f32   = select(A.Material.Roughness, 1.0, Lobe_A == LOBE_LAMBERT);
-    let Roughness_B     : f32   = select(B.Material.Roughness, 1.0, Lobe_B == LOBE_LAMBERT);
-    let bRoughEnough    : bool  = ( min(Roughness_A, Roughness_B) >= RECONNECTION_ROUGHNESS );
+    let PixelUV             : vec2<f32> = (vec2<f32>(ThreadID.xy) + 0.5) / vec2<f32>(UniformBuffer.Resolution);
+    let PixelNDC            : vec3<f32> = vec3<f32>(2.0 * PixelUV - 1.0, 0.0);
 
-    let bFarEnough      : bool  = ( length(A.Position - B.Position) >= RECONNECTION_DISTANCE );
+    let PixelClip_NearPlane : vec3<f32> = vec3<f32>(PixelNDC.xy, 0.0);
+    let PixelClip_Direction : vec3<f32> = vec3<f32>(0.0, 0.0, 1.0);
 
-    return bFarEnough && bRoughEnough;
+    let Ray_Clip            : Ray = Ray(PixelClip_NearPlane, PixelClip_Direction);
+
+    return TransformRayWithMat4x4(Ray_Clip, UniformBuffer.ViewProjectionMatrix_Inverse, true);
 }
 
-fn IsSafeToReconnect_Light(X : Surface, XL : LightSample) -> bool
+fn GetLightColor(pRandomSeed : ptr<function, u32>, X : Surface, V : vec3<f32>, LightID : u32) -> vec3<f32>
 {
-    let bRoughEnough        : bool  = ( X.Material.Roughness >= RECONNECTION_ROUGHNESS );
 
-    let bIsDirectionalLight : bool  = ( XL.Type == LIGHT_DIRECTION ) || ( XL.Type == LIGHT_ENV );
-    let bFarEnough          : bool  = bIsDirectionalLight || ( length(X.Position - XL.Position) >= RECONNECTION_DISTANCE );
+    var XL : LightSample;
 
-    return bFarEnough && bRoughEnough;
-}
+    let LightSource : Light = GetLight(LightID);
+    XL.Type       = LightSource.LightType;
+    XL.Emittance  = LightSource.Intensity * LightSource.Color;
 
-fn SafeReconnectionIndex(InPath : Path) -> u32
-{
-    for (var k = 2u; k < InPath.length; k++)
+    switch ( LightSource.LightType )
     {
-        if ( IsSafeToReconnect(
-            InPath.Surface[k - 1], InPath.Lobe[k - 1], 
-            InPath.Surface[k    ], InPath.Lobe[k    ]
-            ) ) { return k; }
+        case LIGHT_DIRECTION :
+        {
+            XL.Position   = X.Position - LightSource.Direction * INF;
+            XL.Direction  = LightSource.Direction;
+            XL.PDF        = 1.0;
+        }
+
+        case LIGHT_POINT :
+        {
+            XL.Position   = LightSource.Position;
+            XL.Direction  = normalize(X.Position - LightSource.Position);
+            XL.PDF        = 1.0;
+        }
+
+        case LIGHT_RECT :
+        {
+            let Random_U    : f32       = (Random(pRandomSeed) * 2.0) - 1.0;
+            let Random_V    : f32       = (Random(pRandomSeed) * 2.0) - 1.0;
+            let Offset      : vec3<f32> = (Random_U * LightSource.U) + (Random_V * LightSource.V);
+
+            XL.Position   = LightSource.Position + Offset;
+            XL.Direction  = normalize( X.Position - XL.Position );
+
+            let r : vec3<f32>   = XL.Position - X.Position;
+            let L : vec3<f32>   = normalize(r);
+            let N : vec3<f32>   = LightSource.Direction;
+            let A : f32         = LightSource.Area;
+
+            XL.PDF = dot(r,r) / max(A * abs(dot(N, L)), EPS);
+        }
+
+        default : {}
     }
 
-    if ( IsSafeToReconnect_Light( InPath.Surface[InPath.length - 1], InPath.XL ) ) { return InPath.length; }
+    let L : vec3<f32> = DirectionToLight(X, XL);
 
-    return 0u;
+    return L_emit(XL, X) * BSDF(X, V, L) * abs(dot(X.Normal, L)) * Visibility(X.Position, XL.Position) / XL.PDF;
 }
-
-fn PathContribution(InPath : Path) -> vec3<f32>
-{
-    var f : vec3<f32> = vec3f(1.0);
-
-    for (var i = 1u; i < InPath.length - 1; i++)
-    {
-        let X_Prev : Surface = InPath.Surface[i - 1];
-        let X_Curr : Surface = InPath.Surface[i    ];
-        let X_Next : Surface = InPath.Surface[i + 1];
-
-        let V : vec3<f32> = normalize( X_Prev.Position - X_Curr.Position );
-        let L : vec3<f32> = normalize( X_Next.Position - X_Curr.Position );
-        let N : vec3<f32> = X_Curr.Normal;
-
-        f *= BSDF(X_Curr, L, V) * abs( dot(N, L) );
-    }
-
-    {
-        let X_Prev : Surface = InPath.Surface[InPath.length - 2];
-        let X_Curr : Surface = InPath.Surface[InPath.length - 1];
-
-        let V : vec3<f32> = normalize( X_Prev.Position - X_Curr.Position );
-        let L : vec3<f32> = DirectionToLight( X_Curr, InPath.XL );
-        let N : vec3<f32> = X_Curr.Normal;
-
-        let Start : vec3<f32> = X_Curr.Position;
-        let End : vec3<f32> = Start + L * INF;
-
-        f *= BSDF(X_Curr, L, V) * abs( dot(N, L) );
-        f *= L_emit(InPath.XL, X_Curr) * Visibility(Start, End);
-    }
-
-    return f;
-}
-
-fn PathPDF(InPath : Path) -> f32
-{    
-    var PDF : f32 = 1.0;
-
-    for (var i = 2u; i < InPath.length - 1; i++)
-    {
-        let X_Prev : Surface = InPath.Surface[i - 1];
-        let X_Curr : Surface = InPath.Surface[i    ];
-        let X_Next : Surface = InPath.Surface[i + 1];
-
-        let V : vec3<f32> = normalize( X_Prev.Position - X_Curr.Position );
-        let L : vec3<f32> = normalize( X_Next.Position - X_Curr.Position );
-
-        PDF *= PDF_BSDF(X_Curr, V, L);
-    }
-
-    {
-        let X_Prev : Surface = InPath.Surface[InPath.length - 2];
-        let X_Curr : Surface = InPath.Surface[InPath.length - 1];
-
-        let V : vec3<f32> = normalize( X_Prev.Position - X_Curr.Position );
-
-        PDF *= PDF_LIGHT(X_Curr, V, InPath.XL);
-    }
-
-    return PDF;
-}
-
-fn UpdateReservoir(
-    pRandomSeed : ptr<function, u32>, 
-    pReservoir  : ptr<function, PathReservoir>, 
-    Sample      : Path, 
-    RIS         : f32,
-    P_hat       : f32,
-    Confidence  : u32
-)
-{
-    let Pr_Change       : f32   = RIS / ((*pReservoir).w_sum + RIS);
-    let bChangeSample   : bool  = Random(pRandomSeed) < Pr_Change;
-
-    if ( !bChangeSample ) { return; }
-
-    (*pReservoir).w_sum     += RIS;
-    (*pReservoir).C         += Confidence;
-
-    (*pReservoir).Sample    = Sample;
-    (*pReservoir).P_hat     = P_hat;
-
-    return;
-}
-
-fn SubmitPathToReservoir(
-    pRandomSeed     : ptr<function, u32>,
-    pReservoir      : ptr<function, PathReservoir>,
-    CandidatePath   : Path
-)
-{
-    let P_hat   : f32 = Luminance( PathContribution( CandidatePath ) );
-    let MIS     : f32 = 1.0;
-    let RIS     : f32 = MIS * P_hat / max( PathPDF( CandidatePath ), EPS );
-
-    UpdateReservoir(pRandomSeed, pReservoir, CandidatePath, RIS, P_hat, 1u);
-
-    return;
-}
-
-fn CompressPath(InPath : Path, CSurface : array<CompactSurface, 8u>) -> CompactPath
-{
-    var OutCompactPath : CompactPath;
-    {
-        OutCompactPath.k        = SafeReconnectionIndex(InPath);
-        OutCompactPath.length   = InPath.length;
-        OutCompactPath.RcVertex = vec4<f32>(0.0, 0.0, 0.0, 0.0);
-        OutCompactPath.XL       = InPath.XL;
-        OutCompactPath.J        = 0.0;
-
-        OutCompactPath.rSeed[0] = InPath.rSeed[2];
-        OutCompactPath.rSeed[1] = InPath.rSeed[3];
-        OutCompactPath.rSeed[2] = InPath.rSeed[4];
-        OutCompactPath.rSeed[3] = InPath.rSeed[5];
-    }
-
-    // Unshiftable Path
-    if ( OutCompactPath.k == 0u ) { return OutCompactPath; }
-
-    let bIsLight_Xk : bool  = ( OutCompactPath.k == InPath.length );
-    OutCompactPath.Lobe_k   = select(InPath.Lobe[OutCompactPath.k], LOBE_LIGHT, bIsLight_Xk);
-    OutCompactPath.Lobe_k_1 = InPath.Lobe[OutCompactPath.k - 1];
-
-    if ( bIsLight_Xk ) { OutCompactPath.RcVertex = GetRcVertex( CSurface[OutCompactPath.k] ); }
-
-    // TODO : Compute Jacobian Determinant
-    {
-
-    }
-
-    return OutCompactPath;
-}
-
-
 
 //==========================================================================
-// Main
+// Shader Main =============================================================
 //==========================================================================
 
 @compute @workgroup_size(8,8,1)
-fn cs_main(@builtin(global_invocation_id) ThreadID : vec3<u32>)
+fn cs_main(@builtin(global_invocation_id) ThreadID: vec3<u32>)
 {
 
     // 0. 범위 밖 스레드는 계산 X
@@ -1447,73 +1326,47 @@ fn cs_main(@builtin(global_invocation_id) ThreadID : vec3<u32>)
 
     // 1. 초기화
     var rSeed       : u32 = InitializeRandomSeed(ThreadID.xy);
+    var CurrentRay  : Ray = GenerateRayFromThreadID(ThreadID.xy);
 
-    var CSurface    : array<CompactSurface, 8u>;
+    var FrameColor  : vec3<f32> = vec3f(0.0);
+    var f           : vec3<f32> = vec3f(1.0);
+    var p           : f32       = 1.0;
+
+    // 2. Path Trace
+    for (var BounceDepth : u32 = 0u; BounceDepth < 3u; BounceDepth++)
     {
-        CSurface[1] = Get_X1(ThreadID.xy);
-    }
+        let RayHit : HitResult = TraceRay(CurrentRay);
 
-    var PathTreeReservoir : PathReservoir = PathReservoir();
-    {
-        PathTreeReservoir.w_sum = 0.0;
-        PathTreeReservoir.C     = 0u;
-    }
-
-    var PathTree : Path = Path();
-    {
-        PathTree.Surface[0].Position    = Get_X0(ThreadID.xy);
-        PathTree.Surface[1]             = GetSurface( CSurface[1] );
-        PathTree.length                 = 2u;
-    }
-
-
-    for (var i = 1u; i < 3u; i++)
-    {
-        let X_Prev  : Surface   = PathTree.Surface[i - 1];
-        let X_Curr  : Surface   = PathTree.Surface[i    ];
-
-        let V   : vec3<f32> = normalize( X_Prev.Position - X_Curr.Position );
-
-        PathTree.rSeed[i + 1]   = rSeed;
-        PathTree.XL             = SampleNEE(&rSeed, X_Curr, V);
-
-        SubmitPathToReservoir(&rSeed, &PathTreeReservoir, PathTree);
-
-        if (i == 3u) { break; }
-
-        PathTree.rSeed[i + 1]   = rSeed;
-        let W : BSDFSample      = SampleBSDF(&rSeed, X_Curr, V);
-        PathTree.Lobe[i]        = W.Lobe;
-        let HitInfo : HitResult = TraceRay( Ray(X_Curr.Position, W.Direction) );
-
-        if ( HitInfo.IsValidHit )
+        if ( !RayHit.IsValidHit )
         {
-            CSurface[i + 1]         = HitInfo.SurfaceInfo;
-            PathTree.Surface[i + 1] = GetSurface( CSurface[i + 1] );
-
-            PathTree.length++;
-        }
-        else
-        {
-            PathTree.XL = CreateEnvLight(X_Curr, V, W.Direction);
-
-            SubmitPathToReservoir(&rSeed, &PathTreeReservoir, PathTree);
-
+            FrameColor += ( f / p ) * ENV_COLOR;
             break;
         }
+
+        let X : Surface     = GetSurface( RayHit.SurfaceInfo );
+        let V : vec3<f32>   = normalize( CurrentRay.Start - X.Position );
+        var L : vec3<f32>;
+
+        // Direct Light 빛 모두 계산
+        for (var LightID : u32 = 0u; LightID < UniformBuffer.LightSourceCount; LightID++)
+        {
+            FrameColor += ( f / p ) * GetLightColor(&rSeed, X, V, LightID);
+        }
+        
+        // BSDF Sampling 으로 다음 방향 결정
+        L = SampleBSDF(&rSeed, X, V).Direction;
+
+        f *= BSDF(X, V, L) * abs(dot(X.Normal, L));
+        p *= PDF_BSDF(X, V, L);
+        CurrentRay = Ray(X.Position, L);
+
+        // Russian Roulette 기법으로 수송량 낮은 경로는 조기 탈락
+        let P_Survive : f32 = Luminance(f) / p;
+        if (Random(&rSeed) < P_Survive) { p *= P_Survive; } else { break; }
     }
 
-
-    // 4. 최종 살아남은 경로를 Reservoir 에 저장
-    {
-        var ResultReservoir : Reservoir;
-
-        ResultReservoir.Sample  = CompressPath(PathTreeReservoir.Sample, CSurface);
-        ResultReservoir.UCW     = PathTreeReservoir.w_sum / max(PathTreeReservoir.P_hat, EPS);
-        ResultReservoir.C       = PathTreeReservoir.C;
-
-        StoreReservoir(ThreadID.xy, &ResultReservoir);
-    }
+    // 3. Write Color
+    WriteColor(ThreadID.xy, FrameColor);
 
     return;
 }

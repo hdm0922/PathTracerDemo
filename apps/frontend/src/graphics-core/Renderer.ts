@@ -1,6 +1,7 @@
 import { mat4 } from 'wgpu-matrix';
 
-import computeShaderCode from './shaders/ComputeShader.wgsl?raw';
+// ComputeShader  TEST_MCPT
+import computeShaderCode from './shaders/TEST_MCPT.wgsl?raw';
 import vertexShaderCode from './shaders/VertexShader.wgsl?raw';
 import fragmentShaderCode from './shaders/FragmentShader.wgsl?raw';
 

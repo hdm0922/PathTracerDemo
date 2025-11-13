@@ -15,9 +15,6 @@ import ShaderCode_FinalShading      from './shaders/PT_4_FinalShadingPass.wgsl?r
 import ShaderCode_Vertex            from './shaders/VertexShader.wgsl?raw';
 import ShaderCode_Fragment          from './shaders/FragmentShader.wgsl?raw';
 
-import ShaderCode_Initialize_TEST        from './shaders/TEST_PT_1.wgsl?raw';
-import ShaderCode_FinalShading_TEST      from './shaders/TEST_PT_4.wgsl?raw';
-
 
 const EBufferIndex =
 {
@@ -507,7 +504,7 @@ export class Renderer
             ComputePass.Create
             (
                 this.Device, 
-                ShaderCode_Initialize_TEST, 
+                ShaderCode_Initialize, 
                 [   // Input, GPUBuffer
                     this.GPUBuffers[EBufferIndex.Uniform],
                     this.GPUBuffers[EBufferIndex.Scene],
@@ -528,7 +525,7 @@ export class Renderer
             ComputePass.Create
             (
                 this.Device, 
-                ShaderCode_FinalShading_TEST, 
+                ShaderCode_FinalShading, 
                 [   // Input, GPUBuffer
                     this.GPUBuffers[EBufferIndex.Uniform],
                     this.GPUBuffers[EBufferIndex.Scene],
