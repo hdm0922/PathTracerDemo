@@ -221,11 +221,11 @@ export class World
         for (let i = 0; i < this.Lights.length; i++) { LuminanceArray[i] /= LuminanceSum; }
         for (let i = 1; i < this.Lights.length; i++) { LuminanceArray[i] += LuminanceArray[i-1]; }
 
+        LuminanceArray[this.Lights.length - 1] = 1.0;
+
         const LightCDFArrayBuffer : ArrayBuffer = new ArrayBuffer(4 * LuminanceArray.length);
         const Float32View : Float32Array = new Float32Array(LightCDFArrayBuffer);
         Float32View.set(LuminanceArray, 0);
-
-        console.log("CDF: ", Float32View);
 
         return LightCDFArrayBuffer;
     }
