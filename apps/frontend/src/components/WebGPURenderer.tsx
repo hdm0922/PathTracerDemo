@@ -1,341 +1,182 @@
 import { useEffect, useRef, useState } from 'react';
-import { vec3 } from 'wgpu-matrix';
-import type { Vec3 } from 'wgpu-matrix';
-import { ResourceManager } from '../graphics-core/ResourceManager';
-import { World } from '../graphics-core/World';
-import { DUMMY_SCENE_1, AVAILABLE_SCENES } from '../graphics-core/test/DummyScenes';
-import type { Scene } from '../graphics-core/Structs';
-
-// Renderer_TEST   Renderer
-import { Renderer } from '../graphics-core/Renderer_TEST';
+import { WebGPUEngine } from '../graphics-core/service';
 
 interface WebGPURendererProps {
   className?: string;
   width?: number;
   height?: number;
-  sceneId?: string; // TODO: 차후 Backend API에서 Scene을 선택할 때 사용
+  sceneId?: string;
   onCameraUpdate?: (position: { x: number; y: number; z: number }) => void;
 }
 
+/**
+ * WebGPURenderer - WebGPU 렌더링을 위한 얇은 React 래퍼 컴포넌트
+ */
 export default function WebGPURenderer({
   className = '',
-  width = 600,
-  height = 450,
+  width = 800,
+  height = 600,
   sceneId,
   onCameraUpdate,
 }: WebGPURendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rendererRef = useRef<Renderer | null>(null);
-  const worldRef = useRef<World | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
-
-  // Camera control state
-  const pressedKeysRef = useRef<Set<string>>(new Set());
-  const isMouseDownRef = useRef<boolean>(false);
-  const lastMouseXRef = useRef<number>(0);
-  const lastMouseYRef = useRef<number>(0);
-
-  // Frame time tracking
-  const lastFrameTimeRef = useRef<number>(performance.now());
+  const containerRef = useRef<HTMLDivElement>(null);
+  const engineRef = useRef<WebGPUEngine | null>(null);
   const [frameTime, setFrameTime] = useState<number>(0);
+  const [error, setError] = useState<string | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ width, height });
+
+  // 반응형 크기 처리 (ResizeObserver)
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width: containerWidth, height: containerHeight } = entry.contentRect;
+
+        // WebGPU 내부 해상도 제한 (성능 최적화)
+        // CSS로는 크게 표시되지만, 실제 렌더링은 낮은 해상도로
+        const MAX_WIDTH = 640;   // 최대 내부 렌더 너비
+        const MAX_HEIGHT = 688;  // 최대 내부 렌더 높이 (953:1024 비율 유지)
+
+        // 최소 크기 보장
+        const minWidth = Math.max(containerWidth, 400);
+        const minHeight = Math.max(containerHeight, 300);
+
+        // 최대 크기 제한
+        const newWidth = Math.min(minWidth, MAX_WIDTH);
+        const newHeight = Math.min(minHeight, MAX_HEIGHT);
+
+        setCanvasSize({ width: newWidth, height: newHeight });
+      }
+    });
+
+    resizeObserver.observe(containerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   // 초기 렌더러 설정
   useEffect(() => {
     let isMounted = true;
 
-    async function initRenderer() {
+    async function initEngine() {
       if (!canvasRef.current) return;
 
-      // Check WebGPU support
-      if (!navigator.gpu) {
-        console.error('WebGPU is not supported in this browser');
-        return;
-      }
-
       try {
-        // Create GPU resources
-        const adapter = await navigator.gpu.requestAdapter();
-        if (!adapter) {
-          console.error('Failed to get GPU adapter');
+        const engine = new WebGPUEngine(canvasRef.current);
+
+        // Setup callbacks
+        engine.onFrameTimeUpdate = (ft) => {
+          if (isMounted) setFrameTime(ft);
+        };
+
+        engine.onCameraUpdate = (pos) => {
+          if (isMounted && onCameraUpdate) {
+            onCameraUpdate(pos);
+          }
+        };
+
+        // Initialize and start
+        await engine.initialize(canvasSize.width, canvasSize.height, sceneId);
+
+        if (!isMounted) {
+          engine.dispose();
           return;
         }
 
-        const device = await adapter.requestDevice();
-        if (!device) {
-          console.error('Failed to get GPU device');
-          return;
+        engineRef.current = engine;
+        engine.start();
+      } catch (err) {
+        console.error('Error initializing WebGPU engine:', err);
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Unknown error occurred');
         }
-
-        const canvas = canvasRef.current;
-        canvas.width = width;
-        canvas.height = height;
-
-        // TODO: 차후 Backend API에서 Scene을 가져오도록 수정
-        // 현재는 sceneId로 AVAILABLE_SCENES에서 찾거나 기본 Scene 사용
-        let currentScene: Scene = DUMMY_SCENE_1;
-        if (sceneId) {
-          const foundScene = AVAILABLE_SCENES.find((s) => s.id === sceneId);
-          if (foundScene) {
-            currentScene = foundScene;
-          } else {
-            console.warn(`Scene with id "${sceneId}" not found, using default scene`);
-          }
-        }
-
-        // Scene에서 사용된 모든 Mesh 이름 추출
-        const meshNamesToLoad: string[] = [];
-        for (const asset of currentScene.assets) {
-          if (asset.type === 'object' && asset.meshName) {
-            if (!meshNamesToLoad.includes(asset.meshName)) {
-              meshNamesToLoad.push(asset.meshName);
-            }
-          }
-        }
-
-        // 필요한 Asset 로드
-        await ResourceManager.LoadAssets(meshNamesToLoad);
-
-        // World와 Renderer 생성 및 초기화
-        const world = new World();
-        const renderer = new Renderer(adapter, device, canvas);
-
-        // Scene 데이터로부터 World 구성
-        world.LoadFromScene(currentScene);
-
-        // Renderer 초기화
-        await renderer.Initialize(world);
-
-        if (!isMounted) return;
-
-        rendererRef.current = renderer;
-        worldRef.current = world;
-
-        // Start render loop
-        function frame() {
-          if (!isMounted || !rendererRef.current) return;
-
-          // Calculate delta time
-          const currentTime = performance.now();
-          const deltaTime = (currentTime - lastFrameTimeRef.current) / 1000; // Convert to seconds
-          lastFrameTimeRef.current = currentTime;
-
-          // Update frame time display (in milliseconds)
-          setFrameTime(deltaTime * 1000);
-
-          // Handle camera movement based on pressed keys
-          const camera = rendererRef.current.GetCamera();
-          let cameraMoved = false;
-
-          const moveSpeed = 5.0; // Units per second (이동 속도)
-          const pressedKeys = pressedKeysRef.current;
-
-          if (pressedKeys.size > 0) {
-            const forwardVector: Vec3 = camera.GetForwardVector();
-            const rightVector: Vec3 = camera.GetRightVector();
-            const upVector: Vec3 = vec3.fromValues(0, 1, 0);
-            const moveOffset: Vec3 = vec3.create(0, 0, 0);
-
-            // Apply delta time to movement speed for frame-rate independent movement
-            const frameAdjustedSpeed = moveSpeed * deltaTime;
-
-            if (pressedKeys.has('w') || pressedKeys.has('W')) {
-              // Forward
-              vec3.addScaled(moveOffset, forwardVector, frameAdjustedSpeed, moveOffset);
-            }
-            if (pressedKeys.has('s') || pressedKeys.has('S')) {
-              // Backward
-              vec3.addScaled(moveOffset, forwardVector, -frameAdjustedSpeed, moveOffset);
-            }
-            if (pressedKeys.has('a') || pressedKeys.has('A')) {
-              // Left
-              vec3.addScaled(moveOffset, rightVector, -frameAdjustedSpeed, moveOffset);
-            }
-            if (pressedKeys.has('d') || pressedKeys.has('D')) {
-              // Right
-              vec3.addScaled(moveOffset, rightVector, frameAdjustedSpeed, moveOffset);
-            }
-            if (pressedKeys.has('q') || pressedKeys.has('Q')) {
-              // Up (Unreal Engine style)
-              vec3.addScaled(moveOffset, upVector, -frameAdjustedSpeed, moveOffset);
-            }
-            if (pressedKeys.has('e') || pressedKeys.has('E')) {
-              // Down (Unreal Engine style)
-              vec3.addScaled(moveOffset, upVector, frameAdjustedSpeed, moveOffset);
-            }
-
-            if (vec3.length(moveOffset) > 0) {
-              camera.AddLocationOffset(moveOffset);
-              cameraMoved = true;
-            }
-          }
-
-          // Reset FrameCount if camera moved
-          if (cameraMoved) {
-            rendererRef.current.ResetFrameCount();
-          }
-
-          // Update camera position callback
-          if (onCameraUpdate) {
-            const cameraLocation = camera.GetLocation();
-            onCameraUpdate({
-              x: cameraLocation[0],
-              y: cameraLocation[1],
-              z: cameraLocation[2],
-            });
-          }
-
-          rendererRef.current.Update();
-          rendererRef.current.Render();
-
-          animationFrameRef.current = requestAnimationFrame(frame);
-        }
-
-        frame();
-      } catch (error) {
-        console.error('Error initializing WebGPU renderer:', error);
       }
     }
 
-    initRenderer();
+    initEngine();
 
     // Cleanup
     return () => {
       isMounted = false;
-      if (animationFrameRef.current !== null) {
-        cancelAnimationFrame(animationFrameRef.current);
+      if (engineRef.current) {
+        engineRef.current.dispose();
+        engineRef.current = null;
       }
-      // GPU resources will be cleaned up automatically when the device is lost
-      rendererRef.current = null;
-      worldRef.current = null;
     };
-  }, [width, height]);
+  }, [canvasSize.width, canvasSize.height]);
+
+  // Canvas 크기 변경 시 리사이즈
+  useEffect(() => {
+    if (!engineRef.current) return;
+
+    async function resizeEngine() {
+      try {
+        await engineRef.current!.resize(canvasSize.width, canvasSize.height);
+      } catch (err) {
+        console.error('Error resizing engine:', err);
+      }
+    }
+
+    resizeEngine();
+  }, [canvasSize]);
 
   // sceneId 변경 시 Scene 전환
   useEffect(() => {
-    if (!sceneId || !rendererRef.current || !worldRef.current) return;
+    if (!sceneId || !engineRef.current) return;
 
     async function switchScene() {
-      // TODO: 차후 Backend API에서 Scene을 가져오도록 수정
-      const newScene = AVAILABLE_SCENES.find((s) => s.id === sceneId);
-      if (!newScene) {
-        console.warn(`Scene with id "${sceneId}" not found`);
-        return;
+      try {
+        await engineRef.current!.switchScene(sceneId);
+      } catch (err) {
+        console.error('Error switching scene:', err);
+        setError(err instanceof Error ? err.message : 'Failed to switch scene');
       }
-
-      console.log(`Switching to scene: ${newScene.name}`);
-
-      // 새 Scene에서 사용된 모든 Mesh 이름 추출
-      const meshNamesToLoad: string[] = [];
-      for (const asset of newScene.assets) {
-        if (asset.type === 'object' && asset.meshName) {
-          // 이미 로드된 Mesh는 건너뛰기
-          if (
-            !ResourceManager.MeshPool.has(asset.meshName) &&
-            !meshNamesToLoad.includes(asset.meshName)
-          ) {
-            meshNamesToLoad.push(asset.meshName);
-          }
-        }
-      }
-
-      // 필요한 Asset 로드 (아직 로드되지 않은 것만)
-      if (meshNamesToLoad.length > 0) {
-        await ResourceManager.LoadAssets(meshNamesToLoad);
-      }
-
-      // World에 새 Scene 로드
-      worldRef.current!.LoadFromScene(newScene);
-
-      // Renderer 재초기화
-      await rendererRef.current!.Initialize(worldRef.current!);
-
-      console.log(`Scene switched successfully to: ${newScene.name}`);
     }
 
-    switchScene().catch((error) => {
-      console.error('Error switching scene:', error);
-    });
+    switchScene();
   }, [sceneId]);
 
-  // Keyboard and Mouse input handlers
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-      if (['w', 'a', 's', 'd', 'q', 'e'].includes(key)) {
-        pressedKeysRef.current.add(key);
-      }
-    };
-
-    const handleKeyUp = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-      pressedKeysRef.current.delete(key);
-    };
-
-    const handleMouseDown = (event: MouseEvent) => {
-      if (!canvasRef.current) return;
-
-      isMouseDownRef.current = true;
-      lastMouseXRef.current = event.clientX;
-      lastMouseYRef.current = event.clientY;
-
-      // Lock pointer for better camera control
-      canvasRef.current.requestPointerLock();
-    };
-
-    const handleMouseUp = () => {
-      isMouseDownRef.current = false;
-      document.exitPointerLock();
-    };
-
-    const handleMouseMove = (event: MouseEvent) => {
-      if (!isMouseDownRef.current || !rendererRef.current) return;
-
-      const camera = rendererRef.current.GetCamera();
-
-      // Use movementX/Y for smoother rotation when pointer is locked
-      const deltaX = event.movementX;
-      const deltaY = event.movementY;
-
-      const mouseSensitivity = 0.1; // 마우스 감도
-
-      // Update camera rotation
-      camera.AddYaw(-deltaX * mouseSensitivity);
-      camera.AddPitch(-deltaY * mouseSensitivity);
-
-      // Reset FrameCount when camera rotates
-      rendererRef.current.ResetFrameCount();
-    };
-
-    // Add event listeners
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-
-    const canvas = canvasRef.current;
-    if (canvas) {
-      canvas.addEventListener('mousedown', handleMouseDown);
-      window.addEventListener('mouseup', handleMouseUp);
-      window.addEventListener('mousemove', handleMouseMove);
-    }
-
-    // Cleanup
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      if (canvas) {
-        canvas.removeEventListener('mousedown', handleMouseDown);
-      }
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('mousemove', handleMouseMove);
-      document.exitPointerLock();
-    };
-  }, []);
+  // 에러 화면
+  if (error) {
+    return (
+      <div
+        className={className}
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#1a1a1a',
+          color: '#ff4444',
+          fontFamily: 'monospace',
+          padding: '20px',
+          textAlign: 'center',
+        }}
+      >
+        <div>
+          <h3>WebGPU Error</h3>
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className={className} style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div
+      ref={containerRef}
+      className={className}
+      style={{ width: '100%', height: '100%', position: 'relative' }}
+    >
       <canvas
         ref={canvasRef}
         style={{ display: 'block', width: '100%', height: '100%', cursor: 'pointer' }}
       />
+
       {/* Frame Time Display */}
       <div
         style={{
