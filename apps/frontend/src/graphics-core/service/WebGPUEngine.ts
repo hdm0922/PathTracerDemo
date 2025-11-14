@@ -24,6 +24,10 @@ export class WebGPUEngine {
     private lastFrameTime: number = performance.now();
     private isRunning: boolean = false;
 
+    // Frame time averaging
+    private frameTimeSamples: number[] = [];
+    private readonly FRAME_TIME_SAMPLE_COUNT = 60; // 최근 60 프레임 평균
+
     // Callbacks
     public onFrameTimeUpdate: ((frameTime: number) => void) | null = null;
     public onCameraUpdate: ((position: { x: number; y: number; z: number }) => void) | null = null;
@@ -159,9 +163,19 @@ export class WebGPUEngine {
         const deltaTime = (currentTime - this.lastFrameTime) / 1000; // Convert to seconds
         this.lastFrameTime = currentTime;
 
-        // Update frame time callback
-        if (this.onFrameTimeUpdate) {
-            this.onFrameTimeUpdate(deltaTime * 1000); // Convert back to milliseconds
+        // Update frame time with moving average
+        const frameTimeMs = deltaTime * 1000; // Convert to milliseconds
+        this.frameTimeSamples.push(frameTimeMs);
+
+        // Keep only the most recent N samples
+        if (this.frameTimeSamples.length > this.FRAME_TIME_SAMPLE_COUNT) {
+            this.frameTimeSamples.shift();
+        }
+
+        // Calculate average frame time
+        if (this.onFrameTimeUpdate && this.frameTimeSamples.length > 0) {
+            const avgFrameTime = this.frameTimeSamples.reduce((sum, val) => sum + val, 0) / this.frameTimeSamples.length;
+            this.onFrameTimeUpdate(avgFrameTime);
         }
 
         // Handle input and update camera
