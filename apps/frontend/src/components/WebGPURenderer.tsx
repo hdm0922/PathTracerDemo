@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { vec3 } from 'wgpu-matrix';
 import type { Vec3 } from 'wgpu-matrix';
 import { ResourceManager } from '../graphics-core/ResourceManager';
@@ -34,6 +34,10 @@ export default function WebGPURenderer({
   const isMouseDownRef = useRef<boolean>(false);
   const lastMouseXRef = useRef<number>(0);
   const lastMouseYRef = useRef<number>(0);
+
+  // Frame time tracking
+  const lastFrameTimeRef = useRef<number>(performance.now());
+  const [frameTime, setFrameTime] = useState<number>(0);
 
   // 초기 렌더러 설정
   useEffect(() => {
@@ -110,11 +114,19 @@ export default function WebGPURenderer({
         function frame() {
           if (!isMounted || !rendererRef.current) return;
 
+          // Calculate delta time
+          const currentTime = performance.now();
+          const deltaTime = (currentTime - lastFrameTimeRef.current) / 1000; // Convert to seconds
+          lastFrameTimeRef.current = currentTime;
+
+          // Update frame time display (in milliseconds)
+          setFrameTime(deltaTime * 1000);
+
           // Handle camera movement based on pressed keys
           const camera = rendererRef.current.GetCamera();
           let cameraMoved = false;
 
-          const moveSpeed = 0.1; // 이동 속도
+          const moveSpeed = 5.0; // Units per second (이동 속도)
           const pressedKeys = pressedKeysRef.current;
 
           if (pressedKeys.size > 0) {
@@ -123,29 +135,32 @@ export default function WebGPURenderer({
             const upVector: Vec3 = vec3.fromValues(0, 1, 0);
             const moveOffset: Vec3 = vec3.create(0, 0, 0);
 
+            // Apply delta time to movement speed for frame-rate independent movement
+            const frameAdjustedSpeed = moveSpeed * deltaTime;
+
             if (pressedKeys.has('w') || pressedKeys.has('W')) {
               // Forward
-              vec3.addScaled(moveOffset, forwardVector, moveSpeed, moveOffset);
+              vec3.addScaled(moveOffset, forwardVector, frameAdjustedSpeed, moveOffset);
             }
             if (pressedKeys.has('s') || pressedKeys.has('S')) {
               // Backward
-              vec3.addScaled(moveOffset, forwardVector, -moveSpeed, moveOffset);
+              vec3.addScaled(moveOffset, forwardVector, -frameAdjustedSpeed, moveOffset);
             }
             if (pressedKeys.has('a') || pressedKeys.has('A')) {
               // Left
-              vec3.addScaled(moveOffset, rightVector, -moveSpeed, moveOffset);
+              vec3.addScaled(moveOffset, rightVector, -frameAdjustedSpeed, moveOffset);
             }
             if (pressedKeys.has('d') || pressedKeys.has('D')) {
               // Right
-              vec3.addScaled(moveOffset, rightVector, moveSpeed, moveOffset);
+              vec3.addScaled(moveOffset, rightVector, frameAdjustedSpeed, moveOffset);
             }
             if (pressedKeys.has('q') || pressedKeys.has('Q')) {
               // Up (Unreal Engine style)
-              vec3.addScaled(moveOffset, upVector, -moveSpeed, moveOffset);
+              vec3.addScaled(moveOffset, upVector, -frameAdjustedSpeed, moveOffset);
             }
             if (pressedKeys.has('e') || pressedKeys.has('E')) {
               // Down (Unreal Engine style)
-              vec3.addScaled(moveOffset, upVector, moveSpeed, moveOffset);
+              vec3.addScaled(moveOffset, upVector, frameAdjustedSpeed, moveOffset);
             }
 
             if (vec3.length(moveOffset) > 0) {
@@ -316,11 +331,31 @@ export default function WebGPURenderer({
   }, []);
 
   return (
-    <div className={className} style={{ width: '100%', height: '100%' }}>
+    <div className={className} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <canvas
         ref={canvasRef}
         style={{ display: 'block', width: '100%', height: '100%', cursor: 'pointer' }}
       />
+      {/* Frame Time Display */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '10px',
+          right: '10px',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          color: '#0f0',
+          padding: '8px 12px',
+          borderRadius: '4px',
+          fontFamily: 'monospace',
+          fontSize: '14px',
+          pointerEvents: 'none',
+          userSelect: 'none',
+        }}
+      >
+        Frame Time: {frameTime.toFixed(2)} ms
+        <br />
+        FPS: {frameTime > 0 ? (1000 / frameTime).toFixed(0) : '0'}
+      </div>
     </div>
   );
 }
