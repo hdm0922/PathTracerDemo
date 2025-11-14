@@ -26,16 +26,6 @@ export const DUMMY_SCENE_1: Scene = {
         scale: [1, 1, 1],
       },
     },
-    {
-      id: 'glass_instance_0',
-      type: 'object',
-      meshName: 'Glass',
-      transform: {
-        position: [0, 0, 0],
-        rotation: [0, 0, 0],
-        scale: [1, 1, 1],
-      },
-    },
 
     {
       id: 'window_instance_0',
@@ -55,7 +45,7 @@ export const DUMMY_SCENE_1: Scene = {
       lightParams: {
         direction: [0, 0, -1],
         color: [1, 1, 1],
-        intensity: 2.0,
+        intensity: 0.5,
       },
     },
 
@@ -66,7 +56,7 @@ export const DUMMY_SCENE_1: Scene = {
       lightParams: {
         position: [0, 0, -1],
         color: [1, 1, 1],
-        intensity: 20.0,
+        intensity: 10.0,
       },
     },
 
@@ -79,7 +69,7 @@ export const DUMMY_SCENE_1: Scene = {
         u: [0.4, 0, 0],
         v: [0, 0, 0.4],
         color: [1, 1, 1],
-        intensity: 10.0,
+        intensity: 5.0,
       }
     },
 

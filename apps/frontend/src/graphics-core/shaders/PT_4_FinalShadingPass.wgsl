@@ -1401,6 +1401,11 @@ fn cs_main(@builtin(global_invocation_id) ThreadID : vec3<u32>)
         if (!bPixelInBoundary_X || !bPixelInBoundary_Y) { return; }
     }
 
+    if ( !Get_X1(ThreadID.xy).IsValidSurface )
+    {
+        textureStore(ResultTexture, ThreadID.xy, vec4<f32>(ENV_COLOR, 1.0));
+        return;
+    }
 
     // 1. Load Path
     let Reservoir : Reservoir = LoadReservoir(ThreadID.xy);

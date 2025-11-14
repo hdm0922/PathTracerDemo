@@ -1,7 +1,11 @@
-import { Renderer } from '../Renderer_TEST';
 import { World } from '../World';
 import { InputController } from '../InputController';
 import { SceneManager } from '../SceneManager';
+
+// Renderer Renderer_TEST
+import { Renderer } from '../Renderer_TEST';
+
+
 
 /**
  * WebGPUEngine - WebGPU 초기화, 렌더 루프, 입력 처리를 통합 관리합니다.
