@@ -26,18 +26,16 @@ export const DUMMY_SCENE_1: Scene = {
         scale: [1, 1, 1],
       },
     },
-    // PureWindow Instance
-
-    // {
-    //   id: 'glass_instance_0',
-    //   type: 'object',
-    //   meshName: 'Glass',
-    //   transform: {
-    //     position: [0, 0, 0],
-    //     rotation: [0, 0, 0], // Euler angles in degrees [x, y, z]
-    //     scale: [1, 1, 1],
-    //   },
-    // },
+    {
+      id: 'glass_instance_0',
+      type: 'object',
+      meshName: 'Glass',
+      transform: {
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: [1, 1, 1],
+      },
+    },
 
     {
       id: 'window_instance_0',
