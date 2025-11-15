@@ -1,0 +1,160 @@
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage{kotex}
+
+
+% Packages
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\title{ReSTIR Path Tracing: Shift Mappings}
+
+\begin{document}
+
+\maketitle
+
+
+\section{Shift Mappings}
+
+
+Shift mapping의 핵심 요구 조건은 다음과 같다.  
+\begin{enumerate}
+\item Shift mapping은 결정적이어야 한다. 즉, 주어진 입력 경로는 타겟 도메인에서 최대 하나의 경로로만 사상된다.  
+\item 두 서로 다른 입력 경로가 동일한 출력 경로로 매핑되어서는 안 된다. 
+이는 shift mapping이 일대일 대응 함수임을 의미하며,  
+이에 따라 역변환(inverse shift)이 항상 정의될 수 있어야 한다.  
+\item 모든 경로가 반드시 shift 가능할 필요는 없다.  
+\end{enumerate}
+
+
+    집합 $A$와 $B$에 대하여, shift mapping $T$는 
+    $A$의 부분집합 $D(T) \subseteq A$에서 
+    $B$의 부분집합 $I(T) \subseteq B$로 정의된 
+    전단사 함수
+    \[
+        T : D(T) \to I(T)
+    \]
+    를 의미한다.  
+    즉, shift mapping은 일반적으로 $A \to B$ 전체에 대한 함수가 아니라,  
+    입력 집합의 적절한 부분 영역에서만 정의되며, 
+    그 상(image) 역시 $B$의 전부를 포함할 필요는 없다.
+
+
+ 
+\section{도메인간 샘플 재사용}
+다음은 shift mapping이 포함된 RIS 과정을 다시 정리한 것이다.
+
+\begin{enumerate}
+    \item 입력 샘플들 $(X_1, \ldots, X_M)$을 각자의 도메인 $\Omega_i$로부터 가져온다.
+    
+    \item 각 샘플에 shift mapping을 적용하여 타겟 도메인$\Omega$의 원소 $Y_i = T_i(X_i)$로 정의한다.
+    
+    \item 모든 $Y_i$에 대해 resampling MIS 가중치 $m_i(Y_i)$를 계산한다.
+    
+    \item 모든 $i$에 대해 resampling weight를 아래와 같이 계산한다.
+    \[
+        w_i = m_i(Y_i)\,
+        \hat{p}(Y_i) W_{X_i} |T_i'(X_i)| 
+    \]
+    이때 $T_i'$는 shift mapping의 야코비안(Jacobian)이다.
+    
+    \item $w_i$에 비례하여 $Y_i$ 중 하나를 확률적으로 선택하고,
+    이를 출력 샘플 $Y$로 한다.
+    
+    \item 선택된 $Y$의 unbiased contribution weight는 다음과 같다.
+    \[
+        W_Y =
+        \frac{1}{\hat{p}(Y)} \sum_{j=1}^{M} w_j 
+    \]
+\end{enumerate}
+
+
+
+\section{Shift mapping을 이용한 $m_i$의 유도}
+
+입력 도메인 $\Omega_i$의 PDF$ p_{X_i}$가 주어졌다고 가정하자. 
+각 입력 도메인에서 타겟 도메인으로 가는 shift mapping을
+\[
+T_i : \Omega_i \longrightarrow \Omega,\qquad
+x \longmapsto y = T_i(x)
+\]
+로 정의하자. $T_i$의 Jacobian determinant는 $\left|T_i'(x)\right|$이다. 
+
+이때 타겟 도메인 $\Omega$ 위의 한 지점 $y$에서의 resampling MIS weight는
+\[
+m_i : \Omega \to [0,1], \qquad
+m_i(y) = \frac{p_{Y_i}(y)}{\sum_{j=1}^{M} p_{Y_j}(y)}, \qquad y \in \Omega
+\]
+로 정의된다.
+
+PDF transformation rule에 의해, 타겟 도메인에서의 PDF $p_{Y_i}(y)$는
+다음과 같이 입력 도메인의 PDF $p_{X_i}(x)$로부터 얻어진다.
+\[
+p_{Y_i}(y)
+= \frac{p_{X_i}(x)} {\left|T_i'(x)\right|}, 
+\qquad y = T_i(x).
+\]
+
+$T_i$는 shift mapping이므로, ${T_i}^{-1}(y) = x$가 되게 하는 $T_i$의 역변환 ${T_i}^{-1}$이 존재한다. 
+이때 inverse function theorem에 의해 다음이 성립한다.
+\[
+(T^{-1}_i)^\prime (y) = \frac{1}{T^\prime_i(x)} = \frac{1}{T^\prime_i(T^{-1}_i(y))}
+\implies {\left|T_i^{-1\prime}(y)\right|} = \frac{1}{\left|T^\prime_i(T^{-1}_i(y))\right|} = \frac{1}{\left|T_i'(x)\right|}
+\]
+따라서 $p_{Y_i}(y)$를 다음과 같이 나타낼 수 있다.
+\[
+p_{Y_i}(y)
+= {p_{X_i}(x)} \cdot {\left|T_i^{-1\prime}(y)\right|} 
+= {p_{X_i}({T_i}^{-1}(y))} \cdot {\left|T_i^{-1\prime}(y)\right|}
+\]
+이를 이용하면 다음과 같은 $m_i(y)$를 얻을 수 있다.
+\[
+m_i(y) = 
+\frac{p_{X_i}(T_i^{-1}(y)) \cdot \bigl|T_i^{-1\prime}(y)\bigr|}
+{\displaystyle\sum_{j=1}^{M} (p_{X_j}(T_j^{-1}(y)) \cdot \bigl|T_j^{-1\prime}(y)\bigr|)}, 
+\qquad y \in \Omega.
+\]
+
+
+\section{PDF를 모를 때의 MIS 가중치}
+단일 도메인에서 RIS를 시행하는 경우, $X_i$들은 각자에 대응된 타겟 함수 $\hat{p}_i$에
+대략 비례하는 분포로 분포하게 된다.
+따라서 우리는 실제 PDF $p_i$ 대신, 타겟 함수
+$\hat{p}_{i}$를 $p_i$대신 사용하여 일반화된 generalized balance heuristic을
+정의하였다.
+
+마찬가지로 서로 다른 도메인에서 만들어진 샘플들로 RIS를 시행하는 경우에도 타겟함수$\hat{p}_{\leftarrow  i}$를 다음과 같이 새로 정의한다. 
+\[
+\hat{p}_{\leftarrow i}(y) =
+\begin{cases}
+\hat{p}_i\bigl(T_i^{-1}(y)\bigr)\,\bigl|T_i^{-1\prime}(y)\bigr|,
+  & y \in T_i(\operatorname{supp} X_i),\\[4pt]
+0, & \text{otherwise}.
+\end{cases}
+\]
+이때 $\operatorname{supp} X_i$의 정의는 다음과 같다. 이떄 $c_i$는 confidence weights를 나타낸다.
+\[
+\operatorname{supp} X_i =\operatorname{cl} \lbrace x \in \Omega_i : T_i(x) \neq 0 \rbrace
+\]
+
+즉 y가 입력 도메인으로 제대로 되돌아갈 수 없거나, 되돌린 점의 PDF가 0일때 0을 반환하는 함수이다.
+
+
+이를 이용해 도메인 간 MIS weight $m_i(x)$를 다음과 같이 정의한다.
+\[
+    m_i(x)
+    = \frac{c_i \cdot \hat{p}_{\leftarrow  i}(y)}
+           {\displaystyle\sum_{j=1}^{M} c_j \cdot \hat{p}_{\leftarrow  j}(y)}.
+\]
+
+
+
+
+
+\end{document}
